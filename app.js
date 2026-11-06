@@ -238,9 +238,12 @@ async function resolveNames(){
   items.forEach(i=>["approvedBy","submittedBy","changesBy","postedBy","createdBy"].forEach(k=>i[k]&&ids.add(i[k])));
   Object.keys(team).forEach(id=>ids.add(id));
   tasks.forEach(t=>{ t.by&&ids.add(t.by); t.doneBy&&ids.add(t.doneBy) });
-  const need=[...ids].filter(id=>!(id in names)&&id!==myId); if(!need.length) return;
-  need.forEach(id=>names[id]="Someone");
-  try{ const ps=await userNs.profiles(need); need.forEach(id=>{ if(ps[id]&&ps[id].name) names[id]=ps[id].name }); render(); }catch(e){}
+  // Ask again for anyone still unnamed: a teammate's profile can arrive after their first note
+  const need=[...ids].filter(id=>(!(id in names)||names[id]==="Someone")&&id!==myId); if(!need.length) return;
+  need.forEach(id=>{ if(!(id in names)) names[id]="Someone" });
+  try{ const ps=await userNs.profiles(need); let changed=false;
+    need.forEach(id=>{ if(ps[id]&&ps[id].name&&names[id]!==ps[id].name){ names[id]=ps[id].name; changed=true } });
+    if(changed) render(); }catch(e){}
 }
 async function connect(){
   if(!window.claude||typeof window.claude.use!=="function"){mode="local";setNote();renderNotifs();renderFocus();return}
