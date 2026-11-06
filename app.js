@@ -1383,7 +1383,7 @@ function setPreview(r){
   teamF=""; selId=null; deskFor=undefined;
   applyPreview();
   if($("roleDlg").open) $("roleDlg").close();
-  if(previewRole==="hr") location.hash="tasks"; else if(!previewRole&&view==="tasks"&&location.hash!=="#tasks") location.hash="tasks";
+  if(previewRole==="hr") location.hash="shoots";
   render(); window.scrollTo(0,0);
   toast(previewRole?"Previewing as "+ROLES[previewRole].name+".":"Back to your own view.");
 }
