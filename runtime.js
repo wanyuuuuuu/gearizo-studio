@@ -146,6 +146,28 @@
     },
     me: () => ({ ...member }),
   };
+  /* Each person's private Google Calendar link (only they can read it) and their shoot feed */
+  window.gzCal = {
+    async get() {
+      const { data } = await sb.from("calendar_links").select("ics_url,feed_token,last_sync,last_error").eq("user_id", session.user.id).maybeSingle();
+      if (!data) return { connected: false, feedUrl: null };
+      return { connected: !!data.ics_url, feedUrl: cfg.supabaseUrl + "/functions/v1/notify?feed=" + data.feed_token, lastSync: data.last_sync, error: data.last_error };
+    },
+    async ensure() {
+      const { data } = await sb.from("calendar_links").select("user_id").eq("user_id", session.user.id).maybeSingle();
+      if (!data) { const { error } = await sb.from("calendar_links").insert({ user_id: session.user.id }); if (error) throw error; }
+    },
+    async save(url) {
+      const { error } = await sb.from("calendar_links").upsert({ user_id: session.user.id, ics_url: url || null, updated_at: new Date().toISOString() });
+      if (error) throw error;
+      return this.sync();
+    },
+    async sync() {
+      const { data, error } = await sb.functions.invoke("notify", { body: { action: "calsync" } });
+      if (error) throw error;
+      return data;
+    },
+  };
 
   const db = {
     collection(name) {

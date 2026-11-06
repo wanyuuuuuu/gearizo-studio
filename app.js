@@ -37,7 +37,7 @@ const newId=()=>"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6
 let items=new Map(), versions=[], feedback=[], focus=[];
 let db=null, assets=null, userNs=null, myId=null, amOwner=false, names={};
 let mode="local", readOnly=false, live={items:false,focus:false,team:false};
-let team={}, promptedRole=false, inbox=[], tasks=[];
+let team={}, promptedRole=false, inbox=[], tasks=[], shoots=[], avail=[], busy=[];
 const ROLES={content:{name:"Content & video",k:"var(--blue)"},marketing:{name:"Marketing",k:"var(--mk)"},ecomm:{name:"E-commerce",k:"#E8772E"},hr:{name:"HR",k:"#8C6BD1"}};
 const TEAMS={marketing:"Marketing",ecomm:"E-commerce"};
 const SIZES=[{id:"sq",name:"Square 1:1 (product)"},{id:"post",name:"Post 4:5"},{id:"story",name:"Story 9:16"},{id:"banner",name:"Banner 16:9"},{id:"wide",name:"Wide banner 3:1"},{id:"thumb",name:"Thumbnail 1280×720"}];
@@ -55,7 +55,7 @@ let nRead=(()=>{
   try{ const r=JSON.parse(localStorage.getItem(NOTIF_KEY)||"null"); if(r&&r.floor) return {floor:Number(r.floor)||0,ids:new Set(Array.isArray(r.ids)?r.ids:[])} }catch(e){}
   const s={floor:Date.now(),ids:new Set()}; saveRead(s); return s;
 })();
-const VIEWS=["calendar","review","pipeline","tasks"];
+const VIEWS=["calendar","review","pipeline","tasks","shoots"];
 let view=VIEWS.includes(location.hash.slice(1))?location.hash.slice(1):"calendar";
 const now=new Date(); const todayStr=ymd(now);
 let cursor=new Date(now.getFullYear(),now.getMonth(),1);
@@ -154,7 +154,7 @@ function renderHeader(){
   const catSrc=isMk()?"cat-mk.png":"cat.png", ci=$("catImg");
   if(ci.getAttribute("src")!==catSrc){ ci.setAttribute("src",catSrc); ci.width=isMk()?203:188; ci.height=240; $("cat").classList.toggle("mk",isMk()) }
   const isCal=view==="calendar";
-  $("monthLabel").textContent=isCal?MONTHS[cursor.getMonth()]+" "+cursor.getFullYear():view==="review"?"Review":view==="tasks"?"Tasks":"Pipeline";
+  $("monthLabel").textContent=isCal?MONTHS[cursor.getMonth()]+" "+cursor.getFullYear():view==="review"?"Review":view==="tasks"?"Tasks":view==="shoots"?"Shoots":"Pipeline";
   if(isCal){
     const prefix=cursor.getFullYear()+"-"+pad(cursor.getMonth()+1);
     const inMonth=all.filter(i=>i.date.startsWith(prefix));
@@ -164,6 +164,10 @@ function renderHeader(){
   }else if(view==="review"){
     const ch=all.filter(i=>i.status==="changes").length, ap=all.filter(i=>i.status==="approved").length;
     $("stats").innerHTML=stat(waiting,"to approve",waiting>0)+stat(ch,"being fixed")+stat(ap,"ready to post");
+  }else if(view==="shoots"){
+    const now=Date.now(), mine=isHr()?shoots.filter(x=>x.talent.includes(myId)):shoots;
+    const ask=mine.filter(x=>x.status==="proposed"&&x.end>now).length, conf=mine.filter(x=>x.status==="confirmed"&&x.end>now).length, no=mine.filter(x=>x.status==="declined"&&x.end>now).length;
+    $("stats").innerHTML=stat(ask,isHr()?"to confirm":"waiting for reply",ask>0&&isHr())+stat(conf,"confirmed")+(no?stat(no,"can’t make it",!isHr()):"");
   }else if(view==="tasks"){
     const r0=myRole(), mineT=tasks.filter(t=>!r0||t.for===r0), openT=mineT.filter(t=>!t.done), lateT=openT.filter(t=>t.due&&t.due<todayStr);
     $("stats").innerHTML=stat(openT.length,r0?"open for you":"open",openT.length>0)+stat(lateT.length,"overdue",lateT.length>0)+stat(tasks.filter(t=>t.done).length,"done");
@@ -171,7 +175,7 @@ function renderHeader(){
     $("stats").innerHTML=stat(all.filter(i=>!["idea","posted"].includes(i.status)).length,"in production")+stat(all.filter(i=>i.status==="idea").length,"ideas");
   }
   $("prev").hidden=$("next").hidden=$("todayBtn").hidden=!isCal;
-  $("vCal").setAttribute("aria-pressed",isCal); $("vRev").setAttribute("aria-pressed",view==="review"); $("vPipe").setAttribute("aria-pressed",view==="pipeline"); $("vTask").setAttribute("aria-pressed",view==="tasks");
+  $("vCal").setAttribute("aria-pressed",isCal); $("vRev").setAttribute("aria-pressed",view==="review"); $("vPipe").setAttribute("aria-pressed",view==="pipeline"); $("vTask").setAttribute("aria-pressed",view==="tasks"); $("vShoot").setAttribute("aria-pressed",view==="shoots");
   $("newBtn").hidden=readOnly||isHr();
   $("teamFilter").hidden=!isCr()||view==="tasks";
   $("teamFilter").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.t===teamF));
@@ -198,7 +202,7 @@ function renderCalendar(){
       const dt=new Date(y,m,d), ds=ymd(dt), list=byDate[ds]||[];
       if(!list.length&&ds!==todayStr) continue; any=true;
       html+='<section class="aday'+(ds===todayStr?" today":"")+stCls(list)+'"><h3><span>'+d+' '+MONTHS[m].slice(0,3)+'</span><small>'+DOW[(dt.getDay()+6)%7]+(ds===todayStr?", today":"")+'</small></h3><div class="list">'+
-        (list.length?list.map(i=>chip(i)).join(""):'<div class="empty">Nothing planned today.</div>')+'</div></section>';
+        (list.length||shootChips(ds)?list.map(i=>chip(i)).join("")+shootChips(ds):'<div class="empty">Nothing planned today.</div>')+'</div></section>';
     }
     if(!any) html+='<div class="empty">Nothing scheduled this month. Tap New item to add one.</div>';
     html+='</div>';
@@ -206,7 +210,7 @@ function renderCalendar(){
     html=LEGEND+'<div class="grid" role="grid">'+DOW.map(d=>'<div class="dow">'+d+'</div>').join("");
     for(let i=0;i<weeks*7;i++){
       const dt=new Date(y,m,1-offset+i), ds=ymd(dt);
-      html+='<div class="cell'+(dt.getMonth()!==m?" out":"")+(ds===todayStr?" today":"")+stCls(byDate[ds])+'" data-date="'+ds+'"><span class="dnum">'+dt.getDate()+'</span>'+(byDate[ds]||[]).map(it=>chip(it)).join("")+'</div>';
+      html+='<div class="cell'+(dt.getMonth()!==m?" out":"")+(ds===todayStr?" today":"")+stCls(byDate[ds])+'" data-date="'+ds+'"><span class="dnum">'+dt.getDate()+'</span>'+(byDate[ds]||[]).map(it=>chip(it)).join("")+shootChips(ds)+'</div>';
     }
     html+='</div>';
   }
@@ -222,12 +226,17 @@ function renderColumns(cols){
 }
 function render(){
   renderHeader(); renderFilters();
-  if(isHr()&&view!=="tasks"){ view="tasks"; if(location.hash!=="#tasks") history.replaceState(null,"","#tasks") }
+  if(isHr()&&!["tasks","shoots"].includes(view)){ view="shoots"; history.replaceState(null,"","#shoots") }
+  if(view==="shoots"&&isMk()){ view="calendar"; history.replaceState(null,"","#calendar") }
   ["vCal","vRev","vPipe"].forEach(k=>{ $(k).hidden=isHr() });
-  const rev=view==="review", tv=view==="tasks";
+  $("vShoot").hidden=!(isCr()||isHr());
+  const sv=view==="shoots";
+  $("shoots").hidden=!sv;
+  const rev=view==="review", tv=view==="tasks"||sv;
   $("layout").classList.toggle("full",rev||tv); $("main").hidden=rev||tv; $("desk").hidden=!rev; $("tasks").hidden=!tv; $("notifs").hidden=rev||tv; $("filters").hidden=tv;
   if(view==="calendar") renderCalendar();
   else if(rev) renderDesk();
+  else if(sv) renderShoots();
   else if(tv) {}
   else renderColumns(STATUSES);
   renderFocus(); renderNotifs(); renderTodo(); renderTasks();
@@ -296,6 +305,21 @@ async function connect(){
         due:typeof v.due==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(v.due)?v.due:"",done:!!v.done,doneBy:String(v.doneBy||""),doneAt:Number(v.doneAt)||0,by:String(v.by||""),at:Number(v.at)||0}}).filter(t=>t.text);
       applyPreview(); render(); resolveNames(); taskWatch();
     },()=>{ live.tasks=true; renderTasks() });
+    db.collection("shoots").onSnapshot(snap=>{
+      live.shoots=true;
+      shoots=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,talent:Array.isArray(v.talent)?v.talent.map(String):[],item:String(v.item||""),title:String(v.title||""),
+        start:Number(v.start)||0,end:Number(v.end)||0,location:String(v.location||""),notes:String(v.notes||""),status:["proposed","confirmed","declined","cancelled"].includes(v.status)?v.status:"proposed",
+        reply:String(v.reply||""),by:String(v.by||""),at:Number(v.at)||0,respondedBy:String(v.respondedBy||""),respondedAt:Number(v.respondedAt)||0}}).filter(x=>x.start&&x.end>x.start);
+      render(); shootWatch();
+    },()=>{ live.shoots=true });
+    db.collection("availability").onSnapshot(snap=>{
+      avail=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,user:String(v.user||""),start:Number(v.start)||0,end:Number(v.end)||0}}).filter(x=>x.end>x.start);
+      if(view==="shoots") renderShoots();
+    },()=>{});
+    db.collection("busy").onSnapshot(snap=>{
+      busy=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {user:String(v.user||""),start:Number(v.start)||0,end:Number(v.end)||0}}).filter(x=>x.end>x.start);
+      if(view==="shoots") renderShoots();
+    },()=>{});
     db.collection("inbox").onSnapshot(snap=>{
       raw.inbox=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,path:String(v.path||""),name:String(v.name||"video"),asset:String(v.asset||""),assetType:String(v.assetType||"video/mp4"),size:Number(v.size)||0,mtime:Number(v.mtime)||0,at:Number(v.at)||0}}).sort((a,b)=>a.at-b.at); applyPreview();
       render();
@@ -706,7 +730,7 @@ async function copyText(t){
 }
 
 /* Notifications: built from versions, feedback and status stamps */
-const NT={task:"var(--pink)",taskdone:"var(--ready)",planned:"var(--ink-2)",version:"var(--ink-3)",submit:"var(--review)",feedback:"var(--blue)",changes:"var(--edit)",approve:"var(--ready)",posted:"var(--blue)"};
+const NT={shoot:"var(--pink)",shootreply:"var(--ready)",task:"var(--pink)",taskdone:"var(--ready)",planned:"var(--ink-2)",version:"var(--ink-3)",submit:"var(--review)",feedback:"var(--blue)",changes:"var(--edit)",approve:"var(--ready)",posted:"var(--blue)"};
 function events(){
   const ev=[];
   versions.forEach(v=>{ const it=items.get(v.item); if(it) ev.push({id:"v:"+v.id,at:v.at,by:v.by,item:it,type:"version",n:v.n}) });
@@ -722,11 +746,17 @@ function events(){
     if(t.at) ev.push({id:"k:"+t.id,at:t.at,by:t.by,item:null,type:"task",text:t.text,for:t.for});
     if(t.done&&t.doneAt) ev.push({id:"kd:"+t.id+":"+t.doneAt,at:t.doneAt,by:t.doneBy,item:null,type:"taskdone",text:t.text});
   });
+  shoots.forEach(x=>{
+    if(x.at) ev.push({id:"sh:"+x.id+":"+x.at,at:x.at,by:x.by,item:null,type:"shoot",shoot:x});
+    if(x.respondedAt) ev.push({id:"shr:"+x.id+":"+x.respondedAt,at:x.respondedAt,by:x.respondedBy,item:null,type:"shootreply",shoot:x});
+  });
   return ev.filter(e=>e.at).sort((a,b)=>b.at-a.at);
 }
 const isUnread=e=>(!myId||e.by!==myId)&&e.at>nRead.floor&&!nRead.ids.has(e.id);
 function nText(e){
   const t=e.item?'<b>'+esc(e.item.title)+'</b>':'', w='<b>'+esc(who(e.by))+'</b>', v=e.n?' v'+e.n:'';
+  if(e.type==="shoot") return w+' booked a shoot with '+esc(e.shoot.talent.map(who).join(", "))+': '+esc(shootWhen(e.shoot))+(e.shoot.title?' · '+esc(e.shoot.title):'');
+  if(e.type==="shootreply") return w+(e.shoot.status==="declined"?' can’t make the shoot on ':' confirmed the shoot on ')+esc(shootWhen(e.shoot));
   if(e.type==="task") return w+' added a task for '+ROLE_SHORT[e.for]+': '+esc(e.text);
   if(e.type==="taskdone") return w+' finished: '+esc(e.text);
   if(e.type==="planned") return w+(["marketing","ecomm"].includes(team[e.by])?' assigned ':' planned ')+t+(e.item.date?' for '+esc(shortDate(e.item.date)):'');
@@ -743,14 +773,14 @@ function renderNotifs(){
   const ev=events(), unread=ev.filter(isUnread).length;
   $("nCount").hidden=!unread; $("nCount").textContent=unread; $("nAll").hidden=!unread;
   if(!ev.length){ list.innerHTML='<div class="empty">Nothing yet. When someone sends a video for review, leaves feedback or approves a video, it shows up here.</div>'; return }
-  list.innerHTML=ev.slice(0,nShow).map(e=>'<button type="button" class="nitem'+(isUnread(e)?" unread":"")+'" data-n="'+esc(e.id)+'" data-item="'+esc(e.item?e.item.id:"")+'"><span class="dot" style="--k:'+NT[e.type]+'"></span><span><span class="nt">'+nText(e)+'</span>'+
+  list.innerHTML=ev.slice(0,nShow).map(e=>'<button type="button" class="nitem'+(isUnread(e)?" unread":"")+'" data-n="'+esc(e.id)+'" data-item="'+esc(e.item?e.item.id:"")+'" data-kind="'+e.type+'"><span class="dot" style="--k:'+NT[e.type]+'"></span><span><span class="nt">'+nText(e)+'</span>'+
     (e.type==="feedback"?'<span class="q">“'+esc(e.text)+'”</span>':"")+'<time>'+esc(fmtTime(e.at))+'</time></span></button>').join("")+
     (ev.length>nShow?'<button type="button" class="btn sm ghost more" id="nMore">Show older</button>':"");
 }
 $("nList").addEventListener("click",e=>{
   if(e.target.closest("#nMore")){ nShow+=20; renderNotifs(); return }
   const b=e.target.closest(".nitem"); if(!b) return;
-  nRead.ids.add(b.dataset.n); saveRead(nRead); if(b.dataset.item) goReview(b.dataset.item); else goTasks();
+  nRead.ids.add(b.dataset.n); saveRead(nRead); if(b.dataset.item) goReview(b.dataset.item); else if(/^shoot/.test(b.dataset.kind)) location.hash="shoots"; else goTasks();
 });
 $("nAll").onclick=()=>{ nRead={floor:Date.now(),ids:new Set()}; saveRead(nRead); renderNotifs(); toast("All caught up.") };
 
@@ -1026,10 +1056,12 @@ $("vRev").onclick=()=>{ $("desk").classList.remove("phone-detail"); location.has
 $("dBack").onclick=()=>{ $("desk").classList.remove("phone-detail"); window.scrollTo(0,0) };
 $("vPipe").onclick=()=>{location.hash="pipeline"};
 $("vTask").onclick=()=>{location.hash="tasks"};
+$("vShoot").onclick=()=>{location.hash="shoots"};
 window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);view=VIEWS.includes(h)?h:"calendar";render()});
 narrow.addEventListener("change",render);
 $("filters").addEventListener("click",e=>{const b=e.target.closest(".fchip"); if(!b) return; const s=b.dataset.series; filters.has(s)?filters.delete(s):filters.add(s); render()});
 $("main").addEventListener("click",e=>{
+  if(e.target.closest(".shootchip")){ location.hash="shoots"; return }
   const c=e.target.closest(".chip"); if(c){openItem(c.dataset.id);return}
   const cell=e.target.closest(".cell"); if(cell&&!readOnly) openItem(null,cell.dataset.date);
 });
@@ -1171,6 +1203,162 @@ document.addEventListener("drop",e=>{
   else { const d=t.dataset.date; if(!d||it.date===d) return; next.date=d }
   persist(it.id,next);
 });
+
+/* ===== Shoots: book HR for filming, see their free and busy times ===== */
+const DAY_FROM=8, DAY_TO=20;                       // board shows 8am–8pm
+const hrPeople=()=>Object.keys(team).filter(id=>team[id]==="hr");
+const ymdOf=ms=>ymd(new Date(ms));
+const hm=ms=>{ const d=new Date(ms); let h=d.getHours(); const ap=h>=12?"pm":"am"; h=h%12||12; return h+(d.getMinutes()?":"+pad(d.getMinutes()):"")+ap };
+function shootWhen(x){ const d=new Date(x.start); return DOW[(d.getDay()+6)%7]+" "+d.getDate()+" "+MONTHS[d.getMonth()].slice(0,3)+", "+hm(x.start)+"–"+hm(x.end) }
+const gcalUtc=ms=>new Date(ms).toISOString().replace(/[-:]/g,"").replace(/\.\d{3}/,"");
+function gcalLink(x){ return "https://calendar.google.com/calendar/render?action=TEMPLATE&text="+encodeURIComponent("Gearizo shoot"+(x.title?": "+x.title:""))+"&dates="+gcalUtc(x.start)+"/"+gcalUtc(x.end)+"&details="+encodeURIComponent(x.notes||"")+"&location="+encodeURIComponent(x.location||"") }
+function shootChips(ds){
+  if(!isCr()) return "";
+  return shoots.filter(x=>x.status!=="cancelled"&&ymdOf(x.start)===ds).sort((a,b)=>a.start-b.start).map(x=>'<button class="chip shootchip" type="button" draggable="false" title="Shoot"><span class="t">Shoot '+esc(hm(x.start))+'</span><span class="m">'+esc(x.talent.map(who).join(", ")+" · "+({proposed:"Waiting",confirmed:"Confirmed",declined:"Can’t make it"}[x.status]||""))+'</span></button>').join("");
+}
+function shootCard(x,forHr){
+  const d=new Date(x.start), past=x.end<Date.now();
+  const pill='<span class="spill '+x.status+'">'+({proposed:forHr?"Please reply":"Waiting for reply",confirmed:"Confirmed",declined:"Can’t make it",cancelled:"Cancelled"}[x.status])+'</span>';
+  let acts="";
+  if(!readOnly&&!past){
+    if(forHr&&x.status==="proposed") acts='<button class="btn go sm" type="button" data-sh="confirm" data-id="'+x.id+'">Confirm</button><input type="text" data-reply="'+x.id+'" placeholder="Can’t make it? Say why or suggest a time (optional)"><button class="btn sm" type="button" data-sh="decline" data-id="'+x.id+'">Can’t make it</button>';
+    if(!forHr&&x.status!=="cancelled") acts='<button class="btn sm" type="button" data-sh="edit" data-id="'+x.id+'">Change time</button><button class="btn ghost sm danger" type="button" data-sh="cancel" data-id="'+x.id+'">Cancel shoot</button>';
+    if(forHr&&x.status==="confirmed") acts='<button class="btn sm" type="button" data-sh="undo" data-id="'+x.id+'">I can’t make it any more</button>';
+  }
+  if(x.status==="confirmed"&&!past) acts+='<a class="btn sm" href="'+esc(gcalLink(x))+'" target="_blank" rel="noopener">Add to Google Calendar</a>';
+  return '<div class="shcard"><div class="when"><small>'+DOW[(d.getDay()+6)%7]+'</small>'+d.getDate()+' '+MONTHS[d.getMonth()].slice(0,3)+'<small>'+esc(hm(x.start))+'</small></div>'+
+    '<div class="what"><b>'+esc(x.title||"Shoot")+' '+pill+'</b><span>'+esc(hm(x.start)+"–"+hm(x.end))+(forHr?"":" · with "+esc(x.talent.map(who).join(", ")))+(x.location?" · "+esc(x.location):"")+'</span>'+
+    (x.notes?'<span>'+esc(x.notes)+'</span>':"")+(x.reply?'<span><b>Reply:</b> '+esc(x.reply)+'</span>':"")+'</div>'+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>';
+}
+function dayBar(uid,day){
+  const d0=new Date(day+"T00:00:00").getTime(), from=d0+DAY_FROM*3600e3, to=d0+DAY_TO*3600e3, span=to-from;
+  const seg=(s,e,cls)=>{ const a=Math.max(s,from), b=Math.min(e,to); if(b<=a) return ""; return '<i class="'+cls+'" style="left:'+((a-from)/span*100).toFixed(2)+'%;width:'+((b-a)/span*100).toFixed(2)+'%"></i>' };
+  return '<div class="bar" data-user="'+esc(uid)+'" data-day="'+day+'" title="Tap a time to book">'+
+    avail.filter(a=>a.user===uid).map(a=>seg(a.start,a.end,"free")).join("")+
+    busy.filter(b=>b.user===uid).map(b=>seg(b.start,b.end,"busy")).join("")+
+    shoots.filter(x=>x.talent.includes(uid)&&["proposed","confirmed"].includes(x.status)).map(x=>seg(x.start,x.end,"sh "+x.status)).join("")+'</div>';
+}
+let calState=null;
+async function loadCal(){ if(!window.gzCal) return; try{ await window.gzCal.ensure(); calState=await window.gzCal.get() }catch(e){ calState={error:e.message} } if(view==="shoots") renderShoots() }
+function renderShoots(){
+  const box=$("shoots"), now=Date.now();
+  if(isHr()){
+    const mine=previewRole?shoots:shoots.filter(x=>x.talent.includes(myId));
+    const ask=mine.filter(x=>x.status==="proposed"&&x.end>now).sort((a,b)=>a.start-b.start);
+    const up=mine.filter(x=>x.status==="confirmed"&&x.end>now).sort((a,b)=>a.start-b.start);
+    if(!previewRole&&calState===null){ calState={loading:true}; loadCal() }
+    const c=previewRole?{preview:true}:(calState||{});
+    const mineFree=avail.filter(a=>a.user===myId&&a.end>now).sort((a,b)=>a.start-b.start);
+    box.innerHTML=
+      '<div class="shsec"><h2>Shoot requests'+(ask.length?'<span class="ncount">'+ask.length+'</span>':"")+'</h2>'+(ask.length?ask.map(x=>shootCard(x,true)).join(""):'<p class="empty">No requests right now.</p>')+'</div>'+
+      '<div class="shsec"><h2>Coming up</h2>'+(up.length?up.map(x=>shootCard(x,true)).join(""):'<p class="empty">No confirmed shoots yet.</p>')+'</div>'+
+      '<div class="shsec calbox"><h2>Your Google Calendar</h2>'+
+        (c.preview?'<p class="hint">In preview: HR connects their own Google Calendar here (paste the private iCal link once).</p>':c.loading?'<p class="hint">Loading…</p>':
+        '<p class="calstat '+(c.error?"err":c.connected?"ok":"")+'">'+(c.error?"Couldn’t read your calendar: "+esc(c.error):c.connected?"Connected. Busy times update about every 15 minutes"+(c.lastSync?" (last read "+esc(fmtTime(Date.parse(c.lastSync)))+")":"")+". Only start and end times are read, never titles or guests.":"Not connected. Connect it so the studio sees when you’re busy.")+'</p>'+
+        '<div class="row"><input type="url" id="calUrl" placeholder="Paste the “Secret address in iCal format” here" autocomplete="off"><button class="btn primary sm" type="button" data-sh="calsave">'+(c.connected?"Replace link":"Connect")+'</button>'+(c.connected?'<button class="btn sm" type="button" data-sh="calsync">Read now</button><button class="btn ghost sm danger" type="button" data-sh="calremove">Disconnect</button>':"")+'</div>'+
+        '<details><summary class="hint">Where do I find that link?</summary><ol><li>On a computer, open <b>calendar.google.com</b>.</li><li>Click ⚙ <b>Settings</b>, then your calendar’s name on the left under “Settings for my calendars”.</li><li>Scroll to <b>Integrate calendar</b> and copy <b>Secret address in iCal format</b>.</li><li>Paste it above and press Connect. You can reset that address in Google any time to cut the link.</li></ol></details>'+
+        (c.feedUrl?'<p class="hint">Want your shoots to appear in Google Calendar by themselves? In Google Calendar choose <b>Other calendars → + → From URL</b> and paste this (Google refreshes it every few hours; the “Add to Google Calendar” button is instant):</p><div class="row"><code>'+esc(c.feedUrl)+'</code><button class="btn ghost sm" type="button" data-copy="'+esc(c.feedUrl)+'">Copy</button></div>':""))+
+      '</div>'+
+      '<div class="shsec"><h2>Extra free times</h2><p class="hint">Not on Google Calendar? Add times you’re free to film.</p>'+
+        '<div class="freeform"><input type="date" id="frDate" aria-label="Date"><input type="time" id="frFrom" step="900" aria-label="From" value="10:00"><span>to</span><input type="time" id="frTo" step="900" aria-label="To" value="12:00"><button class="btn sm" type="button" data-sh="freeadd">Add</button></div>'+
+        '<div class="freelist">'+mineFree.map(a=>'<div><span>'+esc(DOW[(new Date(a.start).getDay()+6)%7]+" "+new Date(a.start).getDate()+" "+MONTHS[new Date(a.start).getMonth()].slice(0,3)+", "+hm(a.start)+"–"+hm(a.end))+'</span><button class="btn ghost sm" type="button" data-sh="freedel" data-id="'+a.id+'">Remove</button></div>').join("")+'</div></div>';
+    return;
+  }
+  const people=hrPeople();
+  const up=shoots.filter(x=>x.end>now-3600e3&&x.status!=="cancelled").sort((a,b)=>a.start-b.start);
+  let board="";
+  if(!people.length) board='<p class="empty">No one has the HR role yet. Add them in the Team screen; their free and busy times will show here.</p>';
+  else{
+    board='<div class="blegend"><span><i style="background:color-mix(in srgb,var(--ready) 28%,#fff)"></i>Free (they added)</span><span><i style="background:repeating-linear-gradient(135deg,#D9E1DD 0 4px,#E7EDEA 4px 8px)"></i>Busy (their Google Calendar)</span><span><i style="background:var(--pink)"></i>Shoot</span><span>Tap a time to book.</span></div>'+
+      '<div class="bscale"><span></span><span></span><span class="ticks">'+[8,10,12,14,16,18,20].map(h=>'<span>'+(h%12||12)+(h<12?"am":"pm")+'</span>').join("")+'</span></div><div class="board">';
+    for(let i=0;i<14;i++){
+      const dt=new Date(); dt.setHours(0,0,0,0); dt.setDate(dt.getDate()+i); const day=ymd(dt);
+      board+='<div class="bday'+(i===0?" today":"")+'"><div class="dl">'+DOW[(dt.getDay()+6)%7]+' '+dt.getDate()+'<small>'+MONTHS[dt.getMonth()].slice(0,3)+(i===0?", today":"")+'</small></div><div class="bpeople">'+
+        people.map(uid=>'<div class="bp"><span class="nm">'+esc(who(uid))+'</span>'+dayBar(uid,day)+'</div>').join("")+'</div></div>';
+    }
+    board+='</div>';
+  }
+  box.innerHTML='<div class="shhead"><span class="hint">Times are your local time.</span>'+(readOnly?"":'<button class="btn primary" type="button" data-sh="book">Book a shoot</button>')+'</div>'+
+    '<div class="shsec"><h2>Upcoming shoots</h2>'+(up.length?up.map(x=>shootCard(x,false)).join(""):'<p class="empty">Nothing booked yet.</p>')+'</div>'+
+    '<div class="shsec"><h2>Who’s free</h2>'+board+'</div>';
+}
+let editingShoot=null;
+function openShoot(pre){
+  pre=pre||{};
+  const people=hrPeople();
+  if(!people.length){ toast("Add someone with the HR role in the Team screen first."); return }
+  editingShoot=pre.id||null;
+  $("shH").textContent=editingShoot?"Change the shoot time":"Book a shoot";
+  $("shSave").textContent=editingShoot?"Send new time":"Send request";
+  $("shWho").innerHTML=people.map(id=>'<option value="'+esc(id)+'">'+esc(who(id))+'</option>').join("");
+  const vids=[...items.values()].filter(i=>i.type!=="design"&&i.status!=="posted").sort((a,b)=>a.title.localeCompare(b.title));
+  $("shItem").innerHTML='<option value="">No specific video</option>'+vids.map(i=>'<option value="'+esc(i.id)+'">'+esc((i.code?i.code+" ":"")+i.title)+'</option>').join("");
+  const ex=editingShoot?shoots.find(x=>x.id===editingShoot):null;
+  const start=ex?ex.start:pre.start||null;
+  $("shWho").value=ex?ex.talent[0]:(pre.user||people[0]);
+  $("shDate").value=start?ymdOf(start):(pre.day||todayStr);
+  $("shStart").value=start?pad(new Date(start).getHours())+":"+pad(new Date(start).getMinutes()):"10:00";
+  $("shLen").value=ex?String(Math.round((ex.end-ex.start)/60000)):"60"; if(!$("shLen").value) $("shLen").value="60";
+  $("shItem").value=ex?ex.item:""; $("shLoc").value=ex?ex.location:""; $("shNotes").value=ex?ex.notes:"";
+  shootWarn(); $("shootDlg").showModal();
+}
+function shootTimes(){
+  const d=$("shDate").value, t=$("shStart").value; if(!d||!t) return null;
+  const s=new Date(d+"T"+t+":00").getTime(); return {start:s,end:s+Number($("shLen").value||60)*60000};
+}
+function shootWarn(){
+  const tm=shootTimes(), uid=$("shWho").value, w=$("shWarn");
+  if(!tm){ w.hidden=true; return }
+  const clash=busy.some(b=>b.user===uid&&b.start<tm.end&&b.end>tm.start)?"Their Google Calendar shows them busy then.":
+    shoots.some(x=>x.id!==editingShoot&&x.talent.includes(uid)&&["proposed","confirmed"].includes(x.status)&&x.start<tm.end&&x.end>tm.start)?"They already have a shoot at that time.":"";
+  w.hidden=!clash; w.textContent=clash?clash+" You can still send the request.":"";
+}
+["shWho","shDate","shStart","shLen"].forEach(k=>$(k).addEventListener("change",shootWarn));
+$("shClose").onclick=()=>$("shootDlg").close();
+$("shootForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const tm=shootTimes(); if(!tm){ toast("Pick a date and start time."); return }
+  if(tm.end<Date.now()){ toast("That time has already passed."); return }
+  const it=items.get($("shItem").value);
+  const data={talent:[$("shWho").value],item:it?it.id:"",title:it?((it.code?it.code+" ":"")+it.title):"Shoot",start:tm.start,end:tm.end,location:$("shLoc").value.trim(),notes:$("shNotes").value.trim(),status:"proposed",reply:"",by:myId||"",at:Date.now(),respondedBy:"",respondedAt:0};
+  try{
+    if(editingShoot) await db.collection("shoots").doc(editingShoot).update({start:data.start,end:data.end,item:data.item,title:data.title,location:data.location,notes:data.notes,talent:data.talent,status:"proposed",reply:"",respondedBy:"",respondedAt:0});
+    else await db.collection("shoots").add(data);
+    $("shootDlg").close(); toast(editingShoot?"New time sent. They’ll get a notification.":"Request sent. "+who(data.talent[0])+" gets a notification to confirm.");
+  }catch(err){ writeErr(err,"the shoot") }
+});
+$("shoots").addEventListener("click",async e=>{
+  const bar=e.target.closest(".bar");
+  if(bar&&!readOnly){ const r=bar.getBoundingClientRect(); let h=DAY_FROM+(e.clientX-r.left)/r.width*(DAY_TO-DAY_FROM); h=Math.min(DAY_TO-1,Math.max(DAY_FROM,Math.round(h*2)/2));
+    const s=new Date(bar.dataset.day+"T00:00:00").getTime()+h*3600e3; openShoot({user:bar.dataset.user,day:bar.dataset.day,start:s}); return }
+  const b=e.target.closest("[data-sh]"); if(!b||!db) return;
+  const act=b.dataset.sh, id=b.dataset.id, ref=id?db.collection(b.dataset.sh.startsWith("free")?"availability":"shoots").doc(id):null;
+  try{
+    if(act==="book") openShoot();
+    else if(act==="edit") openShoot({id});
+    else if(act==="cancel"){ if(!b.dataset.armed){ b.dataset.armed="1"; b.textContent="Tap again to cancel"; return } await ref.update({status:"cancelled"}); toast("Shoot cancelled. They’ll get a notification.") }
+    else if(act==="confirm"){ await ref.update({status:"confirmed",reply:"",respondedBy:myId||"",respondedAt:Date.now()}); toast("Confirmed. Add it to your Google Calendar with the button.") }
+    else if(act==="decline"||act==="undo"){ const inp=document.querySelector('[data-reply="'+id+'"]'); await ref.update({status:"declined",reply:inp?inp.value.trim().slice(0,200):"",respondedBy:myId||"",respondedAt:Date.now()}); toast("Sent. The content team will find another time.") }
+    else if(act==="freeadd"){ const d=$("frDate").value, f=$("frFrom").value, t=$("frTo").value; if(!d||!f||!t){ toast("Pick a date and times."); return }
+      const s=new Date(d+"T"+f+":00").getTime(), en=new Date(d+"T"+t+":00").getTime(); if(!(en>s)){ toast("The end time must be after the start."); return }
+      await db.collection("availability").add({user:myId||"",start:s,end:en}); toast("Free time added.") }
+    else if(act==="freedel"){ await db.collection("availability").doc(id).delete() }
+    else if(act==="calsave"){ const u=$("calUrl").value.trim(); if(!/^(https|webcal):\/\/\S+\.ics(\?|$)|^(https|webcal):\/\/calendar\.google\.com\/\S+/i.test(u)){ toast("Paste the “Secret address in iCal format” from Google Calendar settings (it ends in .ics)."); return }
+      b.disabled=true; b.textContent="Connecting…"; await window.gzCal.save(u); calState=await window.gzCal.get(); renderShoots(); toast(calState.error?"Couldn’t read that calendar: "+calState.error:"Connected. Your busy times are shared with the studio.") }
+    else if(act==="calsync"){ b.disabled=true; b.textContent="Reading…"; await window.gzCal.sync(); calState=await window.gzCal.get(); renderShoots(); toast("Calendar read.") }
+    else if(act==="calremove"){ if(!b.dataset.armed){ b.dataset.armed="1"; b.textContent="Tap again to disconnect"; return } await window.gzCal.save(""); calState=await window.gzCal.get(); renderShoots(); toast("Disconnected. Your busy times were removed.") }
+  }catch(err){ b.disabled=false; if(/calsave|calsync|calremove/.test(act)) toast("Something went wrong: "+(err.message||err)); else writeErr(err,"the shoot") }
+});
+let seenShoots=null;
+function shootWatch(){
+  const ids=new Set(shoots.map(x=>x.id+":"+x.status+":"+x.start));
+  if(seenShoots===null){ seenShoots=ids; return }
+  const fresh=shoots.filter(x=>!seenShoots.has(x.id+":"+x.status+":"+x.start)&&x.by!==myId&&x.status==="proposed"&&x.talent.includes(myId));
+  seenShoots=ids;
+  const n=shoots.filter(x=>x.talent.includes(myId)&&x.status==="proposed"&&x.end>Date.now()).length;
+  $("shBadge").hidden=!n||!isHr(); $("shBadge").textContent=n;
+  if(fresh.length){ chime(); catMove("hop"); catSays("Shoot request",who(fresh[0].by)+" wants to film with you "+shootWhen(fresh[0])+".",{label:"Reply",fn:()=>{location.hash="shoots"}}) }
+}
 
 /* Phase 2 wiring: type fields, references, team filter, owner preview */
 $("fType").addEventListener("change",typeFields);
