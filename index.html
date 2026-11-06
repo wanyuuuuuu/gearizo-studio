@@ -531,6 +531,69 @@ dialog{border-radius:18px}
 .gz-auth-links{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .gz-auth-links button{border:0;background:none;padding:4px 0;color:var(--green);font-weight:600;font-size:13.5px}
 #gzBell[data-state="on"]{background:var(--pink);border-color:var(--pink);color:#fff}
+.dback{display:none}
+
+/* ===== Phone layout (computer layout above stays as it is) ===== */
+@media (max-width:720px){
+  body{font-size:15px}
+  .wrap{padding-top:14px}
+  /* slim top bar: wordmark left, bell + role as icons right */
+  .top{position:relative;gap:10px;margin-bottom:10px}
+  .top > div:first-child{width:100%}
+  .brand{font-size:17px;padding-right:96px}
+  .brand small{display:none}
+  #gzBell{position:absolute;top:-4px;right:46px;width:40px;height:40px;min-height:40px}
+  #roleBtn{position:absolute;top:-4px;right:0;width:40px;height:40px;min-height:40px;padding:0;font-size:0;gap:0}
+  #roleBtn::before{width:14px;height:14px}
+  .month{font-size:26px}
+  .stats{margin-top:8px;gap:5px}
+  .stat{font-size:12px;padding:3px 9px}
+  /* month arrows + Today in one row; New item becomes a floating + button */
+  .nav{width:100%;gap:8px}
+  .nav .btn.icon{width:40px;height:40px;min-height:40px}
+  #todayBtn{min-height:40px}
+  #newBtn{position:fixed;z-index:22;right:calc(env(safe-area-inset-right,0px) + 16px);bottom:calc(env(safe-area-inset-bottom,0px) + 82px);
+    width:58px;height:58px;min-height:58px;padding:0;border-radius:50%;font-size:0;box-shadow:0 8px 22px color-mix(in srgb,var(--pink) 45%,transparent)}
+  #newBtn::before{content:"+";font-family:var(--display);font-size:32px;font-weight:600;line-height:1;margin-top:-3px}
+  /* the cat moves to the left so it doesn't sit under the + button */
+  .rail .mascot{right:auto;left:calc(env(safe-area-inset-left,0px) + 12px)}
+  .catsay{right:auto;left:calc(env(safe-area-inset-left,0px) + 70px)}
+  .catsay::before{left:-7px;right:auto;transform:rotate(45deg)}
+  /* quieter extras */
+  .note{display:none}
+  .bar{padding-bottom:8px}
+  .fchip{font-size:12px;padding:4px 10px 4px 8px}
+  .nstrip{margin-bottom:10px}
+  .nrow{grid-auto-columns:minmax(220px,78vw)}
+  .nrow .nitem{font-size:13px;padding:9px 10px}
+  .nrow .nitem .q{display:none}
+  /* bigger tap targets */
+  .btn{min-height:44px}
+  .btn.sm{min-height:38px}
+  .chip{padding:8px 10px 9px;font-size:13.5px}
+  .tkchk{width:26px;height:26px}
+  .tk{grid-template-columns:28px minmax(0,1fr) auto;padding:10px 6px}
+  /* Review: list first; tapping a video opens it full screen with a back button */
+  .desk:not(.phone-detail) .detail{display:none}
+  .desk.phone-detail .qcol{display:none}
+  .dback{display:inline-flex;margin-bottom:10px}
+  .queue .empty{display:none}
+  .detail{padding:14px 14px 16px;border-radius:14px}
+  .detail .ver video{max-height:62vh}
+  .banner .acts{width:100%}
+  .banner .acts .btn{flex:1}
+  /* item editor opens full screen */
+  dialog#dlg{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border-radius:0}
+  #dlg .dlg{height:100%;max-height:100dvh}
+  #dlg .dlg-head{border-radius:0;padding-top:calc(env(safe-area-inset-top,0px) + 12px)}
+  #dlg .dlg-scroll{flex:1}
+  #dlg .dlg-foot{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 12px)}
+  .tabs{overflow-x:auto}
+  .tabs .jump{white-space:nowrap}
+  /* tasks page: add form stacks neatly */
+  .tkview .tkadd #tkText{flex:1 1 100%}
+  .tkview .tkadd select{flex:1}
+}
 #gzBell svg{width:18px;height:18px}
 </style>
 </head>
@@ -591,6 +654,7 @@ dialog{border-radius:18px}
       <article class="detail" id="detail">
         <p class="empty" id="dEmpty">Nothing to review right now. When an editor sends a video for review, it shows up here.</p>
         <div id="dBody" hidden>
+          <button class="btn sm dback" id="dBack" type="button">‹ All videos</button>
           <div class="dhead">
             <div><p class="dseries" id="dSeries"></p><h2 id="dTitle"></h2><p class="dmeta" id="dMeta"></p></div>
             <div class="dacts"><button class="btn sm" id="dEdit" type="button">Edit details</button></div>

@@ -458,7 +458,7 @@ function linkHtml(link){
   if(/^https?:\/\//i.test(link)) return '<div class="path"><a class="btn sm" href="'+esc(link)+'" target="_blank" rel="noopener">Open on NAS</a><code>'+esc(link)+'</code><button class="btn sm ghost" data-copy="'+esc(link)+'" type="button">Copy</button></div>';
   return '<div class="path"><span>NAS:</span><code>'+esc(link)+'</code><button class="btn sm ghost" data-copy="'+esc(link)+'" type="button">Copy path</button></div>';
 }
-function goReview(id){ selId=id||null; window.scrollTo(0,0); if(view!=="review") location.hash="review"; else render(); }
+function goReview(id){ selId=id||null; $("desk").classList.toggle("phone-detail",!!id&&narrow.matches); window.scrollTo(0,0); if(view!=="review") location.hash="review"; else render(); }
 const QGROUPS=[
   {id:"review",name:"Waiting for approval",k:"var(--review)"},
   {id:"changes",name:"Needs changes",k:"var(--edit)"},
@@ -961,7 +961,8 @@ $("next").onclick=()=>{cursor=new Date(cursor.getFullYear(),cursor.getMonth()+1,
 $("todayBtn").onclick=()=>{cursor=new Date(now.getFullYear(),now.getMonth(),1);render()};
 $("newBtn").onclick=()=>openItem(null,"");
 $("vCal").onclick=()=>{location.hash="calendar"};
-$("vRev").onclick=()=>{location.hash="review"};
+$("vRev").onclick=()=>{ $("desk").classList.remove("phone-detail"); location.hash="review" };
+$("dBack").onclick=()=>{ $("desk").classList.remove("phone-detail"); window.scrollTo(0,0) };
 $("vPipe").onclick=()=>{location.hash="pipeline"};
 $("vTask").onclick=()=>{location.hash="tasks"};
 window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);view=VIEWS.includes(h)?h:"calendar";render()});
@@ -996,7 +997,10 @@ $("dlg").addEventListener("click",e=>{
 });
 $("desk").addEventListener("click",e=>{
   const c=e.target.closest(".chip");
-  if(c){ selId=c.dataset.id; render(); if(window.matchMedia("(max-width: 860px)").matches) $("detail").scrollIntoView({block:"start"}); return }
+  if(c){ selId=c.dataset.id; render();
+    if(narrow.matches){ $("desk").classList.add("phone-detail"); window.scrollTo(0,0) }   /* phone: list → full-screen video */
+    else if(window.matchMedia("(max-width: 860px)").matches) $("detail").scrollIntoView({block:"start"});
+    return }
   const cp=e.target.closest("[data-copy]"); if(cp){ copyText(cp.dataset.copy); return }
   const ib=e.target.closest("[data-inb]");
   if(ib){
