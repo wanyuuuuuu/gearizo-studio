@@ -100,8 +100,56 @@
       },
     };
   }
+  /* Roles live in public.members (only the owner edits them). app.js still reads them as a "team" collection. */
+  const teamListeners = new Set();
+  let teamSnap = null, member = { role: "", is_owner: false };
+  async function loadTeam() {
+    const { data, error } = await sb.rpc("team_roles");
+    if (error) throw error;
+    teamSnap = { docs: (data || []).map((r) => ({ id: r.user_id, exists: true, data: () => ({ role: r.role }) })) };
+    teamListeners.forEach((l) => { try { l.next(teamSnap); } catch (e) { console.error(e); } });
+  }
+  async function loadMember() {
+    const { data } = await sb.rpc("my_member");
+    member = (data && data[0]) || { role: "", is_owner: false };
+  }
+  const teamCollection = {
+    doc: () => ({ get: async () => ({ exists: false, data: () => undefined }), set: async () => { const e = new Error("Roles are set by the studio owner"); e.code = "not_granted"; throw e; }, update: async () => {}, delete: async () => {} }),
+    add: async () => { const e = new Error("Roles are set by the studio owner"); e.code = "not_granted"; throw e; },
+    onSnapshot(next, error) {
+      const l = { next, error }; teamListeners.add(l);
+      if (teamSnap) setTimeout(() => next(teamSnap), 0); else loadTeam().catch((e) => error && error(wrapErr(e)));
+      return () => teamListeners.delete(l);
+    },
+  };
+  /* Owner tools for the Team screen */
+  window.gzTeam = {
+    async list() {
+      const { data, error } = await sb.from("members").select("email,role,is_owner,added_at").order("added_at");
+      if (error) throw error;
+      return data || [];
+    },
+    async add(email, role) {
+      const { error } = await sb.from("members").insert({ email: String(email).trim().toLowerCase(), role });
+      if (error) throw error;
+      await loadTeam();
+    },
+    async setRole(email, role) {
+      const { error } = await sb.from("members").update({ role }).eq("email", email);
+      if (error) throw error;
+      await loadTeam();
+    },
+    async remove(email) {
+      const { error } = await sb.from("members").delete().eq("email", email);
+      if (error) throw error;
+      await loadTeam();
+    },
+    me: () => ({ ...member }),
+  };
+
   const db = {
     collection(name) {
+      if (name === "team") return teamCollection;
       return {
         doc: (id) => docRef(name, id || newId()),
         async add(d) { const r = docRef(name, newId()); await r.set(d); return r; },
@@ -120,6 +168,7 @@
   const user = {
     id: async () => session.user.id,
     isOwner: async () => {
+      if (member.is_owner) return true;
       const bytes = new TextEncoder().encode((session.user.email || "").trim().toLowerCase());
       const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
       return hash === cfg.ownerEmailSha256;
@@ -261,6 +310,9 @@
     // Keep each person's display name where teammates can read it
     docRef("profiles", s.user.id).set({ name: displayName(), email: s.user.email }).catch(() => {});
     load("profiles").catch(() => {});
+    await loadMember().catch(() => {});
+    loadTeam().catch(() => {});
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { loadMember().catch(() => {}); loadTeam().catch(() => {}); } });
     startRealtime();
     resolveReady();
     const app = document.createElement("script");

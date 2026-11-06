@@ -532,6 +532,16 @@ dialog{border-radius:18px}
 .gz-auth-links button{border:0;background:none;padding:4px 0;color:var(--green);font-weight:600;font-size:13.5px}
 #gzBell[data-state="on"]{background:var(--pink);border-color:var(--pink);color:#fff}
 .dback{display:none}
+/* Team screen (owner) and dynamic task columns */
+.teamrow{flex-wrap:wrap}
+.teamrow .tm{min-width:0;word-break:break-all;font-size:13.5px}
+.teamrow .tm i{font-style:normal;font-size:11px;font-weight:700;color:var(--pink);margin-left:4px}
+.teamrow .tmr{display:flex;align-items:center;gap:6px}
+.team-add{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.team-add input{flex:1 1 200px;min-width:0;border:1px solid var(--line);border-radius:999px;padding:8px 12px;min-height:38px}
+.team-add select{border:1px solid var(--line);border-radius:999px;padding:6px 10px;min-height:38px;background:var(--surface)}
+.role-legend{margin:12px 0 0;padding-left:18px;font-size:12.5px;color:var(--ink-2);display:grid;gap:4px}
+.tkcols{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
 
 /* ===== Phone layout (computer layout above stays as it is) ===== */
 @media (max-width:720px){
@@ -645,10 +655,7 @@ dialog{border-radius:18px}
         <input type="date" id="tkDue" aria-label="Due date (optional)">
         <button class="btn primary" type="submit">Add task</button>
       </form>
-      <div class="tkcols">
-        <div class="tkcol" id="tkColC" data-for="content" style="--k:var(--green)"><h2>Content<span class="ncount" id="tkNc" hidden>0</span></h2><div class="list" id="tkListC"></div><button class="tkdone-t" type="button" data-for="content" hidden></button><div class="list" id="tkDoneC" hidden></div></div>
-        <div class="tkcol" id="tkColM" data-for="marketing" style="--k:var(--pink)"><h2>Marketing<span class="ncount" id="tkNm" hidden>0</span></h2><div class="list" id="tkListM"></div><button class="tkdone-t" type="button" data-for="marketing" hidden></button><div class="list" id="tkDoneM" hidden></div></div>
-      </div>
+      <div class="tkcols" id="tkCols"></div>
     </section>
     <section class="desk" id="desk" hidden aria-label="Review desk">
       <div class="qcol"><div id="inboxBox"></div><div class="queue" id="queue"></div></div>
@@ -727,6 +734,7 @@ dialog{border-radius:18px}
         <div class="formgrid">
           <div class="f"><label for="fSeries">Series</label><select id="fSeries"></select></div>
           <div class="f"><label for="fStatus">Status</label><select id="fStatus"></select></div>
+          <div class="f" id="fTeamWrap"><label for="fTeam">For team</label><select id="fTeam"><option value="marketing">Marketing</option><option value="ecomm">E-commerce</option></select></div>
           <div class="f full"><span class="lab">Post date</span>
             <div class="datefield"><input type="date" id="fDate" aria-label="Post date"><button class="btn ghost" id="fClearDate" type="button">No date</button></div>
           </div>
@@ -754,13 +762,23 @@ dialog{border-radius:18px}
 </dialog>
 <dialog id="roleDlg" aria-labelledby="roleH">
   <div class="role-wrap">
-    <h2 id="roleH">What’s your part in the studio?</h2>
-    <p class="hint">This decides which buttons you see. You can change it any time from the button at the top.</p>
-    <div class="role-opts">
-      <button class="role-opt" data-role="content" type="button" style="--k:var(--blue)" aria-pressed="false"><b>Content &amp; video</b><span>You make the videos.</span><ul><li>Script, shoot and edit</li><li>Upload versions and send them for review</li><li>Fix feedback</li></ul></button>
-      <button class="role-opt" data-role="marketing" type="button" style="--k:var(--mk)" aria-pressed="false"><b>Marketing</b><span>You run the plan.</span><ul><li>Assign tasks with dates</li><li>Review, approve or ask for changes</li><li>Write captions and post</li></ul></button>
+    <h2 id="roleH">Your role</h2>
+    <p class="hint" id="myRoleLine"></p>
+    <div id="teamBox" hidden>
+      <h3 class="sec-h">Team</h3>
+      <p class="hint">Only you can add people and set roles. Add their email here first, then they sign up with that email.</p>
+      <div id="teamList"></div>
+      <form class="team-add" id="teamAdd">
+        <input type="email" id="teamEmail" placeholder="name@company.com" aria-label="New member’s email" autocomplete="off">
+        <select id="teamRole" aria-label="Role"></select>
+        <button class="btn primary sm" type="submit">Add</button>
+      </form>
+      <ul class="role-legend">
+        <li><b>Content &amp; video</b> sees and makes everything (you).</li>
+        <li><b>Marketing</b> and <b>E-commerce</b> each see only their own requests, review and approve them.</li>
+        <li><b>HR</b> sees only tasks for now; the shoot schedule comes next.</li>
+      </ul>
     </div>
-    <div id="teamBox" hidden><h3 class="sec-h">Team</h3><p class="hint">As the owner you can change anyone’s role. People show up here after they open the studio and pick a role.</p><div id="teamList"></div></div>
     <div class="row" style="display:flex;justify-content:space-between;gap:8px"><button class="btn ghost" id="gzSignOutBtn" type="button" onclick="window.gzSignOut&&window.gzSignOut()">Sign out</button><button class="btn" id="roleClose" type="button">Close</button></div>
   </div>
 </dialog>

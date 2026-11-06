@@ -38,9 +38,11 @@ let items=new Map(), versions=[], feedback=[], focus=[];
 let db=null, assets=null, userNs=null, myId=null, amOwner=false, names={};
 let mode="local", readOnly=false, live={items:false,focus:false,team:false};
 let team={}, promptedRole=false, inbox=[], tasks=[];
-const ROLES={content:{name:"Content & video",k:"var(--blue)"},marketing:{name:"Marketing",k:"var(--mk)"}};
+const ROLES={content:{name:"Content & video",k:"var(--blue)"},marketing:{name:"Marketing",k:"var(--mk)"},ecomm:{name:"E-commerce",k:"#E8772E"},hr:{name:"HR",k:"#8C6BD1"}};
+const TEAMS={marketing:"Marketing",ecomm:"E-commerce"};
 const myRole=()=>(myId&&team[myId])||"";
-const isMk=()=>myRole()==="marketing", isCr=()=>myRole()==="content";
+/* isMk = a requesting team that reviews and approves (Marketing or E-commerce) */
+const isMk=()=>["marketing","ecomm"].includes(myRole()), isCr=()=>myRole()==="content", isHr=()=>myRole()==="hr";
 let focusRO=false, selId=null, nShow=20;
 const NOTIF_KEY="gearizo-notif-read-v1";
 function saveRead(s){ try{localStorage.setItem(NOTIF_KEY,JSON.stringify({floor:s.floor,ids:[...s.ids].slice(-400)}))}catch(e){} }
@@ -69,6 +71,7 @@ function normalize(id,d){
     due:typeof d.due==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(d.due)?d.due:"",
     product:String(d.product||""),
     kind:d.kind==="ai"||d.kind==="real"?d.kind:"",
+    team:d.team==="ecomm"?"ecomm":"marketing",
     notes:String(d.notes||""),
     caption:String(d.caption||""),
     approvedBy:String(d.approvedBy||""), approvedAt:Number(d.approvedAt)||0, postedAt:Number(d.postedAt)||0, postedBy:String(d.postedBy||""),
@@ -112,7 +115,7 @@ function chip(it,showDate,extra){
   if(view!=="pipeline") meta.push(stMap[it.status].name);
   if(!showDate&&view==="calendar"){ const vs0=vFor(it.id); const open0=fbFor(it.id).filter(f=>!f.done).length;
     return '<button class="chip s-'+it.status+(it.status==="posted"?" posted":"")+(extra||"")+'" draggable="'+(!readOnly)+'" data-id="'+esc(it.id)+'" style="--c:'+s.c+'" title="'+esc(s.name+(it.code?" · "+it.code:""))+'">'+
-      '<span class="t">'+esc(it.title)+'</span><span class="m">'+esc(stMap[it.status].name)+'</span>'+(open0?'<span class="flag">'+open0+' to fix</span>':"")+'</button>'; }
+      '<span class="t">'+esc(it.title)+'</span><span class="m">'+esc((isCr()&&it.team==="ecomm"?"E-com · ":"")+stMap[it.status].name)+'</span>'+(open0?'<span class="flag">'+open0+' to fix</span>':"")+'</button>'; }
   const vs=vFor(it.id); if(vs.length) meta.push("v"+vs[0].n);
   if(it.due&&["idea","script","shoot","edit","changes"].includes(it.status)) meta.push("Due "+shortDate(it.due));
 
@@ -159,7 +162,7 @@ function renderHeader(){
   }
   $("prev").hidden=$("next").hidden=$("todayBtn").hidden=!isCal;
   $("vCal").setAttribute("aria-pressed",isCal); $("vRev").setAttribute("aria-pressed",view==="review"); $("vPipe").setAttribute("aria-pressed",view==="pipeline"); $("vTask").setAttribute("aria-pressed",view==="tasks");
-  $("newBtn").hidden=readOnly;
+  $("newBtn").hidden=readOnly||isHr();
 }
 function stCls(list){
   list=list||[];
@@ -206,6 +209,8 @@ function renderColumns(cols){
 }
 function render(){
   renderHeader(); renderFilters();
+  if(isHr()&&view!=="tasks"){ view="tasks"; if(location.hash!=="#tasks") history.replaceState(null,"","#tasks") }
+  ["vCal","vRev","vPipe"].forEach(k=>{ $(k).hidden=isHr() });
   const rev=view==="review", tv=view==="tasks";
   $("layout").classList.toggle("full",rev||tv); $("main").hidden=rev||tv; $("desk").hidden=!rev; $("tasks").hidden=!tv; $("notifs").hidden=rev||tv; $("filters").hidden=tv;
   if(view==="calendar") renderCalendar();
@@ -274,7 +279,7 @@ async function connect(){
     },()=>{});
     db.collection("tasks").onSnapshot(snap=>{
       live.tasks=true;
-      tasks=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,text:String(v.text||"").slice(0,200),for:v.for==="marketing"?"marketing":"content",
+      tasks=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,text:String(v.text||"").slice(0,200),for:ROLES[v.for]?v.for:"content",
         due:typeof v.due==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(v.due)?v.due:"",done:!!v.done,doneBy:String(v.doneBy||""),doneAt:Number(v.doneAt)||0,by:String(v.by||""),at:Number(v.at)||0}}).filter(t=>t.text);
       render(); resolveNames(); taskWatch();
     },()=>{ live.tasks=true; renderTasks() });
@@ -316,6 +321,7 @@ function openItem(id,presetDate,presetProduct){
   if(!it) return;
   $("fTitle").value=it.title==="Untitled"&&id?"":it.title;
   $("fStatus").querySelectorAll("option").forEach(o=>{ o.disabled=isCr()&&["approved","posted"].includes(o.value)&&o.value!==it.status });
+  $("fTeamWrap").hidden=!isCr(); $("fTeam").value=it.team||(isMk()?myRole():"marketing");
   $("fSeries").value=it.series; $("fStatus").value=it.status; $("fDate").value=it.date; $("fDue").value=it.due||""; $("fNotes").value=it.notes; $("fCaption").value=it.caption||"";
   $("fPlatforms").querySelectorAll("input").forEach(i=>i.checked=it.platforms.includes(i.value));
   $("fLangs").querySelectorAll("input").forEach(i=>i.checked=it.langs.includes(i.value));
@@ -339,6 +345,7 @@ function formData(prev,id){
   STAMP_KEYS.forEach(k=>{ d[k]=prev?prev[k]:(k.endsWith("By")?"":0) });
   d.createdBy=prev?prev.createdBy:(myId||"");
   d.code=prev&&prev.code?prev.code:nextCode();
+  d.team=isMk()?myRole():(isCr()?$("fTeam").value:(prev?prev.team:"marketing"));
   return d;
 }
 function saveItem(close){
@@ -674,7 +681,7 @@ function nText(e){
   const t=e.item?'<b>'+esc(e.item.title)+'</b>':'', w='<b>'+esc(who(e.by))+'</b>', v=e.n?' v'+e.n:'';
   if(e.type==="task") return w+' added a task for '+ROLE_SHORT[e.for]+': '+esc(e.text);
   if(e.type==="taskdone") return w+' finished: '+esc(e.text);
-  if(e.type==="planned") return w+(team[e.by]==="marketing"?' assigned ':' planned ')+t+(e.item.date?' for '+esc(shortDate(e.item.date)):'');
+  if(e.type==="planned") return w+(["marketing","ecomm"].includes(team[e.by])?' assigned ':' planned ')+t+(e.item.date?' for '+esc(shortDate(e.item.date)):'');
   if(e.type==="version") return w+' added v'+e.n+' of '+t;
   if(e.type==="submit") return w+' sent '+t+v+' for review';
   if(e.type==="feedback") return w+' left feedback on '+t+v+(e.t!=null?' at '+fmtSec(e.t):'');
@@ -700,8 +707,9 @@ $("nList").addEventListener("click",e=>{
 $("nAll").onclick=()=>{ nRead={floor:Date.now(),ids:new Set()}; saveRead(nRead); renderNotifs(); toast("All caught up.") };
 
 /* Tasks: its own page in the rail, one column per role */
-const ROLE_SHORT={content:"Content",marketing:"Marketing"};
-const tkShowDone={content:false,marketing:false};
+const ROLE_SHORT={content:"Content",marketing:"Marketing",ecomm:"E-commerce",hr:"HR"};
+const tkShowDone={};
+const taskCols=()=>{ const r=myRole(); return !r||r==="content"?["content","marketing","ecomm","hr"]:[r,"content"] };
 function taskRow(t){
   const late=!t.done&&t.due&&t.due<todayStr, today=!t.done&&t.due===todayStr;
   const meta=[t.due?'<span class="'+(late?"late":"")+'">'+(late?"Overdue, ":today?"Today, ":"Due ")+esc(shortDate(t.due))+'</span>':"",
@@ -715,28 +723,29 @@ function renderTasks(){
   const myOpen=r?tasks.filter(t=>t.for===r&&!t.done).length:0;
   $("tkBadge").hidden=!myOpen; $("tkBadge").textContent=myOpen;
   if(view!=="tasks") return;
-  const ready=mode==="db"&&live.tasks;
+  const ready=mode==="db"&&live.tasks, cols=taskCols();
   $("tkForm").hidden=!ready||readOnly;
-  if(!$("tkFor").dataset.touched) $("tkFor").value="content";
-  $("tkColC").classList.toggle("mine",r==="content"); $("tkColM").classList.toggle("mine",r==="marketing");
-  [["content","C"],["marketing","M"]].forEach(([role,k])=>{
-    const list=$("tkList"+k), dl=$("tkDone"+k), tgl=$("tasks").querySelector('.tkdone-t[data-for="'+role+'"]');
-    if(!ready){ list.innerHTML='<div class="empty">'+(mode==="db"?"Loading…":"Sign in to see tasks.")+'</div>'; dl.hidden=true; tgl.hidden=true; $("tkN"+k.toLowerCase()).hidden=true; return }
+  const sel=$("tkFor"), opts=cols.map(k=>'<option value="'+k+'">→ '+esc(ROLE_SHORT[k])+'</option>').join("");
+  if(sel._opts!==opts){ sel.innerHTML=opts; sel._opts=opts; sel.dataset.touched="" }
+  if(!sel.dataset.touched) sel.value="content";
+  $("tkCols").innerHTML=cols.map(role=>{
+    if(!ready) return '<div class="tkcol" style="--k:'+ROLES[role].k+'"><h2>'+esc(ROLE_SHORT[role])+'</h2><div class="empty">'+(mode==="db"?"Loading…":"Sign in to see tasks.")+'</div></div>';
     const all=tasks.filter(t=>t.for===role);
     const open=all.filter(t=>!t.done).sort((a,b)=>(a.due||"9999").localeCompare(b.due||"9999")||a.at-b.at);
     const done=all.filter(t=>t.done).sort((a,b)=>b.doneAt-a.doneAt).slice(0,20);
-    const n=$("tkN"+k.toLowerCase()); n.hidden=!open.length; n.textContent=open.length;
-    list.innerHTML=open.length?open.map(taskRow).join(""):'<div class="empty">'+(all.length?"All done.":"No tasks yet.")+'</div>';
-    tgl.hidden=!done.length; tgl.textContent=(tkShowDone[role]?"Hide":"Show")+" done ("+done.length+")";
-    dl.hidden=!tkShowDone[role]||!done.length; dl.innerHTML=tkShowDone[role]?done.map(taskRow).join(""):"";
-  });
+    const show=!!tkShowDone[role];
+    return '<div class="tkcol'+(role===r?" mine":"")+'" style="--k:'+ROLES[role].k+'"><h2>'+esc(role===r&&r!=="content"?"Yours":ROLE_SHORT[role])+(open.length?'<span class="ncount">'+open.length+'</span>':"")+'</h2>'+
+      '<div class="list">'+(open.length?open.map(taskRow).join(""):'<div class="empty">'+(all.length?"All done.":"No tasks yet.")+'</div>')+'</div>'+
+      (done.length?'<button class="tkdone-t" type="button" data-for="'+role+'">'+(show?"Hide":"Show")+' done ('+done.length+')</button>'+(show?'<div class="list">'+done.map(taskRow).join("")+'</div>':""):"")+'</div>';
+  }).join("");
 }
 $("tkFor").addEventListener("change",()=>{ $("tkFor").dataset.touched="1" });
 $("tasks").addEventListener("click",e=>{ const b=e.target.closest(".tkdone-t"); if(b){ tkShowDone[b.dataset.for]=!tkShowDone[b.dataset.for]; renderTasks() } });
 $("tkForm").addEventListener("submit",async e=>{
   e.preventDefault();
   const text=$("tkText").value.trim(); if(!text||!db){ $("tkText").focus(); return }
-  const t={text:text.slice(0,200),for:$("tkFor").value==="marketing"?"marketing":"content",due:$("tkDue").value||"",done:false,doneBy:"",doneAt:0,by:myId||"",at:Date.now()};
+  const f=$("tkFor").value;
+  const t={text:text.slice(0,200),for:ROLES[f]?f:"content",due:$("tkDue").value||"",done:false,doneBy:"",doneAt:0,by:myId||"",at:Date.now()};
   $("tkText").value=""; $("tkDue").value=""; $("tkText").focus();
   try{ await db.collection("tasks").add(t); toast(t.for===myRole()?"Task added.":"Task sent to "+ROLE_SHORT[t.for]+".") }
   catch(err){ $("tkText").value=text; writeErr(err,"tasks") }
@@ -759,37 +768,41 @@ async function taskClick(e){
 $("tasks").addEventListener("click",taskClick);
 function goTasks(){ window.scrollTo(0,0); if(view!=="tasks") location.hash="tasks"; else render() }
 
-/* Roles */
-function maybeAskRole(){
-  if(promptedRole||!myId||readOnly||mode!=="db"||!live.team||team[myId]) return;
-  if($("dlg").open||$("roleDlg").open) return;
-  promptedRole=true; openRole();
-}
-function renderRoleDlg(){
+/* Roles: set by the studio owner in the Team screen */
+const ROLE_HINT={content:"Sees and makes everything.",marketing:"Asks for videos, reviews and approves its own work.",ecomm:"Asks for designs and videos, reviews and approves its own work.",hr:"Sees only tasks for now (shoot schedule comes next)."};
+function maybeAskRole(){}
+async function renderRoleDlg(){
   const r=myRole();
-  $("roleDlg").querySelectorAll(".role-opt").forEach(b=>b.setAttribute("aria-pressed",b.dataset.role===r));
+  $("myRoleLine").textContent=r?("You’re "+ROLES[r].name+". "+ROLE_HINT[r]+(amOwner?"":" Ask the studio owner to change it.")):"You don’t have a role yet. Ask the studio owner to add you.";
   $("teamBox").hidden=!amOwner;
-  if(!amOwner) return;
-  const ids=Object.keys(team);
-  $("teamList").innerHTML=ids.length?ids.map(id=>'<div class="teamrow"><span>'+esc(who(id))+'</span><select data-uid="'+esc(id)+'" aria-label="Role for '+esc(who(id))+'">'+
-    Object.entries(ROLES).map(([k,v])=>'<option value="'+k+'"'+(team[id]===k?" selected":"")+'>'+esc(v.name)+'</option>').join("")+'</select></div>').join(""):'<p class="empty">Nobody has picked a role yet.</p>';
+  if(!amOwner||!window.gzTeam) return;
+  const roleOpts=v=>Object.entries(ROLES).map(([k,x])=>'<option value="'+k+'"'+(v===k?" selected":"")+'>'+esc(x.name)+'</option>').join("");
+  $("teamRole").innerHTML=roleOpts("ecomm");
+  let list=[];
+  try{ list=await window.gzTeam.list() }catch(e){ $("teamList").innerHTML='<p class="empty">Couldn’t load the team.</p>'; return }
+  $("teamList").innerHTML=list.map(m=>'<div class="teamrow"><span class="tm"><b>'+esc(m.email)+'</b>'+(m.is_owner?' <i>owner</i>':"")+'</span>'+
+    (m.is_owner?'<span class="tmr">'+esc(ROLES[m.role].name)+'</span>':'<span class="tmr"><select data-email="'+esc(m.email)+'" aria-label="Role for '+esc(m.email)+'">'+roleOpts(m.role)+'</select>'+
+    '<button type="button" class="btn ghost sm" data-rm="'+esc(m.email)+'">Remove</button></span>')+'</div>').join("");
 }
 function openRole(){ renderRoleDlg(); $("roleDlg").showModal() }
-async function setRole(uid,role){
-  if(!db||!uid||!ROLES[role]) return false;
-  try{ await db.collection("team").doc(uid).set({role,at:Date.now()}); return true }
-  catch(e){ writeErr(e,"roles"); return false }
-}
 $("roleBtn").onclick=openRole;
 $("roleClose").onclick=()=>$("roleDlg").close();
 $("roleDlg").addEventListener("click",async e=>{
   if(e.target===$("roleDlg")){ $("roleDlg").close(); return }
-  const b=e.target.closest(".role-opt"); if(!b) return;
-  if(await setRole(myId,b.dataset.role)){ $("roleDlg").close(); toast("You’re set as "+ROLES[b.dataset.role].name+"."); }
+  const rm=e.target.closest("[data-rm]"); if(!rm) return;
+  if(!rm.dataset.armed){ rm.dataset.armed="1"; rm.textContent="Tap again to remove"; return }
+  try{ await window.gzTeam.remove(rm.dataset.rm); toast(rm.dataset.rm+" removed from the studio."); renderRoleDlg() }catch(err){ toast("Couldn’t remove: "+err.message) }
 });
 $("teamList").addEventListener("change",async e=>{
-  const sel=e.target.closest("select[data-uid]"); if(!sel) return;
-  if(await setRole(sel.dataset.uid,sel.value)) toast(who(sel.dataset.uid)+" is now "+ROLES[sel.value].name+".");
+  const sel=e.target.closest("select[data-email]"); if(!sel) return;
+  try{ await window.gzTeam.setRole(sel.dataset.email,sel.value); toast(sel.dataset.email+" is now "+ROLES[sel.value].name+".") }catch(err){ toast("Couldn’t change the role: "+err.message) }
+});
+$("teamAdd").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const email=$("teamEmail").value.trim().toLowerCase(), role=$("teamRole").value;
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast("Enter a full email address."); $("teamEmail").focus(); return }
+  try{ await window.gzTeam.add(email,role); $("teamEmail").value=""; toast(email+" added as "+ROLES[role].name+". They can sign up now."); renderRoleDlg() }
+  catch(err){ toast(/duplicate|already/i.test(err.message)?"That email is already on the team.":"Couldn’t add: "+err.message) }
 });
 
 /* Instant heads-up while the page is open: a soft chime and the cat pops up */
@@ -951,7 +964,7 @@ $("fpList").addEventListener("keydown",e=>{ if(e.key==="Enter"&&e.target.classLi
 function addProductItem(name,date){
   if(!date) return;
   const id=newId();
-  persist(id,{id,title:name,series:"product",status:"idea",platforms:["reel"],langs:[],kind:"",date,due:"",code:nextCode(),notes:"",caption:"",product:name,approvedBy:"",approvedAt:0,postedAt:0,createdBy:myId||"",created:Date.now()});
+  persist(id,{id,title:name,series:"product",status:"idea",platforms:["reel"],langs:[],kind:"",date,due:"",code:nextCode(),team:isMk()?myRole():"marketing",notes:"",caption:"",product:name,approvedBy:"",approvedAt:0,postedAt:0,createdBy:myId||"",created:Date.now()});
   toast("Planned "+name+" on "+shortDate(date)+".");
 }
 
@@ -1018,7 +1031,7 @@ $("desk").addEventListener("click",e=>{
   const a=e.target.closest("[data-act]");
   if(a){
     const act=a.dataset.act;
-    if(["approve","changes","reopen","gopub"].includes(act)&&isCr()){ toast("Only marketing can do that."); return }
+    if(["approve","changes","reopen","gopub"].includes(act)&&isCr()){ toast("Only the team that asked for it can do that."); return }
     if(act==="submit"&&isMk()){ toast("The content team sends videos for review."); return }
     if(act==="submit"){ setStatusFor(id,"review"); toast("Sent for review. Marketing gets a notification."); }
     else if(act==="approve"){ setStatusFor(id,"approved"); toast("Approved. The file moves to the approve folder shortly."); }
@@ -1104,7 +1117,7 @@ document.addEventListener("drop",e=>{
   const it=items.get(dragId); if(!it) return;
   const next={...it};
   if(t.classList.contains("col")){ if(it.status===t.dataset.status) return;
-    if(isCr()&&["approved","posted"].includes(t.dataset.status)){ toast("Only marketing can approve or mark videos as posted."); return } Object.assign(next,{status:t.dataset.status},stamp(t.dataset.status,it.id)); }
+    if(isCr()&&["approved","posted"].includes(t.dataset.status)){ toast("Only the team that asked for it can approve or mark it posted."); return } Object.assign(next,{status:t.dataset.status},stamp(t.dataset.status,it.id)); }
   else { const d=t.dataset.date; if(!d||it.date===d) return; next.date=d }
   persist(it.id,next);
 });
