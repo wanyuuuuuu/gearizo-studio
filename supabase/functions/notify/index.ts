@@ -3,7 +3,16 @@
 import webpush from "npm:web-push@3.6.7";
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
 
-const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+// New projects provide SUPABASE_SECRET_KEYS (JSON); older ones SUPABASE_SERVICE_ROLE_KEY.
+function serverKey(): string {
+  try {
+    const keys = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") || "{}");
+    const k = keys.default || Object.values(keys)[0];
+    if (k) return String(k);
+  } catch (_) { /* fall through */ }
+  return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+}
+const sb = createClient(Deno.env.get("SUPABASE_URL")!, serverKey());
 webpush.setVapidDetails(
   "mailto:" + (Deno.env.get("VAPID_CONTACT") || "admin@example.com"),
   Deno.env.get("VAPID_PUBLIC_KEY")!,
