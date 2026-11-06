@@ -997,6 +997,32 @@ dialog.sheet{margin:0 0 0 auto;width:min(440px,100vw);max-width:100vw;height:100
   dialog.sheet{margin:auto 0 0;width:100vw;height:auto;max-height:88dvh;border-radius:28px 28px 0 0}
   .sheet-in{padding-top:0;max-height:88dvh}
 }
+
+/* Fewer words: folded extras, icon-size clear buttons, compact publish actions */
+.datefield .clr{width:36px;min-height:36px;height:36px;font-size:18px;color:var(--ink-3);flex:none}
+.datefield .clr:hover{color:var(--ink)}
+details.more{border-radius:18px;background:var(--sunk);padding:0}
+details.more > summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:11px 14px;font-size:13px;font-weight:600;color:var(--ink-2)}
+details.more > summary::-webkit-details-marker{display:none}
+details.more > summary::after{content:"";width:7px;height:7px;border-right:1.8px solid currentColor;border-bottom:1.8px solid currentColor;transform:rotate(45deg) translateY(-2px);margin-left:auto;transition:transform .2s}
+details.more[open] > summary::after{transform:rotate(225deg) translateY(-2px)}
+details.more > .formgrid{padding:2px 14px 14px}
+details.more .f select,details.more .f input[type=text],details.more .f textarea{background:#fff}
+details.more .toggles span{background:#fff}
+details.more .toggles input:checked + span{background:var(--green);color:#fff}
+.caph{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px}
+.caph label{font-size:13px;font-weight:600;color:var(--ink-2)}
+.pubacts{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.shhead{justify-content:flex-end}
+.role-help{margin-top:12px}
+.role-help summary,.calbox details summary{cursor:pointer}
+.freelist .btn{width:30px;min-height:30px;padding:0;font-size:16px}
+@media (max-width:720px){
+  #pPlan > .formgrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+  #pPlan .datefield{gap:2px}
+  #pPlan .datefield input{min-width:0}
+  #pPlan .datefield .clr{width:28px;min-height:36px}
+}
 </style>
 </head>
 <body>
@@ -1025,7 +1051,7 @@ dialog.sheet{margin:0 0 0 auto;width:min(440px,100vw);max-width:100vw;height:100
       <button class="btn" id="todayBtn">Today</button>
       <button class="btn icon" id="next" aria-label="Next month">›</button>
       <button class="btn icon" id="gzBell" type="button" hidden aria-pressed="false" title="Turn on alerts for this device"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6.5 2 6.5H4S6 14 6 9"/><path d="M10 19.5a2 2 0 0 0 4 0"/></svg></button>
-      <button class="btn rolechip" id="roleBtn" type="button" hidden>Choose your role</button>
+      <button class="btn rolechip" id="roleBtn" type="button" hidden>Role</button>
       <button class="btn primary" id="newBtn">New item</button>
     </div>
   </header>
@@ -1047,19 +1073,19 @@ dialog.sheet{margin:0 0 0 auto;width:min(440px,100vw);max-width:100vw;height:100
         <input id="tkText" placeholder="Add a task…" autocomplete="off" aria-label="New task" maxlength="200">
         <select id="tkFor" aria-label="Who is it for" title="Who is it for"><option value="content">→ Content</option><option value="marketing">→ Marketing</option></select>
         <input type="date" id="tkDue" aria-label="Due date (optional)">
-        <button class="btn primary" type="submit">Add task</button>
+        <button class="btn primary" type="submit">Add</button>
       </form>
       <div class="tkcols" id="tkCols"></div>
     </section>
     <section class="desk" id="desk" hidden aria-label="Review desk">
       <div class="qcol"><div id="inboxBox"></div><div class="queue" id="queue"></div></div>
       <article class="detail" id="detail">
-        <p class="empty" id="dEmpty">Nothing to review right now. When an editor sends a video for review, it shows up here.</p>
+        <p class="empty" id="dEmpty">Nothing to review.</p>
         <div id="dBody" hidden>
           <button class="btn sm dback" id="dBack" type="button">‹ All videos</button>
           <div class="dhead">
             <div><p class="dseries" id="dSeries"></p><h2 id="dTitle"></h2><p class="dmeta" id="dMeta"></p></div>
-            <div class="dacts"><button class="btn sm" id="dEdit" type="button">Edit details</button></div>
+            <div class="dacts"><button class="btn sm" id="dEdit" type="button">Edit</button></div>
           </div>
           <div id="vStatus"></div>
           <div class="dgrid">
@@ -1069,16 +1095,16 @@ dialog.sheet{margin:0 0 0 auto;width:min(440px,100vw);max-width:100vw;height:100
               <div id="vLatest"></div>
               <button class="btn addv" id="vOpen" type="button" hidden>+ New version</button>
               <div class="inline-form" id="vForm">
-                <h4 class="form-h">Add a new version</h4>
+                <h4 class="form-h">New version</h4>
                 <div id="vVideoRows" class="vrows">
-                <label class="fl" for="vLink">NAS link or file path</label>
+                <label class="fl" for="vLink">NAS path</label>
                 <input type="text" id="vLink" placeholder="e.g. \\NASGREEN\Videos\TPMS_v2.mp4">
-                <label class="fl" for="vFile">Preview video <span class="hint">Optional, MP4 under 20 MB, so marketing can watch it here.</span></label>
+                <label class="fl" for="vFile">Preview <span class="hint">MP4, under 20 MB</span></label>
                 <input type="file" id="vFile" accept="video/mp4,video/webm,image/*">
                 </div>
                 <label class="fl" for="vNote">What changed</label>
                 <textarea id="vNote" placeholder="One change per line, with the time:&#10;0:05 made the logo bigger&#10;0:12 cut 2 seconds"></textarea>
-                <div class="attach" id="vAttach"><label class="btn sm"><span id="vAttTxt">Attach images or files</span><input type="file" id="vAtt" multiple accept="image/*,video/mp4,video/webm,application/pdf,.csv,.txt,.md,.json" aria-label="Attach images or files to this version"></label><div class="att-list" id="vFiles"></div></div>
+                <div class="attach" id="vAttach"><label class="btn sm"><span id="vAttTxt">+ Files</span><input type="file" id="vAtt" multiple accept="image/*,video/mp4,video/webm,application/pdf,.csv,.txt,.md,.json" aria-label="Attach images or files to this version"></label><div class="att-list" id="vFiles"></div></div>
                 <div class="row" style="justify-content:flex-end"><button class="btn primary" id="vAdd" type="button">Add version</button></div>
               </div>
               <div id="vOlder"></div>
@@ -1088,11 +1114,11 @@ dialog.sheet{margin:0 0 0 auto;width:min(440px,100vw);max-width:100vw;height:100
               <div class="fbwrap" id="fbList"></div>
               <div class="inline-form" id="fbForm">
                 <div class="tc-row" id="fbImgRow" hidden><b>On</b><select id="fbImg" aria-label="Which image"></select></div>
-                <div class="tc-row" id="fbTimeRow"><b>At</b><input type="text" id="fbAt" placeholder="0:05" inputmode="numeric" autocomplete="off" aria-label="Start time, minutes:seconds"><span>to</span><input type="text" id="fbTo" placeholder="0:08" inputmode="numeric" autocomplete="off" aria-label="End time, optional"><button class="btn sm" id="fbTime" type="button">Use video time</button></div>
+                <div class="tc-row" id="fbTimeRow"><b>At</b><input type="text" id="fbAt" placeholder="0:05" inputmode="numeric" autocomplete="off" aria-label="Start time, minutes:seconds"><span>to</span><input type="text" id="fbTo" placeholder="0:08" inputmode="numeric" autocomplete="off" aria-label="End time, optional"><button class="btn sm" id="fbTime" type="button" title="Use the video’s current time">Now</button></div>
                 <textarea id="fbText" placeholder="What needs to change at this moment? e.g. Logo too small, make it twice as big" aria-label="What needs to change"></textarea>
-                <div class="attach" id="fbAttach"><label class="btn sm">Attach screenshot or file<input type="file" id="fbAtt" multiple accept="image/*,video/mp4,video/webm,application/pdf,.csv,.txt,.md,.json" aria-label="Attach screenshots or files to this feedback"></label><div class="att-list" id="fbFiles"></div></div>
+                <div class="attach" id="fbAttach"><label class="btn sm">+ File<input type="file" id="fbAtt" multiple accept="image/*,video/mp4,video/webm,application/pdf,.csv,.txt,.md,.json" aria-label="Attach screenshots or files to this feedback"></label><div class="att-list" id="fbFiles"></div></div>
                 <p class="hint" id="fbHint">Leave the time empty for a note about the whole video.</p>
-                <div class="row" style="justify-content:flex-end"><button class="btn primary" id="fbAdd" type="button">Post feedback</button></div>
+                <div class="row" style="justify-content:flex-end"><button class="btn primary" id="fbAdd" type="button">Post</button></div>
               </div>
             </div>
           </div>
@@ -1103,7 +1129,7 @@ dialog.sheet{margin:0 0 0 auto;width:min(440px,100vw);max-width:100vw;height:100
       <aside class="tray" id="focus" aria-labelledby="fpTitle">
         <h2 id="fpTitle">Focus products</h2>
         <p id="fpSub">Drag a product onto a day to plan it.</p>
-        <div class="focus-form" id="fpForm" hidden><input id="fpText" placeholder="e.g. Mini Portable Inflator" aria-label="Product name" autocomplete="off"><button class="btn" id="fpAdd" type="button">Add</button></div>
+        <div class="focus-form" id="fpForm" hidden><input id="fpText" placeholder="Product" aria-label="Product name" autocomplete="off"><button class="btn" id="fpAdd" type="button">Add</button></div>
         <div class="list" id="fpList"></div>
       </aside>
     </div>
@@ -1114,39 +1140,38 @@ dialog.sheet{margin:0 0 0 auto;width:min(440px,100vw);max-width:100vw;height:100
 <dialog id="dlg" aria-label="Content item">
   <div class="dlg" id="dlgInner">
     <div class="dlg-head">
-      <input id="fTitle" placeholder="What’s the video or post?" aria-label="Title" autocomplete="off">
+      <input id="fTitle" placeholder="Title" aria-label="Title" autocomplete="off">
       <div class="tabs" role="tablist">
         <button role="tab" id="tPlan" aria-selected="true" data-tab="plan">Plan</button>
         <button role="tab" id="tPub" aria-selected="false" data-tab="publish">Publish</button>
         <span class="codechip" id="fCode" hidden></span>
-        <button type="button" class="jump" id="tVideo" data-tab="video">Open in Review →</button>
+        <button type="button" class="jump" id="tVideo" data-tab="video">Review →</button>
       </div>
     </div>
     <div class="dlg-scroll">
       <section id="pPlan" role="tabpanel" aria-labelledby="tPlan">
         <div class="formgrid">
+          <div class="f"><span class="lab">Type</span><div class="toggles" id="fType" role="radiogroup" aria-label="Type"><label><input type="radio" name="itype" value="video"><span>Video</span></label><label><input type="radio" name="itype" value="design"><span>Design</span></label></div></div>
+          <div class="f" id="fTeamWrap"><label for="fTeam">Team</label><select id="fTeam"><option value="marketing">Marketing</option><option value="ecomm">E-commerce</option></select></div>
           <div class="f"><label for="fSeries">Series</label><select id="fSeries"></select></div>
           <div class="f"><label for="fStatus">Status</label><select id="fStatus"></select></div>
-          <div class="f" id="fTeamWrap"><label for="fTeam">For team</label><select id="fTeam"><option value="marketing">Marketing</option><option value="ecomm">E-commerce</option></select></div>
-          <div class="f full"><span class="lab">Type</span><div class="toggles" id="fType"><label><input type="radio" name="itype" value="video"><span>Video</span></label><label><input type="radio" name="itype" value="design"><span>Design</span></label></div></div>
-          <div class="f full" id="fSizesWrap" hidden><span class="lab">Sizes</span><div class="toggles" id="fSizes"></div><input type="text" id="fSizeNote" placeholder="Other sizes or notes, e.g. 1200×628 Facebook ad" aria-label="Other sizes or notes"></div>
-          <div class="f full"><span class="lab">Post date</span>
-            <div class="datefield"><input type="date" id="fDate" aria-label="Post date"><button class="btn ghost" id="fClearDate" type="button">No date</button></div>
-          </div>
-          <div class="f full"><span class="lab">First cut due</span>
-            <div class="datefield"><input type="date" id="fDue" aria-label="First cut due"><button class="btn ghost" id="fClearDue" type="button">No deadline</button></div>
-          </div>
+          <div class="f full" id="fSizesWrap" hidden><span class="lab">Sizes</span><div class="toggles" id="fSizes"></div><input type="text" id="fSizeNote" placeholder="Other sizes" aria-label="Other sizes or notes"></div>
+          <div class="f"><span class="lab">Post</span><div class="datefield"><input type="date" id="fDate" aria-label="Post date"><button class="btn ghost icon clr" id="fClearDate" type="button" aria-label="Clear post date" title="Clear">×</button></div></div>
+          <div class="f"><span class="lab">First cut</span><div class="datefield"><input type="date" id="fDue" aria-label="First cut due"><button class="btn ghost icon clr" id="fClearDue" type="button" aria-label="Clear first cut date" title="Clear">×</button></div></div>
           <div class="f full"><span class="lab">Platforms</span><div class="toggles" id="fPlatforms"></div></div>
-          <div class="f full" id="fKindWrap"><span class="lab">Video type</span><div class="toggles" id="fKind"><label><input type="radio" name="kind" value="ai"><span>AI video</span></label><label><input type="radio" name="kind" value="real"><span>Real people</span></label></div></div>
-          <div class="f full"><span class="lab">Language</span><div class="toggles" id="fLangs"></div></div>
-          <div class="f full"><span class="lab">References</span><div id="fRefs"></div><div class="attach"><label class="btn sm">Add reference images or files<input type="file" id="refAtt" multiple accept="image/*,video/mp4,video/webm,application/pdf,.csv,.txt,.md,.json" aria-label="Add reference images or files"></label><div class="att-list" id="refsFiles"></div></div></div>
-          <div class="f full"><label for="fNotes">Notes</label><textarea id="fNotes" placeholder="Hook, script, shot list…"></textarea></div>
+          <details class="f full more" id="fMore"><summary>More</summary>
+            <div class="formgrid">
+              <div class="f full" id="fKindWrap"><span class="lab">Video type</span><div class="toggles" id="fKind"><label><input type="radio" name="kind" value="ai"><span>AI</span></label><label><input type="radio" name="kind" value="real"><span>Real people</span></label></div></div>
+              <div class="f full"><span class="lab">Language</span><div class="toggles" id="fLangs"></div></div>
+              <div class="f full"><span class="lab">References</span><div id="fRefs"></div><div class="attach"><label class="btn sm">+ Reference<input type="file" id="refAtt" multiple accept="image/*,video/mp4,video/webm,application/pdf,.csv,.txt,.md,.json" aria-label="Add reference images or files"></label><div class="att-list" id="refsFiles"></div></div></div>
+              <div class="f full"><label for="fNotes">Notes</label><textarea id="fNotes" placeholder="Hook, script, shot list…"></textarea></div>
+            </div>
+          </details>
         </div>
       </section>
 
       <section id="pPub" role="tabpanel" aria-labelledby="tPub" hidden>
-        <div class="f full"><label for="fCaption">Caption and hashtags</label><textarea id="fCaption" style="min-height:140px" placeholder="Write the caption here so it’s ready when the video is approved."></textarea></div>
-        <div class="row" style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn sm" id="copyCap" type="button">Copy caption</button></div>
+        <div class="f full"><div class="caph"><label for="fCaption">Caption</label><button class="btn sm" id="copyCap" type="button">Copy</button></div><textarea id="fCaption" style="min-height:140px" placeholder="Caption and #hashtags"></textarea></div>
         <div id="pubInfo"></div>
       </section>
     </div>
@@ -1162,19 +1187,19 @@ dialog.sheet{margin:0 0 0 auto;width:min(440px,100vw);max-width:100vw;height:100
     <p class="hint" id="myRoleLine"></p>
     <div id="teamBox" hidden>
       <h3 class="sec-h">Team</h3>
-      <p class="hint">Only you can add people and set roles. Add their email here first, then they sign up with that email.</p>
+      <p class="hint">Add their email, then they sign up with it.</p>
       <div id="teamList"></div>
       <form class="team-add" id="teamAdd">
         <input type="email" id="teamEmail" placeholder="name@company.com" aria-label="New member’s email" autocomplete="off">
         <select id="teamRole" aria-label="Role"></select>
         <button class="btn primary sm" type="submit">Add</button>
       </form>
-      <div class="pvopts"><b>Preview the app as</b><button type="button" class="btn sm" data-pv="marketing">Marketing</button><button type="button" class="btn sm" data-pv="ecomm">E-commerce</button><button type="button" class="btn sm" data-pv="hr">HR</button></div>
-      <ul class="role-legend">
-        <li><b>Content &amp; video</b> sees and makes everything (you).</li>
-        <li><b>Marketing</b> and <b>E-commerce</b> each see only their own requests, review and approve them.</li>
-        <li><b>HR</b> sees only tasks for now; the shoot schedule comes next.</li>
-      </ul>
+      <div class="pvopts"><b>Preview as</b><button type="button" class="btn sm" data-pv="marketing">Marketing</button><button type="button" class="btn sm" data-pv="ecomm">E-commerce</button><button type="button" class="btn sm" data-pv="hr">HR</button></div>
+      <details class="role-help"><summary class="hint">Who sees what</summary><ul class="role-legend">
+        <li><b>Content &amp; video</b> sees and makes everything.</li>
+        <li><b>Marketing</b> and <b>E-commerce</b> see only their own requests, and review and approve them.</li>
+        <li><b>HR</b> sees their tasks and shoot requests.</li>
+      </ul></details>
     </div>
     <div class="row" style="display:flex;justify-content:space-between;gap:8px"><button class="btn ghost" id="gzSignOutBtn" type="button" onclick="window.gzSignOut&&window.gzSignOut()">Sign out</button><button class="btn" id="roleClose" type="button">Close</button></div>
   </div>
@@ -1189,10 +1214,10 @@ dialog.sheet{margin:0 0 0 auto;width:min(440px,100vw);max-width:100vw;height:100
       <label class="fl">Length<select id="shLen"><option value="30">30 min</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">Half day</option></select></label>
     </div>
     <p class="shwarn" id="shWarn" hidden></p>
-    <label class="fl">For video<select id="shItem"><option value="">No specific video</option></select></label>
-    <label class="fl">Place<input id="shLoc" placeholder="e.g. Office studio, Puchong warehouse" autocomplete="off"></label>
-    <label class="fl">What to prepare<textarea id="shNotes" placeholder="e.g. Wear the black Gearizo tee, script is in the task"></textarea></label>
-    <div class="row" style="display:flex;justify-content:flex-end;gap:8px"><button class="btn" type="button" id="shClose">Close</button><button class="btn primary" type="submit" id="shSave">Send request</button></div>
+    <label class="fl">Video<select id="shItem"><option value="">None</option></select></label>
+    <label class="fl">Place<input id="shLoc" placeholder="Office studio" autocomplete="off"></label>
+    <label class="fl">Prepare<textarea id="shNotes" placeholder="Black Gearizo tee, script…"></textarea></label>
+    <div class="row" style="display:flex;justify-content:flex-end;gap:8px"><button class="btn" type="button" id="shClose">Close</button><button class="btn primary" type="submit" id="shSave">Send</button></div>
   </form>
 </dialog>
 <dialog id="nDlg" class="sheet" aria-labelledby="nTitle">

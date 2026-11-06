@@ -40,7 +40,7 @@ let mode="local", readOnly=false, live={items:false,focus:false,team:false};
 let team={}, promptedRole=false, inbox=[], tasks=[], shoots=[], avail=[], busy=[];
 const ROLES={content:{name:"Content & video",k:"var(--blue)"},marketing:{name:"Marketing",k:"var(--mk)"},ecomm:{name:"E-commerce",k:"#E8772E"},hr:{name:"HR",k:"#8C6BD1"}};
 const TEAMS={marketing:"Marketing",ecomm:"E-commerce"};
-const SIZES=[{id:"sq",name:"Square 1:1 (product)"},{id:"post",name:"Post 4:5"},{id:"story",name:"Story 9:16"},{id:"banner",name:"Banner 16:9"},{id:"wide",name:"Wide banner 3:1"},{id:"thumb",name:"Thumbnail 1280×720"}];
+const SIZES=[{id:"sq",name:"Square 1:1 (product)",s:"1:1"},{id:"post",name:"Post 4:5",s:"4:5"},{id:"story",name:"Story 9:16",s:"9:16"},{id:"banner",name:"Banner 16:9",s:"16:9"},{id:"wide",name:"Wide banner 3:1",s:"3:1"},{id:"thumb",name:"Thumbnail 1280×720",s:"Thumbnail"}];
 const sizeName=id=>(SIZES.find(x=>x.id===id)||{}).name||id;
 /* Owner preview: see the app as another role (read only); raw holds the real data */
 let previewRole="", realRO=null, teamF="";
@@ -147,7 +147,7 @@ function renderHeader(){
   $("vRev").title=isCr()?"Review: "+mine+" need changes or a home":"Review: "+waiting+" waiting for approval";
   const r=myRole();
   $("roleBtn").hidden=mode!=="db"||!myId||!live.team;
-  $("roleBtn").textContent=r?ROLES[r].name:"Choose your role";
+  $("roleBtn").textContent=r?ROLES[r].name:"Role";
   $("roleBtn").style.setProperty("--k",r?ROLES[r].k:"var(--ink-3)");
   $("newBtn").textContent=isMk()?"Request":"New";
   /* Each role has its own cat: the round one for content, the tabby for marketing */
@@ -346,9 +346,9 @@ async function connect(){
 function buildForm(){
   $("fSeries").innerHTML=SERIES.map(s=>'<option value="'+s.id+'">'+esc(s.name)+'</option>').join("");
   $("fStatus").innerHTML=STATUSES.map(s=>'<option value="'+s.id+'">'+esc(s.name)+'</option>').join("");
-  $("fPlatforms").innerHTML=PLATFORMS.map(p=>'<label><input type="checkbox" value="'+p.id+'"><span>'+esc(p.name)+'</span></label>').join("");
+  $("fPlatforms").innerHTML=PLATFORMS.map(p=>'<label title="'+esc(p.name)+'"><input type="checkbox" value="'+p.id+'" aria-label="'+esc(p.name)+'"><span>'+esc(p.s)+'</span></label>').join("");
   $("fLangs").innerHTML=LANGS.map(p=>'<label><input type="checkbox" value="'+p.id+'"><span>'+esc(p.name)+'</span></label>').join("");
-  $("fSizes").innerHTML=SIZES.map(p=>'<label><input type="checkbox" value="'+p.id+'"><span>'+esc(p.name)+'</span></label>').join("");
+  $("fSizes").innerHTML=SIZES.map(p=>'<label title="'+esc(p.name)+'"><input type="checkbox" value="'+p.id+'" aria-label="'+esc(p.name)+'"><span>'+esc(p.s)+'</span></label>').join("");
 }
 function setTab(t){
   if(t!=="publish") t="plan";
@@ -374,6 +374,7 @@ function openItem(id,presetDate,presetProduct){
   $("fSizeNote").value=it.sizeNote||"";
   $("fRefs").innerHTML=attHtml(it.refs||[]);
   pending.refs=[]; renderPending("refs");
+  $("fMore").open=!!(it.kind||(it.langs||[]).length||(it.refs||[]).length||it.notes);
   typeFields();
   $("fCode").hidden=!(id&&it.code); $("fCode").textContent=id&&it.code?it.code:"";
   $("fDelete").hidden=!id||readOnly; $("fDelete").textContent="Delete"; $("fDelete").dataset.armed="";
@@ -417,7 +418,7 @@ async function saveItem(close){
   }
   if(!prev||prev.status!==data.status) Object.assign(data,stamp(data.status,id));
   persist(id,data);
-  if(isNew){ editingId=id; $("fDelete").hidden=readOnly; toast("Added. Add videos and feedback for it in Review."); }
+  if(isNew){ editingId=id; $("fDelete").hidden=readOnly; toast("Added."); }
   else toast("Saved.");
   if(close!==false) $("dlg").close(); else renderPublish();
 }
@@ -518,17 +519,17 @@ function nasBoxHtml(it){
     :"Export the finished version here with this file name. Within about 15 minutes it’s added here, sent for review, and marketing gets a notification. Once approved, the file moves to approve.";
   return '<div class="nas"><div><b>NAS folder</b><code>Marketing Content / '+esc(rel.split("/").join(" / "))+'</code>'+
     (mk?"":'<div class="fname"><b>File name</b><code>'+esc(fname)+'</code><button class="btn sm ghost" type="button" data-copy="'+esc(fname.replace(/\.mp4$/,""))+'">Copy name</button></div>')+
-    '<span class="hint">'+esc(hint)+'</span></div><div class="acts"><a class="btn sm" href="'+esc(smbUrl(rel))+'" target="_blank" rel="noopener">Open in Finder</a><button class="btn sm ghost" type="button" data-copy="'+esc(NAS_MAC+rel)+'">Copy path</button></div></div>';
+    '<span class="hint">'+esc(hint)+'</span></div><div class="acts"><a class="btn sm" href="'+esc(smbUrl(rel))+'" target="_blank" rel="noopener" title="Open in Finder">Finder ↗</a><button class="btn sm ghost" type="button" data-copy="'+esc(NAS_MAC+rel)+'">Copy path</button></div></div>';
 }
 function linkHtml(link){
   if(!link) return "";
-  if(link.startsWith(NAS_MAC)){ const rel=link.slice(NAS_MAC.length); return '<div class="path"><span>NAS:</span><code>'+esc(rel)+'</code><a class="btn sm" href="'+esc(smbUrl(rel))+'" target="_blank" rel="noopener">Open in Finder</a><button class="btn sm ghost" data-copy="'+esc(link)+'" type="button">Copy path</button></div>' }
+  if(link.startsWith(NAS_MAC)){ const rel=link.slice(NAS_MAC.length); return '<div class="path"><span>NAS:</span><code>'+esc(rel)+'</code><a class="btn sm" href="'+esc(smbUrl(rel))+'" target="_blank" rel="noopener" title="Open in Finder">Finder ↗</a><button class="btn sm ghost" data-copy="'+esc(link)+'" type="button">Copy path</button></div>' }
   if(/^https?:\/\//i.test(link)) return '<div class="path"><a class="btn sm" href="'+esc(link)+'" target="_blank" rel="noopener">Open on NAS</a><code>'+esc(link)+'</code><button class="btn sm ghost" data-copy="'+esc(link)+'" type="button">Copy</button></div>';
   return '<div class="path"><span>NAS:</span><code>'+esc(link)+'</code><button class="btn sm ghost" data-copy="'+esc(link)+'" type="button">Copy path</button></div>';
 }
 function goReview(id){ selId=id||null; $("desk").classList.toggle("phone-detail",!!id&&narrow.matches); window.scrollTo(0,0); if(view!=="review") location.hash="review"; else render(); }
 const QGROUPS=[
-  {id:"review",name:"Waiting for approval",k:"var(--review)"},
+  {id:"review",name:"In review",k:"var(--review)"},
   {id:"changes",name:"Needs changes",k:"var(--edit)"},
   {id:"edit",name:"Editing",k:"var(--ink-3)"},
   {id:"approved",name:"Approved",k:"var(--ready)"}];
@@ -561,11 +562,11 @@ function renderInbox(){
   const opts=[...items.values()].filter(i=>i.status!=="posted").sort((a,b)=>(rank[a.status]??9)-(rank[b.status]??9)||a.title.localeCompare(b.title))
     .map(i=>'<option value="'+esc(i.id)+'">'+esc(i.title+" · "+stMap[i.status].name+(i.date?" · "+shortDate(i.date):""))+'</option>').join("");
   setHTML(box,'<div class="inbox"><div class="qh"><span><i style="--k:var(--blue)"></i>New in Checking</span><span>'+inbox.length+'</span></div>'+
-    '<p class="hint">Pick the content for each file.</p>'+
+    
     inbox.map(x=>'<div class="inb" data-id="'+esc(x.id)+'">'+(x.asset?'<video src="'+esc(x.asset)+'" controls preload="metadata" playsinline></video>':"")+
       '<div class="inb-n">'+esc(x.name)+'</div><span class="hint">'+esc(fmtTime(x.at))+'</span>'+
-      '<select data-inb-sel="'+esc(x.id)+'" aria-label="Which content is '+esc(x.name)+'?"><option value="">Which content is this?</option>'+opts+'</select>'+
-      '<div class="row"><button type="button" class="btn primary sm" data-inb="add">Add and send for review</button><button type="button" class="btn ghost sm" data-inb="dismiss">Not a content video</button></div></div>').join("")+'</div>');
+      '<select data-inb-sel="'+esc(x.id)+'" aria-label="Which content is '+esc(x.name)+'?"><option value="">Which content?</option>'+opts+'</select>'+
+      '<div class="row"><button type="button" class="btn primary sm" data-inb="add" title="Add as the next version and send for review">Add + send</button><button type="button" class="btn ghost sm" data-inb="dismiss">Not content</button></div></div>').join("")+'</div>');
   box.querySelectorAll("select[data-inb-sel]").forEach(sl=>{ if(keep[sl.dataset.inbSel]) sl.value=keep[sl.dataset.inbSel] });
 }
 async function assignInbox(xid,itemId){
@@ -598,7 +599,7 @@ function renderDesk(){
   $("dMeta").textContent=[TEAMS[it.team]+(it.type==="design"?" design":" video"), it.date?(it.type==="design"?"Needed ":"Posting ")+shortDate(it.date):"No date yet",
     it.type==="design"?[...it.sizes.map(sizeName),it.sizeNote].filter(Boolean).join(", "):"", it.platforms.map(p=>pMap[p].name).join(", "),
     it.kind?(it.kind==="ai"?"AI video":"Real people"):"", it.langs.map(l=>(LANGS.find(x=>x.id===l)||{}).name).join(", ")].filter(Boolean).join(" · ");
-  $("dEdit").textContent=readOnly?"View details":"Edit details";
+  $("dEdit").textContent=readOnly?"Details":"Edit";
 
   const vs=vFor(it.id), fbs=fbFor(it.id), open=fbs.filter(f=>!f.done).length, latest=vs[0];
   const can=!readOnly&&mode==="db", mk=isMk(), cr=isCr();
@@ -609,7 +610,7 @@ function renderDesk(){
   if(["idea","script","shoot"].includes(st)){ head=stMap[st].name; sub=due||"Not cut yet"; acts=submit; }
   else if(st==="edit"){ k="var(--edit)"; head="Editing"; sub=[latest?"v"+latest.n:"",due].filter(Boolean).join(" · ")||"No cut yet"; acts=submit; }
   else if(st==="changes"){ k="var(--edit)"; head="Needs changes"; sub=[it.changesBy?who(it.changesBy):"",open?open+" to fix":"All fixed, send the new version"].filter(Boolean).join(" · "); acts=submit; }
-  else if(st==="review"){ k="var(--review)"; head="Waiting for approval"; sub=[latest?"v"+latest.n:"",by(it.submittedBy,it.submittedAt)].filter(Boolean).join(" · "); if(can&&!cr) acts='<button class="btn stop" data-act="changes">Ask for changes</button><button class="btn go" data-act="approve">Approve</button>'; }
+  else if(st==="review"){ k="var(--review)"; head="In review"; sub=[latest?"v"+latest.n:"",by(it.submittedBy,it.submittedAt)].filter(Boolean).join(" · "); if(can&&!cr) acts='<button class="btn stop" data-act="changes">Ask for changes</button><button class="btn go" data-act="approve">Approve</button>'; }
   else if(st==="approved"){ k="var(--ready)"; head="Approved"; sub=by(it.approvedBy,it.approvedAt); if(can&&!cr) acts='<button class="btn" data-act="reopen">Back to editing</button><button class="btn go" data-act="gopub">Open Publish</button>'; }
   else { k="var(--blue)"; head="Posted"; sub=it.postedAt?fmtTime(it.postedAt):""; }
   setHTML($("vStatus"),'<div class="banner" style="--k:'+k+'"><div><b>'+esc(head)+'</b><span>'+esc(sub)+'</span></div>'+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>');
@@ -618,15 +619,15 @@ function renderDesk(){
   setHTML($("nasBox"),(isD?"":nasBoxHtml(it))+(it.refs.length?'<div class="refs"><b>References</b>'+attHtml(it.refs)+'</div>':""));
   setHTML($("vLatest"),latest?verCard(latest,true,it):'<p class="empty">'+(isD?"No design yet.":"No video yet.")+(can?" Add the first "+(isD?"version":"cut")+" below.":" The content team hasn’t added one.")+'</p>');
   setHTML($("vOlder"),vs.length>1?'<details class="older"><summary>Earlier versions ('+(vs.length-1)+')</summary>'+vs.slice(1).map(v=>verCard(v,false,it)).join("")+'</details>':"");
-  $("vVideoRows").hidden=isD; $("vAttTxt").textContent=isD?"Add design images":"Attach images or files";
+  $("vVideoRows").hidden=isD; $("vAttTxt").textContent=isD?"+ Images":"+ Files";
   $("fbTimeRow").hidden=isD; $("fbImgRow").hidden=!isD;
   if(isD){ const imgs=latest?(latest.files||[]).filter(f=>f.type.startsWith("image/")):[]; const o='<option value="">Whole design</option>'+imgs.map((f,i)=>'<option value="'+(i+1)+'">Image '+(i+1)+' · '+esc(f.name)+'</option>').join(""); const sel=$("fbImg"); if(sel._o!==o){ const keep=sel.value; sel.innerHTML=o; sel._o=o; sel.value=keep } }
   const showV=can&&!mk, vOpen=vOpenFor===it.id||!latest;
   $("vOpen").hidden=!showV||vOpen; $("vForm").hidden=!showV||!vOpen;
-  $("fbText").placeholder=cr?"Reply or add a note for marketing, e.g. Fixed, or Can we keep the music?":"What needs to change at this moment? e.g. Logo too small, make it twice as big";
+  $("fbText").placeholder=cr?"Reply or note":"What should change?";
   $("vAdd").textContent="Add v"+((latest?latest.n:0)+1);
   $("vAttach").hidden=$("fbAttach").hidden=!assets;
-  $("fbHint").textContent=(isD?"Pick an image, or leave it on Whole design.":"No time = whole video.")+(assets?" Paste screenshots straight in.":"");
+  $("fbHint").textContent=isD?"":"Empty time = whole video";
 
   setHTML($("fbHead"),'Feedback'+(open?'<span class="flagc">'+open+' to fix</span>':""));
   const fbVers=[...new Set(fbs.map(f=>f.version))].sort((a,b)=>b-a);
@@ -638,7 +639,7 @@ function renderDesk(){
       (can?'<button type="button" data-fb="done">'+(f.done?"Reopen":"Mark fixed")+'</button>':"")+((mine||amOwner)&&can?'<button type="button" class="del" data-fb="del">Delete</button>':"")+'</div></div>';
   }).join("")).join(""):'<p class="empty">No feedback yet.</p>');
   $("fbForm").hidden=!can;
-  $("fbAdd").textContent=latest?"Post feedback on v"+latest.n:"Post feedback";
+  $("fbAdd").textContent="Post";
 }
 const fmtSec=s=>{s=Math.max(0,Math.floor(s));return Math.floor(s/60)+":"+pad(s%60)};
 function seek(t,from){
@@ -715,18 +716,18 @@ function renderPublish(){
   if(!editingId){ box.innerHTML='<p class="hint" style="margin-top:12px">Save the item first.</p>'; return }
   const it=items.get(editingId); if(!it) return;
   const latest=vFor(it.id)[0];
-  const plats=it.platforms.map(p=>pMap[p].name).join(", ")||"no platform chosen";
-  if(it.status==="posted"){ box.innerHTML='<div class="banner" style="--k:var(--blue);margin-top:14px"><div><b>Posted</b><span>'+(it.postedAt?"Marked as posted on "+esc(fmtTime(it.postedAt))+".":"This video is live.")+'</span></div></div>'; return }
-  if(it.status!=="approved"){ box.innerHTML='<div class="banner" style="--k:var(--ink-3);margin-top:14px"><div><b>Not approved yet</b><span>Write the caption now. The posting steps show up here once marketing approves the video.</span></div></div>'; return }
+  const plats=it.platforms.map(p=>pMap[p].s).join(", ");
+  const banner=(k,b,t)=>'<div class="banner" style="--k:'+k+';margin-top:14px"><div><b>'+esc(b)+'</b>'+(t?'<span>'+esc(t)+'</span>':"")+'</div></div>';
+  if(it.status==="posted"){ box.innerHTML=banner("var(--blue)","Posted",it.postedAt?fmtTime(it.postedAt):""); return }
+  if(it.status!=="approved"){ box.innerHTML=banner("var(--ink-3)","Not approved yet","Posting links show here once it’s approved."); return }
   const ig=it.platforms.some(p=>["reel","carousel","story","fb"].includes(p)), tt=it.platforms.includes("tiktok");
-  box.innerHTML='<div class="banner" style="--k:var(--ready);margin-top:14px"><div><b>Ready to post</b><span>'+esc(plats)+(it.date?", planned for "+esc(shortDate(it.date)):"")+'</span></div></div>'+
-    '<ol class="steps">'+
-    '<li>Get the final video'+(latest?' (v'+latest.n+')':'')+' from the NAS.'+(latest&&latest.link?linkHtml(latest.link):"")+'</li>'+
-    '<li>Copy the caption above.</li>'+
-    (ig||!tt?'<li>Schedule Instagram and Facebook in Meta Business Suite.<div class="row"><a class="btn sm" href="https://business.facebook.com/" target="_blank" rel="noopener">Open Meta Business Suite</a></div></li>':"")+
-    (tt?'<li>Schedule TikTok in TikTok Studio.<div class="row"><a class="btn sm" href="https://www.tiktok.com/tiktokstudio" target="_blank" rel="noopener">Open TikTok Studio</a></div></li>':"")+
-    '<li>Once it’s scheduled or live, mark it here.<div class="row">'+(!readOnly&&mode==="db"&&!isCr()?'<button class="btn go sm" data-act="posted" type="button">Mark as posted</button>':'<span class="waitnote">Marketing marks it once it’s live.</span>')+'</div></li>'+
-    '</ol>';
+  box.innerHTML=banner("var(--ready)","Ready to post",[plats,it.date?shortDate(it.date):""].filter(Boolean).join(" · "))+
+    '<div class="pubacts">'+
+    (latest&&latest.link?'<button class="btn sm" type="button" data-copy="'+esc(latest.link)+'">Copy v'+latest.n+' path</button>':"")+
+    (ig||!tt?'<a class="btn sm" href="https://business.facebook.com/" target="_blank" rel="noopener">Meta ↗</a>':"")+
+    (tt?'<a class="btn sm" href="https://www.tiktok.com/tiktokstudio" target="_blank" rel="noopener">TikTok ↗</a>':"")+
+    (!readOnly&&mode==="db"&&!isCr()?'<button class="btn go sm" data-act="posted" type="button">Mark posted</button>':'<span class="waitnote">Marketing marks it posted</span>')+
+    '</div>';
 }
 async function copyText(t){
   try{ await navigator.clipboard.writeText(t); toast("Copied."); return }catch(e){}
@@ -963,7 +964,7 @@ const ROLE_HINT={content:"Sees and makes everything.",marketing:"Asks for videos
 function maybeAskRole(){}
 async function renderRoleDlg(){
   const r=myRole();
-  $("myRoleLine").textContent=r?("You’re "+ROLES[r].name+". "+ROLE_HINT[r]+(amOwner?"":" Ask the studio owner to change it.")):"You don’t have a role yet. Ask the studio owner to add you.";
+  $("myRoleLine").textContent=r?("You’re "+ROLES[r].name+"."+(amOwner?"":" The owner can change it.")):"No role yet. Ask the owner to add you.";
   $("teamBox").hidden=!amOwner;
   if(!amOwner||!window.gzTeam) return;
   const roleOpts=v=>Object.entries(ROLES).map(([k,x])=>'<option value="'+k+'"'+(v===k?" selected":"")+'>'+esc(x.name)+'</option>').join("");
@@ -1103,15 +1104,15 @@ window.addEventListener("resize",stopWalk);
 const monthKey=()=>cursor.getFullYear()+"-"+pad(cursor.getMonth()+1);
 function renderFocus(){
   const list=$("fpList"), mk=monthKey(), label=MONTHS[cursor.getMonth()];
-  $("fpTitle").textContent=label+" focus products";
+  $("fpTitle").textContent="Focus · "+label.slice(0,3);
   $("fpSub").textContent=narrow.matches?"Tap a product to plan a video for it.":"Drag a product onto a day to plan it, or tap it to open the form.";
   if(!live.focus){ $("fpForm").hidden=true; list.innerHTML='<div class="empty">'+(mode==="db"?"Loading…":"Sign in to claude.ai to see focus products.")+'</div>'; return }
   $("fpForm").hidden=focusRO;
   const mine=focus.filter(f=>f.month===mk);
-  if(!mine.length){ list.innerHTML='<div class="empty">No focus products for '+label+' yet. Add the ones you want to push this month.</div>'; return }
+  if(!mine.length){ list.innerHTML='<div class="empty">None yet.</div>'; return }
   list.innerHTML=mine.map(f=>{
     const n=[...items.values()].filter(i=>i.product===f.name&&i.date.startsWith(mk)).length;
-    return '<div class="pchip" draggable="'+(!readOnly)+'" data-name="'+esc(f.name)+'" data-id="'+esc(f.id)+'" tabindex="0" role="button"><span class="pn">'+esc(f.name)+'</span><span class="pc">'+(n?n+" planned":"Not planned yet")+'</span>'+(focusRO?"":'<button type="button" class="px" aria-label="Remove '+esc(f.name)+'">×</button>')+'</div>';
+    return '<div class="pchip" draggable="'+(!readOnly)+'" data-name="'+esc(f.name)+'" data-id="'+esc(f.id)+'" tabindex="0" role="button"><span class="pn">'+esc(f.name)+'</span><span class="pc">'+(n?n+" planned":"–")+'</span>'+(focusRO?"":'<button type="button" class="px" aria-label="Remove '+esc(f.name)+'">×</button>')+'</div>';
   }).join("");
 }
 async function addFocus(){
@@ -1311,14 +1312,14 @@ function shootChips(ds){
 }
 function shootCard(x,forHr){
   const d=new Date(x.start), past=x.end<Date.now();
-  const pill='<span class="spill '+x.status+'">'+({proposed:forHr?"Please reply":"Waiting for reply",confirmed:"Confirmed",declined:"Can’t make it",cancelled:"Cancelled"}[x.status])+'</span>';
+  const pill='<span class="spill '+x.status+'">'+({proposed:forHr?"Reply":"Waiting",confirmed:"Confirmed",declined:"Can’t",cancelled:"Cancelled"}[x.status])+'</span>';
   let acts="";
   if(!readOnly&&!past){
-    if(forHr&&x.status==="proposed") acts='<button class="btn go sm" type="button" data-sh="confirm" data-id="'+x.id+'">Confirm</button><input type="text" data-reply="'+x.id+'" placeholder="Can’t make it? Say why or suggest a time (optional)"><button class="btn sm" type="button" data-sh="decline" data-id="'+x.id+'">Can’t make it</button>';
-    if(!forHr&&x.status!=="cancelled") acts='<button class="btn sm" type="button" data-sh="edit" data-id="'+x.id+'">Change time</button><button class="btn ghost sm danger" type="button" data-sh="cancel" data-id="'+x.id+'">Cancel shoot</button>';
-    if(forHr&&x.status==="confirmed") acts='<button class="btn sm" type="button" data-sh="undo" data-id="'+x.id+'">I can’t make it any more</button>';
+    if(forHr&&x.status==="proposed") acts='<button class="btn go sm" type="button" data-sh="confirm" data-id="'+x.id+'">Confirm</button><input type="text" data-reply="'+x.id+'" placeholder="Reason or new time (optional)" aria-label="Reason or another time (optional)"><button class="btn sm" type="button" data-sh="decline" data-id="'+x.id+'">Can’t make it</button>';
+    if(!forHr&&x.status!=="cancelled") acts='<button class="btn sm" type="button" data-sh="edit" data-id="'+x.id+'">Change</button><button class="btn ghost sm danger" type="button" data-sh="cancel" data-id="'+x.id+'">Cancel</button>';
+    if(forHr&&x.status==="confirmed") acts='<button class="btn sm" type="button" data-sh="undo" data-id="'+x.id+'">Can’t make it</button>';
   }
-  if(x.status==="confirmed"&&!past) acts+='<a class="btn sm" href="'+esc(gcalLink(x))+'" target="_blank" rel="noopener">Add to Google Calendar</a>';
+  if(x.status==="confirmed"&&!past) acts+='<a class="btn sm" href="'+esc(gcalLink(x))+'" target="_blank" rel="noopener" title="Add to Google Calendar">+ Google Calendar</a>';
   return '<div class="shcard"><div class="when"><small>'+DOW[(d.getDay()+6)%7]+'</small>'+d.getDate()+' '+MONTHS[d.getMonth()].slice(0,3)+'<small>'+esc(hm(x.start))+'</small></div>'+
     '<div class="what"><b>'+esc(x.title||"Shoot")+' '+pill+'</b><span>'+esc(hm(x.start)+"–"+hm(x.end))+(forHr?"":" · with "+esc(x.talent.map(who).join(", ")))+(x.location?" · "+esc(x.location):"")+'</span>'+
     (x.notes?'<span>'+esc(x.notes)+'</span>':"")+(x.reply?'<span><b>Reply:</b> '+esc(x.reply)+'</span>':"")+'</div>'+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>';
@@ -1332,7 +1333,7 @@ function dayBar(uid,day){
     shoots.filter(x=>x.talent.includes(uid)&&["proposed","confirmed"].includes(x.status)).map(x=>seg(x.start,x.end,"sh "+x.status)).join("")+'</div>';
 }
 let calState=null;
-async function loadCal(){ if(!window.gzCal) return; try{ await window.gzCal.ensure(); calState=await window.gzCal.get() }catch(e){ calState={error:e.message} } if(view==="shoots") renderShoots() }
+async function loadCal(){ if(!window.gzCal) return; try{ await window.gzCal.ensure(); calState=(await window.gzCal.get())||{} }catch(e){ calState={error:e.message} } if(view==="shoots") renderShoots() }
 function renderShoots(){
   const box=$("shoots"), now=Date.now();
   if(isHr()){
@@ -1343,26 +1344,26 @@ function renderShoots(){
     const c=previewRole?{preview:true}:(calState||{});
     const mineFree=avail.filter(a=>a.user===myId&&a.end>now).sort((a,b)=>a.start-b.start);
     box.innerHTML=
-      '<div class="shsec"><h2>Shoot requests'+(ask.length?'<span class="ncount">'+ask.length+'</span>':"")+'</h2>'+(ask.length?ask.map(x=>shootCard(x,true)).join(""):'<p class="empty">No requests right now.</p>')+'</div>'+
-      '<div class="shsec"><h2>Coming up</h2>'+(up.length?up.map(x=>shootCard(x,true)).join(""):'<p class="empty">No confirmed shoots yet.</p>')+'</div>'+
-      '<div class="shsec calbox"><h2>Your Google Calendar</h2>'+
-        (c.preview?'<p class="hint">In preview: HR connects their own Google Calendar here (paste the private iCal link once).</p>':c.loading?'<p class="hint">Loading…</p>':
-        '<p class="calstat '+(c.error?"err":c.connected?"ok":"")+'">'+(c.error?"Couldn’t read your calendar: "+esc(c.error):c.connected?"Connected. Busy times update about every 15 minutes"+(c.lastSync?" (last read "+esc(fmtTime(Date.parse(c.lastSync)))+")":"")+". Only start and end times are read, never titles or guests.":"Not connected. Connect it so the studio sees when you’re busy.")+'</p>'+
-        '<div class="row"><input type="url" id="calUrl" placeholder="Paste the “Secret address in iCal format” here" autocomplete="off"><button class="btn primary sm" type="button" data-sh="calsave">'+(c.connected?"Replace link":"Connect")+'</button>'+(c.connected?'<button class="btn sm" type="button" data-sh="calsync">Read now</button><button class="btn ghost sm danger" type="button" data-sh="calremove">Disconnect</button>':"")+'</div>'+
-        '<details><summary class="hint">Where do I find that link?</summary><ol><li>On a computer, open <b>calendar.google.com</b>.</li><li>Click ⚙ <b>Settings</b>, then your calendar’s name on the left under “Settings for my calendars”.</li><li>Scroll to <b>Integrate calendar</b> and copy <b>Secret address in iCal format</b>.</li><li>Paste it above and press Connect. You can reset that address in Google any time to cut the link.</li></ol></details>'+
-        (c.feedUrl?'<p class="hint">Want your shoots to appear in Google Calendar by themselves? In Google Calendar choose <b>Other calendars → + → From URL</b> and paste this (Google refreshes it every few hours; the “Add to Google Calendar” button is instant):</p><div class="row"><code>'+esc(c.feedUrl)+'</code><button class="btn ghost sm" type="button" data-copy="'+esc(c.feedUrl)+'">Copy</button></div>':""))+
+      '<div class="shsec"><h2>Requests'+(ask.length?'<span class="ncount">'+ask.length+'</span>':"")+'</h2>'+(ask.length?ask.map(x=>shootCard(x,true)).join(""):'<p class="empty">None.</p>')+'</div>'+
+      '<div class="shsec"><h2>Coming up</h2>'+(up.length?up.map(x=>shootCard(x,true)).join(""):'<p class="empty">None yet.</p>')+'</div>'+
+      '<div class="shsec calbox"><h2>Google Calendar</h2>'+
+        (c.preview?'<p class="hint">HR connects their own calendar here.</p>':c.loading?'<p class="hint">Loading…</p>':
+        '<p class="calstat '+(c.error?"err":c.connected?"ok":"")+'">'+(c.error?"Couldn’t read it: "+esc(c.error):c.connected?"✓ Connected"+(c.lastSync?" · read "+esc(fmtTime(Date.parse(c.lastSync))):""):"Not connected")+'</p>'+
+        '<div class="row"><input type="url" id="calUrl" placeholder="Secret iCal address" aria-label="Secret address in iCal format" autocomplete="off"><button class="btn primary sm" type="button" data-sh="calsave">'+(c.connected?"Replace link":"Connect")+'</button>'+(c.connected?'<button class="btn sm" type="button" data-sh="calsync">Read now</button><button class="btn ghost sm danger" type="button" data-sh="calremove">Disconnect</button>':"")+'</div>'+
+        '<details><summary class="hint">How?</summary><ol><li>On a computer, open <b>calendar.google.com</b>.</li><li>Click ⚙ <b>Settings</b>, then your calendar’s name on the left under “Settings for my calendars”.</li><li>Scroll to <b>Integrate calendar</b> and copy <b>Secret address in iCal format</b>.</li><li>Paste it above and press Connect. You can reset that address in Google any time to cut the link.</li></ol><p class="hint">Only start and end times are read, never titles or guests. Busy times update about every 15 minutes.</p></details>'+
+        (c.feedUrl?'<details><summary class="hint">Shoots in Google Calendar automatically</summary><p class="hint">In Google Calendar choose <b>Other calendars → + → From URL</b> and paste this. Google refreshes it every few hours.</p><div class="row"><code>'+esc(c.feedUrl)+'</code><button class="btn ghost sm" type="button" data-copy="'+esc(c.feedUrl)+'">Copy</button></div></details>':""))+
       '</div>'+
-      '<div class="shsec"><h2>Extra free times</h2><p class="hint">Not on Google Calendar? Add times you’re free to film.</p>'+
+      '<div class="shsec"><h2>Free times</h2>'+
         '<div class="freeform"><input type="date" id="frDate" aria-label="Date"><input type="time" id="frFrom" step="900" aria-label="From" value="10:00"><span>to</span><input type="time" id="frTo" step="900" aria-label="To" value="12:00"><button class="btn sm" type="button" data-sh="freeadd">Add</button></div>'+
-        '<div class="freelist">'+mineFree.map(a=>'<div><span>'+esc(DOW[(new Date(a.start).getDay()+6)%7]+" "+new Date(a.start).getDate()+" "+MONTHS[new Date(a.start).getMonth()].slice(0,3)+", "+hm(a.start)+"–"+hm(a.end))+'</span><button class="btn ghost sm" type="button" data-sh="freedel" data-id="'+a.id+'">Remove</button></div>').join("")+'</div></div>';
+        '<div class="freelist">'+mineFree.map(a=>'<div><span>'+esc(DOW[(new Date(a.start).getDay()+6)%7]+" "+new Date(a.start).getDate()+" "+MONTHS[new Date(a.start).getMonth()].slice(0,3)+", "+hm(a.start)+"–"+hm(a.end))+'</span><button class="btn ghost sm" type="button" data-sh="freedel" data-id="'+a.id+'" aria-label="Remove">×</button></div>').join("")+'</div></div>';
     return;
   }
   const people=hrPeople();
   const up=shoots.filter(x=>x.end>now-3600e3&&x.status!=="cancelled").sort((a,b)=>a.start-b.start);
   let board="";
-  if(!people.length) board='<p class="empty">No one has the HR role yet. Add them in the Team screen; their free and busy times will show here.</p>';
+  if(!people.length) board='<p class="empty">No HR yet. Add them in Team.</p>';
   else{
-    board='<div class="blegend"><span><i style="background:color-mix(in srgb,var(--ready) 28%,#fff)"></i>Free (they added)</span><span><i style="background:repeating-linear-gradient(135deg,#D9E1DD 0 4px,#E7EDEA 4px 8px)"></i>Busy (their Google Calendar)</span><span><i style="background:var(--pink)"></i>Shoot</span><span>Tap a time to book.</span></div>'+
+    board='<div class="blegend"><span><i style="background:color-mix(in srgb,var(--ready) 28%,#fff)"></i>Free</span><span><i style="background:repeating-linear-gradient(135deg,#D9E1DD 0 4px,#E7EDEA 4px 8px)"></i>Busy</span><span><i style="background:var(--pink)"></i>Shoot</span><span class="hint">Tap to book</span></div>'+
       '<div class="bscale"><span></span><span></span><span class="ticks">'+[8,10,12,14,16,18,20].map(h=>'<span>'+(h%12||12)+(h<12?"am":"pm")+'</span>').join("")+'</span></div><div class="board">';
     for(let i=0;i<14;i++){
       const dt=new Date(); dt.setHours(0,0,0,0); dt.setDate(dt.getDate()+i); const day=ymd(dt);
@@ -1371,8 +1372,8 @@ function renderShoots(){
     }
     board+='</div>';
   }
-  box.innerHTML='<div class="shhead"><span class="hint">Times are your local time.</span>'+(readOnly?"":'<button class="btn primary" type="button" data-sh="book">Book a shoot</button>')+'</div>'+
-    '<div class="shsec"><h2>Upcoming shoots</h2>'+(up.length?up.map(x=>shootCard(x,false)).join(""):'<p class="empty">Nothing booked yet.</p>')+'</div>'+
+  box.innerHTML='<div class="shhead">'+(readOnly?"":'<button class="btn primary" type="button" data-sh="book">+ Book</button>')+'</div>'+
+    '<div class="shsec"><h2>Upcoming</h2>'+(up.length?up.map(x=>shootCard(x,false)).join(""):'<p class="empty">Nothing booked.</p>')+'</div>'+
     '<div class="shsec"><h2>Who’s free</h2>'+board+'</div>';
 }
 let editingShoot=null;
@@ -1381,11 +1382,11 @@ function openShoot(pre){
   const people=hrPeople();
   if(!people.length){ toast("Add someone with the HR role in the Team screen first."); return }
   editingShoot=pre.id||null;
-  $("shH").textContent=editingShoot?"Change the shoot time":"Book a shoot";
-  $("shSave").textContent=editingShoot?"Send new time":"Send request";
+  $("shH").textContent=editingShoot?"New time":"Book a shoot";
+  $("shSave").textContent="Send";
   $("shWho").innerHTML=people.map(id=>'<option value="'+esc(id)+'">'+esc(who(id))+'</option>').join("");
   const vids=[...items.values()].filter(i=>i.type!=="design"&&i.status!=="posted").sort((a,b)=>a.title.localeCompare(b.title));
-  $("shItem").innerHTML='<option value="">No specific video</option>'+vids.map(i=>'<option value="'+esc(i.id)+'">'+esc((i.code?i.code+" ":"")+i.title)+'</option>').join("");
+  $("shItem").innerHTML='<option value="">None</option>'+vids.map(i=>'<option value="'+esc(i.id)+'">'+esc((i.code?i.code+" ":"")+i.title)+'</option>').join("");
   const ex=editingShoot?shoots.find(x=>x.id===editingShoot):null;
   const start=ex?ex.start:pre.start||null;
   $("shWho").value=ex?ex.talent[0]:(pre.user||people[0]);
@@ -1402,9 +1403,9 @@ function shootTimes(){
 function shootWarn(){
   const tm=shootTimes(), uid=$("shWho").value, w=$("shWarn");
   if(!tm){ w.hidden=true; return }
-  const clash=busy.some(b=>b.user===uid&&b.start<tm.end&&b.end>tm.start)?"Their Google Calendar shows them busy then.":
-    shoots.some(x=>x.id!==editingShoot&&x.talent.includes(uid)&&["proposed","confirmed"].includes(x.status)&&x.start<tm.end&&x.end>tm.start)?"They already have a shoot at that time.":"";
-  w.hidden=!clash; w.textContent=clash?clash+" You can still send the request.":"";
+  const clash=busy.some(b=>b.user===uid&&b.start<tm.end&&b.end>tm.start)?"Busy on their calendar then.":
+    shoots.some(x=>x.id!==editingShoot&&x.talent.includes(uid)&&["proposed","confirmed"].includes(x.status)&&x.start<tm.end&&x.end>tm.start)?"Already has a shoot then.":"";
+  w.hidden=!clash; w.textContent=clash?clash+" You can still send it.":"";
 }
 ["shWho","shDate","shStart","shLen"].forEach(k=>$(k).addEventListener("change",shootWarn));
 $("shClose").onclick=()=>$("shootDlg").close();
