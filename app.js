@@ -35,7 +35,7 @@ const fmtTime=ms=>{const d=new Date(ms);let h=d.getHours();const ap=h>=12?"pm":"
 const newId=()=>"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
 let items=new Map(), versions=[], feedback=[], focus=[];
-let db=null, assets=null, userNs=null, myId=null, amOwner=false, names={};
+let db=null, assets=null, userNs=null, myId=null, amOwner=false, names={}, myName="";
 let mode="local", readOnly=false, live={items:false,focus:false,team:false};
 let team={}, promptedRole=false, inbox=[], tasks=[], shoots=[], avail=[], busy=[];
 const ROLES={content:{name:"Content & video",k:"var(--blue)"},marketing:{name:"Marketing",k:"var(--mk)"},ecomm:{name:"E-commerce",k:"#E8772E"},hr:{name:"HR",k:"#8C6BD1"}};
@@ -48,15 +48,15 @@ const raw={items:null,versions:null,feedback:null,tasks:null,focus:null,inbox:nu
 const myRole=()=>previewRole||(myId&&team[myId])||"";
 /* isMk = a requesting team that reviews and approves (Marketing or E-commerce) */
 const isMk=()=>["marketing","ecomm"].includes(myRole()), isCr=()=>myRole()==="content", isHr=()=>myRole()==="hr";
-let focusRO=false, selId=null, nShow=20;
+let focusRO=false, selId=null, nShow=20, vOpenFor=null;
 const NOTIF_KEY="gearizo-notif-read-v1";
 function saveRead(s){ try{localStorage.setItem(NOTIF_KEY,JSON.stringify({floor:s.floor,ids:[...s.ids].slice(-400)}))}catch(e){} }
 let nRead=(()=>{
   try{ const r=JSON.parse(localStorage.getItem(NOTIF_KEY)||"null"); if(r&&r.floor) return {floor:Number(r.floor)||0,ids:new Set(Array.isArray(r.ids)?r.ids:[])} }catch(e){}
   const s={floor:Date.now(),ids:new Set()}; saveRead(s); return s;
 })();
-const VIEWS=["calendar","review","pipeline","tasks","shoots"];
-let view=VIEWS.includes(location.hash.slice(1))?location.hash.slice(1):"calendar";
+const VIEWS=["home","calendar","review","pipeline","tasks","shoots"];
+let view=VIEWS.includes(location.hash.slice(1))?location.hash.slice(1):"home";
 const now=new Date(); const todayStr=ymd(now);
 let cursor=new Date(now.getFullYear(),now.getMonth(),1);
 let filters=new Set();
@@ -149,13 +149,16 @@ function renderHeader(){
   $("roleBtn").hidden=mode!=="db"||!myId||!live.team;
   $("roleBtn").textContent=r?ROLES[r].name:"Choose your role";
   $("roleBtn").style.setProperty("--k",r?ROLES[r].k:"var(--ink-3)");
-  $("newBtn").textContent=isMk()?"Assign task":"New item";
+  $("newBtn").textContent=isMk()?"Request":"New";
   /* Each role has its own cat: the round one for content, the tabby for marketing */
   const catSrc=isMk()?"cat-mk.png":"cat.png", ci=$("catImg");
   if(ci.getAttribute("src")!==catSrc){ ci.setAttribute("src",catSrc); ci.width=isMk()?203:188; ci.height=240; $("cat").classList.toggle("mk",isMk()) }
-  const isCal=view==="calendar";
-  $("monthLabel").textContent=isCal?MONTHS[cursor.getMonth()]+" "+cursor.getFullYear():view==="review"?"Review":view==="tasks"?"Tasks":view==="shoots"?"Shoots":"Pipeline";
-  if(isCal){
+  const isCal=view==="calendar", isHome=view==="home";
+  $("kicker").hidden=!isHome;
+  if(isHome){ const d=new Date(); $("kicker").textContent=DOW_LONG[d.getDay()]+", "+d.getDate()+" "+MONTHS[d.getMonth()] }
+  $("monthLabel").textContent=isHome?(myName?"Hi, "+myName.split(/\s+/)[0]:"Hi there"):isCal?MONTHS[cursor.getMonth()]+" "+cursor.getFullYear():view==="review"?"Review":view==="tasks"?"Tasks":view==="shoots"?"Shoots":"Pipeline";
+  if(isHome){ $("stats").innerHTML="" }
+  else if(isCal){
     const prefix=cursor.getFullYear()+"-"+pad(cursor.getMonth()+1);
     const inMonth=all.filter(i=>i.date.startsWith(prefix));
     const posted=inMonth.filter(i=>i.status==="posted").length;
@@ -175,9 +178,9 @@ function renderHeader(){
     $("stats").innerHTML=stat(all.filter(i=>!["idea","posted"].includes(i.status)).length,"in production")+stat(all.filter(i=>i.status==="idea").length,"ideas");
   }
   $("prev").hidden=$("next").hidden=$("todayBtn").hidden=!isCal;
-  $("vCal").setAttribute("aria-pressed",isCal); $("vRev").setAttribute("aria-pressed",view==="review"); $("vPipe").setAttribute("aria-pressed",view==="pipeline"); $("vTask").setAttribute("aria-pressed",view==="tasks"); $("vShoot").setAttribute("aria-pressed",view==="shoots");
+  $("vHome").setAttribute("aria-pressed",isHome); $("vCal").setAttribute("aria-pressed",isCal); $("vRev").setAttribute("aria-pressed",view==="review"); $("vPipe").setAttribute("aria-pressed",view==="pipeline"); $("vTask").setAttribute("aria-pressed",view==="tasks"); $("vShoot").setAttribute("aria-pressed",view==="shoots");
   $("newBtn").hidden=readOnly||isHr();
-  $("teamFilter").hidden=!isCr()||view==="tasks";
+  $("teamFilter").hidden=!isCr()||view==="tasks"||view==="shoots"||isHome;
   $("teamFilter").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.t===teamF));
   $("pvBar").hidden=!previewRole; if(previewRole) $("pvRole").textContent=ROLES[previewRole].name;
 }
@@ -225,21 +228,22 @@ function renderColumns(cols){
   }).join("")+'</div>';
 }
 function render(){
+  if(isHr()&&!["home","tasks","shoots"].includes(view)){ view="home"; history.replaceState(null,"","#home") }
+  if(view==="shoots"&&isMk()){ view="home"; history.replaceState(null,"","#home") }
   renderHeader(); renderFilters();
-  if(isHr()&&!["tasks","shoots"].includes(view)){ view="shoots"; history.replaceState(null,"","#shoots") }
-  if(view==="shoots"&&isMk()){ view="calendar"; history.replaceState(null,"","#calendar") }
   ["vCal","vRev","vPipe"].forEach(k=>{ $(k).hidden=isHr() });
   $("vShoot").hidden=!(isCr()||isHr());
-  const sv=view==="shoots";
-  $("shoots").hidden=!sv;
+  const hv=view==="home", sv=view==="shoots";
+  $("homeView").hidden=!hv; $("shoots").hidden=!sv;
   const rev=view==="review", tv=view==="tasks"||sv;
-  $("layout").classList.toggle("full",rev||tv); $("main").hidden=rev||tv; $("desk").hidden=!rev; $("tasks").hidden=!tv; $("notifs").hidden=rev||tv; $("filters").hidden=tv;
-  if(view==="calendar") renderCalendar();
+  $("layout").classList.toggle("full",rev||tv||hv); $("main").hidden=rev||tv||hv; $("desk").hidden=!rev; $("tasks").hidden=!tv; $("fbar").hidden=hv; $("filters").hidden=tv;
+  if(hv) renderHome();
+  else if(view==="calendar") renderCalendar();
   else if(rev) renderDesk();
   else if(sv) renderShoots();
   else if(tv) {}
   else renderColumns(STATUSES);
-  renderFocus(); renderNotifs(); renderTodo(); renderTasks();
+  renderFocus(); renderNotifs(); renderTasks();
   if($("dlg").open&&editingId) renderPublish();
 }
 
@@ -277,7 +281,7 @@ async function connect(){
   const timer=setTimeout(()=>{ if(!live.items){mode="local";setNote();renderNotifs();renderFocus()} },10000);
   try{
     userNs=await window.claude.use("user");
-    if(userNs){ try{myId=await userNs.id()}catch(e){} try{amOwner=await userNs.isOwner()}catch(e){} }
+    if(userNs){ try{myId=await userNs.id()}catch(e){} try{amOwner=await userNs.isOwner()}catch(e){} try{ const me=await userNs.me(); myName=(me&&me.name)||"" }catch(e){} }
     try{ assets=await window.claude.use("assets") }catch(e){ assets=null }
     const d=await window.claude.use("db");
     if(!d){clearTimeout(timer);mode="local";setNote();renderNotifs();renderFocus();return}
@@ -599,14 +603,15 @@ function renderDesk(){
   const vs=vFor(it.id), fbs=fbFor(it.id), open=fbs.filter(f=>!f.done).length, latest=vs[0];
   const can=!readOnly&&mode==="db", mk=isMk(), cr=isCr();
   let k="var(--ink-3)", head="", sub="", acts="";
-  const due=it.due?" First cut due "+shortDate(it.due)+".":"";
+  const due=it.due?"First cut due "+shortDate(it.due):"";
   const st=it.status, submit=latest&&can&&!mk?'<button class="btn primary" data-act="submit">Send v'+latest.n+' for review</button>':"";
-  if(["idea","script","shoot"].includes(st)){ head=stMap[st].name; sub=(mk?"Waiting for the content team to make the first cut.":"Not edited yet. Add the first cut when it’s ready.")+due; acts=submit; }
-  else if(st==="edit"){ k="var(--edit)"; head="Editing"; sub=(mk?(latest?"v"+latest.n+" is in progress. You’ll get it once it’s sent for review.":"The content team is editing it."):(latest?"Latest is v"+latest.n+". Send it when it’s ready for marketing to check.":"Add the first cut, then send it for review."))+due; acts=submit; }
-  else if(st==="changes"){ k="var(--edit)"; head="Needs changes"; sub=(it.changesBy?who(it.changesBy)+" asked for changes. ":"")+(mk?"Waiting for the content team to send a new version.":(open?open+" note"+(open>1?"s":"")+" to fix. Add a new version, then send it again.":"All notes fixed. Add the new version and send it again.")); acts=submit; }
-  else if(st==="review"){ k="var(--review)"; head="Waiting for approval"; sub=(it.submittedBy?who(it.submittedBy)+" sent ":"Sent ")+(latest?"v"+latest.n:"this")+" for review"+(it.submittedAt?" on "+fmtTime(it.submittedAt):"")+"."+(cr?" "+TEAMS[it.team]+" will approve it or ask for changes.":(it.type==="design"?" Check it, then approve it or leave feedback and ask for changes.":" Watch it, then approve it or leave feedback and ask for changes.")); if(can&&!cr) acts='<button class="btn stop" data-act="changes">Ask for changes</button><button class="btn go" data-act="approve">Approve</button>'; }
-  else if(st==="approved"){ k="var(--ready)"; head="Approved"; sub=(it.approvedBy?"Approved by "+who(it.approvedBy)+(it.approvedAt?" on "+fmtTime(it.approvedAt):"")+". ":"")+(cr?TEAMS[it.team]+" will take it from here.":"Open Publish to post it.")+(it.type==="design"?"":" The file moves to Content Video / approve on the NAS within a few minutes."); if(can&&!cr) acts='<button class="btn" data-act="reopen">Back to editing</button><button class="btn go" data-act="gopub">Open Publish</button>'; }
-  else { k="var(--blue)"; head="Posted"; sub=it.postedAt?"Marked as posted on "+fmtTime(it.postedAt)+".":"This video is live."; }
+  const by=(id,t)=>[id?who(id):"",t?fmtTime(t):""].filter(Boolean).join(" · ");
+  if(["idea","script","shoot"].includes(st)){ head=stMap[st].name; sub=due||"Not cut yet"; acts=submit; }
+  else if(st==="edit"){ k="var(--edit)"; head="Editing"; sub=[latest?"v"+latest.n:"",due].filter(Boolean).join(" · ")||"No cut yet"; acts=submit; }
+  else if(st==="changes"){ k="var(--edit)"; head="Needs changes"; sub=[it.changesBy?who(it.changesBy):"",open?open+" to fix":"All fixed, send the new version"].filter(Boolean).join(" · "); acts=submit; }
+  else if(st==="review"){ k="var(--review)"; head="Waiting for approval"; sub=[latest?"v"+latest.n:"",by(it.submittedBy,it.submittedAt)].filter(Boolean).join(" · "); if(can&&!cr) acts='<button class="btn stop" data-act="changes">Ask for changes</button><button class="btn go" data-act="approve">Approve</button>'; }
+  else if(st==="approved"){ k="var(--ready)"; head="Approved"; sub=by(it.approvedBy,it.approvedAt); if(can&&!cr) acts='<button class="btn" data-act="reopen">Back to editing</button><button class="btn go" data-act="gopub">Open Publish</button>'; }
+  else { k="var(--blue)"; head="Posted"; sub=it.postedAt?fmtTime(it.postedAt):""; }
   setHTML($("vStatus"),'<div class="banner" style="--k:'+k+'"><div><b>'+esc(head)+'</b><span>'+esc(sub)+'</span></div>'+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>');
 
   const isD=it.type==="design";
@@ -616,7 +621,8 @@ function renderDesk(){
   $("vVideoRows").hidden=isD; $("vAttTxt").textContent=isD?"Add design images":"Attach images or files";
   $("fbTimeRow").hidden=isD; $("fbImgRow").hidden=!isD;
   if(isD){ const imgs=latest?(latest.files||[]).filter(f=>f.type.startsWith("image/")):[]; const o='<option value="">Whole design</option>'+imgs.map((f,i)=>'<option value="'+(i+1)+'">Image '+(i+1)+' · '+esc(f.name)+'</option>').join(""); const sel=$("fbImg"); if(sel._o!==o){ const keep=sel.value; sel.innerHTML=o; sel._o=o; sel.value=keep } }
-  $("vForm").hidden=!can||mk;
+  const showV=can&&!mk, vOpen=vOpenFor===it.id||!latest;
+  $("vOpen").hidden=!showV||vOpen; $("vForm").hidden=!showV||!vOpen;
   $("fbText").placeholder=cr?"Reply or add a note for marketing, e.g. Fixed, or Can we keep the music?":"What needs to change at this moment? e.g. Logo too small, make it twice as big";
   $("vAdd").textContent="Add v"+((latest?latest.n:0)+1);
   $("vAttach").hidden=$("fbAttach").hidden=!assets;
@@ -630,7 +636,7 @@ function renderDesk(){
     const tc=f.img?'<button type="button" class="tcb" data-img="'+f.img+'" data-v="'+f.version+'" title="Open image '+f.img+'">Image '+f.img+'</button>':f.t!=null?'<button type="button" class="tcb ts" data-t="'+f.t+'" title="Play from '+fmtSec(f.t)+'">'+fmtSec(f.t)+(f.t2!=null&&f.t2>f.t?'–'+fmtSec(f.t2):"")+'</button>':'<span class="tcg">'+(isD?"Whole design":"Whole video")+'</span>';
     return '<div class="fb'+(f.done?" done":"")+'" data-id="'+esc(f.id)+'"><div class="fb-top">'+tc+'</div>'+(f.text?'<p>'+fbHtml(f.text)+'</p>':"")+attHtml(f.files)+'<div class="rmeta"><span>'+esc(who(f.by))+', '+esc(fmtTime(f.at))+(f.done?", fixed":"")+'</span>'+
       (can?'<button type="button" data-fb="done">'+(f.done?"Reopen":"Mark fixed")+'</button>':"")+((mine||amOwner)&&can?'<button type="button" class="del" data-fb="del">Delete</button>':"")+'</div></div>';
-  }).join("")).join(""):'<p class="empty">No feedback yet.'+(can?" Write what should change, with the video time if it helps.":"")+'</p>');
+  }).join("")).join(""):'<p class="empty">No feedback yet.</p>');
   $("fbForm").hidden=!can;
   $("fbAdd").textContent=latest?"Post feedback on v"+latest.n:"Post feedback";
 }
@@ -671,7 +677,7 @@ async function addVersion(){
   try{
     await db.collection("versions").add({item:id,n,link,asset,assetType,note,files,at:Date.now(),by:myId||""});
     $("vLink").value=""; $("vNote").value=""; $("vFile").value=""; pending.v=[]; renderPending("v");
-    toast("v"+n+" added.");
+    vOpenFor=null; toast("v"+n+" added.");
     const it=items.get(id); if(it&&["idea","script","shoot"].includes(it.status)) setStatusFor(id,"edit");
   }catch(e){ writeErr(e,"this version") }
   btn.disabled=false; renderDesk();
@@ -769,20 +775,126 @@ function nText(e){
 }
 function renderNotifs(){
   const list=$("nList");
-  if(!live.items){ $("nAll").hidden=true; $("nCount").hidden=true; list.innerHTML='<div class="empty">'+(mode==="db"?"Loading…":"Sign in to claude.ai to see notifications.")+'</div>'; return }
-  const ev=events(), unread=ev.filter(isUnread).length;
+  const ev=live.items?events():[], unread=ev.filter(isUnread).length;
+  $("homeBadge").hidden=!unread; $("homeBadge").textContent=unread>99?"99+":unread;
+  if(!live.items){ $("nAll").hidden=true; $("nCount").hidden=true; list.innerHTML='<div class="empty">'+(mode==="db"?"Loading…":"Sign in to see updates.")+'</div>'; return }
   $("nCount").hidden=!unread; $("nCount").textContent=unread; $("nAll").hidden=!unread;
-  if(!ev.length){ list.innerHTML='<div class="empty">Nothing yet. When someone sends a video for review, leaves feedback or approves a video, it shows up here.</div>'; return }
+  if(!ev.length){ list.innerHTML='<div class="empty">Nothing yet.</div>'; return }
   list.innerHTML=ev.slice(0,nShow).map(e=>'<button type="button" class="nitem'+(isUnread(e)?" unread":"")+'" data-n="'+esc(e.id)+'" data-item="'+esc(e.item?e.item.id:"")+'" data-kind="'+e.type+'"><span class="dot" style="--k:'+NT[e.type]+'"></span><span><span class="nt">'+nText(e)+'</span>'+
-    (e.type==="feedback"?'<span class="q">“'+esc(e.text)+'”</span>':"")+'<time>'+esc(fmtTime(e.at))+'</time></span></button>').join("")+
+    (e.type==="feedback"&&e.text?'<span class="q">“'+esc(e.text)+'”</span>':"")+'<time>'+esc(fmtTime(e.at))+'</time></span></button>').join("")+
     (ev.length>nShow?'<button type="button" class="btn sm ghost more" id="nMore">Show older</button>':"");
 }
+function openNotif(b){
+  nRead.ids.add(b.dataset.n); saveRead(nRead);
+  if($("nDlg").open) $("nDlg").close();
+  if(b.dataset.item) goReview(b.dataset.item); else if(/^shoot/.test(b.dataset.kind)) location.hash="shoots"; else goTasks();
+  render();
+}
+function openUpdates(){ nShow=20; renderNotifs(); if(!$("nDlg").open) $("nDlg").showModal() }
 $("nList").addEventListener("click",e=>{
   if(e.target.closest("#nMore")){ nShow+=20; renderNotifs(); return }
-  const b=e.target.closest(".nitem"); if(!b) return;
-  nRead.ids.add(b.dataset.n); saveRead(nRead); if(b.dataset.item) goReview(b.dataset.item); else if(/^shoot/.test(b.dataset.kind)) location.hash="shoots"; else goTasks();
+  const b=e.target.closest(".nitem"); if(b) openNotif(b);
 });
-$("nAll").onclick=()=>{ nRead={floor:Date.now(),ids:new Set()}; saveRead(nRead); renderNotifs(); toast("All caught up.") };
+$("nAll").onclick=()=>{ nRead={floor:Date.now(),ids:new Set()}; saveRead(nRead); render(); toast("All caught up.") };
+$("nClose").onclick=()=>$("nDlg").close();
+$("nDlg").addEventListener("click",e=>{ if(e.target===$("nDlg")) $("nDlg").close() });
+
+/* Home: a few big numbers, one word each; tap a tile for the details */
+const DOW_LONG=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const ic=d=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>';
+const IC={
+  fix:ic('<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/>'),
+  posted:ic('<path d="M21 3 10 14"/><path d="M21 3l-7 18-4-7-7-4z"/>'),
+  tasks:ic('<path d="M4 6.5l1.6 1.6L8.8 5"/><path d="M4 12.5l1.6 1.6 3.2-3.1"/><path d="M4 18.5l1.6 1.6 3.2-3.1"/><path d="M12 7h8M12 13h8M12 19h8"/>'),
+  shoot:ic('<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>'),
+  review:ic('<rect x="3" y="4.5" width="18" height="13" rx="2"/><path d="M10.2 8.4v5.2l4.3-2.6z" fill="currentColor"/><path d="M8 21h8M12 17.5V21"/>'),
+  ready:ic('<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12 2.5 2.5 4.5-5"/>'),
+  booked:ic('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="m9 15 2 2 4-4"/>'),
+  pulse:ic('<path d="M3 12h4l3-7 4 14 3-7h4"/>'),
+  next:ic('<path d="M5 12h14M13 6l6 6-6 6"/>')
+};
+const ST1={idea:"Idea",script:"Script",shoot:"Shoot",edit:"Edit",review:"Review",changes:"Fix",approved:"Ready",posted:"Live"};
+const ST_K={idea:"var(--ink-3)",script:"var(--ink-3)",shoot:"var(--ink-3)",edit:"var(--edit)",changes:"var(--edit)",review:"var(--review)",approved:"var(--ready)",posted:"var(--pink)"};
+const ago=ms=>{ const m=Math.max(0,Math.round((Date.now()-ms)/60000)); return m<1?"now":m<60?m+"m":m<1440?Math.round(m/60)+"h":Math.round(m/1440)+"d" };
+const byDue=(a,b)=>(a.due||a.date||"9999").localeCompare(b.due||b.date||"9999")||(a.date||"9999").localeCompare(b.date||"9999");
+function nextUp(){
+  const rank=isMk()?{review:0,approved:1}:{changes:0,edit:1,shoot:2,script:3,idea:4};
+  return [...items.values()].filter(i=>i.status in rank).sort((a,b)=>rank[a.status]-rank[b.status]||byDue(a,b));
+}
+function tile(cls,icon,word,n,o){
+  o=o||{};
+  return '<button type="button" class="tile '+cls+'" data-go="'+esc(o.go||"")+'">'+
+    '<span class="th"><span class="ti">'+icon+'</span><span>'+esc(word)+'</span>'+(o.pill?'<span class="tp">'+esc(o.pill)+'</span>':"")+'</span>'+
+    '<span class="dn">'+n+'</span>'+(o.ticks!=null?'<span class="ticks" style="--p:'+o.ticks+'"></span>':"")+(o.cap?'<span class="cap">'+esc(o.cap)+'</span>':"")+'</button>';
+}
+function renderHome(){
+  const all=[...items.values()], t0=new Date(), nowMs=t0.getTime(), pm=ymd(t0).slice(0,7), today=ymd(t0), r=myRole();
+  const cnt=sts=>all.filter(i=>sts.includes(i.status));
+  const inMonth=all.filter(i=>i.date.startsWith(pm)), postedM=inMonth.filter(i=>i.status==="posted").length;
+  const myT=tasks.filter(t=>!t.done&&(!r||t.for===r)).sort((a,b)=>(a.due||"9999").localeCompare(b.due||"9999")||a.at-b.at), lateT=myT.filter(t=>t.due&&t.due<today).length;
+  const myShoots=shoots.filter(x=>x.end>nowMs&&x.status!=="cancelled"&&(!isHr()||x.talent.includes(myId))).sort((a,b)=>a.start-b.start);
+  const first=list=>list.slice().sort(byDue)[0];
+  const tasksTile=tile("c"+(isHr()?" solo":""),IC.tasks,"Tasks",myT.length,{go:"view:tasks",pill:lateT?lateT+" late":"",cap:myT.length?myT[0].text:"All done"});
+  const postedTile=tile("b green",IC.posted,"Posted",postedM,{go:"view:calendar",ticks:inMonth.length?(postedM/inMonth.length).toFixed(3):0,cap:"of "+inMonth.length+" in "+MONTHS[t0.getMonth()]});
+  let tiles;
+  if(isHr()){
+    const ask=myShoots.filter(x=>x.status==="proposed"), conf=myShoots.filter(x=>x.status==="confirmed");
+    tiles=tile("a pink",IC.shoot,"To confirm",ask.length,{go:"view:shoots",cap:ask.length?shootWhen(ask[0]):"All replied"})+
+      tile("b green",IC.booked,"Booked",conf.length,{go:"view:shoots",cap:conf.length?shootWhen(conf[0]):"Nothing booked"})+tasksTile;
+  }else if(isMk()){
+    const rv=cnt(["review"]), ap=cnt(["approved"]), f=first(rv), g=first(ap);
+    tiles=tile("a pink",IC.review,"To review",rv.length,{go:f?"item:"+f.id:"view:review",cap:f?f.title:"All clear"})+postedTile+tasksTile+
+      tile("d",IC.ready,"Ready",ap.length,{go:g?"publish:"+g.id:"view:review",cap:g?g.title:"Nothing yet"});
+  }else{
+    const ch=cnt(["changes"]), f=first(ch), wait=myShoots.filter(x=>x.status==="proposed").length, upS=myShoots.filter(x=>x.status!=="declined");
+    tiles=tile("a pink",IC.fix,"To fix",ch.length,{go:f?"item:"+f.id:"view:review",pill:inbox.length?inbox.length+" new file"+(inbox.length>1?"s":""):"",cap:f?f.title:"All clear"})+postedTile+tasksTile+
+      tile("d",IC.shoot,"Shoots",upS.length,{go:"view:shoots",pill:wait?wait+" waiting":"",cap:upS.length?shootWhen(upS[0]):"None booked"});
+  }
+  const strip=isHr()?"":'<div class="hstrip">'+[
+    ["Ideas",cnt(["idea","script"]).length,"var(--ink-3)","view:pipeline"],
+    ["Making",cnt(["shoot","edit","changes"]).length,"var(--edit)","view:pipeline"],
+    ["Review",cnt(["review"]).length,"var(--review)","view:review"],
+    ["Ready",cnt(["approved"]).length,"var(--ready)","view:pipeline"],
+    ["Posted",cnt(["posted"]).length,"var(--pink)","view:pipeline"]
+  ].map(([w,n,k,go])=>'<button type="button" class="hs" data-go="'+go+'"><span class="dn">'+n+'</span><span class="pl" style="--k:'+k+'"><i></i>'+w+'</span></button>').join("")+'</div>';
+  /* Updates: last 14 days as a dot timeline, plus the latest three */
+  const ev=live.items?events():[], unread=ev.filter(isUnread).length;
+  const days=[]; for(let i=13;i>=0;i--) days.push(ymd(new Date(t0.getFullYear(),t0.getMonth(),t0.getDate()-i)));
+  const byDay={}; ev.forEach(e=>{ const k=ymdOf(e.at); (byDay[k]=byDay[k]||[]).push(e) });
+  const dots=days.map((d,i)=>{ const list=byDay[d]||[]; let h=""; for(let j=0;j<6;j++){ const e=list[j]; h+=e?'<i class="on" style="--k:'+NT[e.type]+'"></i>':'<i></i>' }
+    return '<div class="tl-col'+(i===13?" today":"")+'" title="'+esc(shortDate(d)+": "+list.length+" update"+(list.length===1?"":"s"))+'">'+h+'</div>' }).join("");
+  const labs=days.map((d,i)=>'<span>'+(i===0||i===7?esc(shortDate(d)):i===13?"Today":"")+'</span>').join("");
+  const glass='<button type="button" class="glass" data-go="updates">'+(unread?'<span class="dn">'+unread+'</span><span><b>new</b></span>':'<span><b>All read</b></span>')+'</button>';
+  const theirs=ev.filter(e=>!myId||e.by!==myId);
+  const rows=(theirs.length?theirs:ev).slice(0,3).map(e=>'<button type="button" class="ur'+(isUnread(e)?" unread":"")+'" data-n="'+esc(e.id)+'" data-item="'+esc(e.item?e.item.id:"")+'" data-kind="'+e.type+'"><span class="dot" style="--k:'+NT[e.type]+'"></span><span class="tx">'+nText(e)+'</span><time>'+ago(e.at)+'</time></button>').join("");
+  const upd='<section class="hcard upd"><h2 class="ch"><span class="ti">'+IC.pulse+'</span>Updates<button type="button" class="btn sm see" data-go="updates">See all</button></h2>'+
+    '<div class="tl">'+glass+'<div class="tl-dots">'+dots+'</div><div class="tl-lab">'+labs+'</div></div>'+
+    '<div class="ul">'+(rows||'<div class="empty">'+(live.items?"Nothing yet.":mode==="db"?"Loading…":"Sign in to see updates.")+'</div>')+'</div></section>';
+  /* Next up */
+  let nrows, more;
+  if(isHr()){
+    nrows=myShoots.slice(0,4).map(x=>'<button type="button" class="nx" data-go="view:shoots"><span class="dot" style="--k:var(--pink)"></span><span class="tx">'+esc(x.title||"Shoot")+'</span><span class="pl" style="--k:'+(x.status==="confirmed"?"var(--ready)":"var(--review)")+'"><i></i>'+esc(shootWhen(x).split(",")[0])+'</span></button>').join("");
+    more=myShoots.length>4?"view:shoots":"";
+  }else{
+    const list=nextUp();
+    nrows=list.slice(0,4).map(i=>{ const d=["review","approved"].includes(i.status)?i.date:(i.due||i.date);
+      return '<button type="button" class="nx" data-go="item:'+esc(i.id)+'"><span class="dot" style="--k:'+sMap[i.series].c+'"></span><span class="tx">'+esc(i.title)+'</span><span class="pl" style="--k:'+ST_K[i.status]+'"><i></i>'+esc(ST1[i.status])+(d?" · "+esc(shortDate(d)):"")+'</span></button>' }).join("");
+    more=list.length>4?"view:pipeline":"";
+  }
+  const nxCard='<section class="hcard"><h2 class="ch"><span class="ti">'+IC.next+'</span>Next'+(more?'<button type="button" class="btn sm see" data-go="'+more+'">See all</button>':"")+'</h2><div class="ul">'+(nrows||'<div class="empty">All clear.</div>')+'</div></section>';
+  const newCard=(readOnly||isHr())?"":'<button type="button" class="newc" data-go="new"><span class="plus" aria-hidden="true">+</span><span><b>'+(isMk()?"New request":"New")+'</b><small>Video or design</small></span><span class="stack" aria-hidden="true"><i></i><i></i><i></i></span></button>';
+  setHTML($("homeView"),strip+'<div class="hgrid">'+tiles+'</div><div class="hrow">'+upd+'<div class="hside">'+nxCard+newCard+'</div></div>');
+}
+$("homeView").addEventListener("click",e=>{
+  const n=e.target.closest("[data-n]"); if(n){ openNotif(n); return }
+  const b=e.target.closest("[data-go]"); if(!b||!b.dataset.go) return;
+  const i=b.dataset.go.indexOf(":"), k=i<0?b.dataset.go:b.dataset.go.slice(0,i), v=i<0?"":b.dataset.go.slice(i+1);
+  if(k==="view"){ window.scrollTo(0,0); location.hash=v }
+  else if(k==="item") goReview(v);
+  else if(k==="publish"){ openItem(v); setTab("publish") }
+  else if(k==="new") openItem(null,"");
+  else if(k==="updates") openUpdates();
+});
 
 /* Tasks: its own page in the rail, one column per role */
 const ROLE_SHORT={content:"Content",marketing:"Marketing",ecomm:"E-commerce",hr:"HR"};
@@ -987,27 +1099,6 @@ async function catWalk(){
 (function strollLater(first){ setTimeout(()=>{ catWalk(); strollLater(false) }, first?6000:30000) })(true);
 window.addEventListener("resize",stopWalk);
 
-/* Your to-do, by role */
-function renderTodo(){
-  const r=myRole();
-  $("todo").hidden=!r||!live.items;
-  if(!r||!live.items) return;
-  const all=[...items.values()];
-  const byDue=(a,b)=>(a.due||"9999").localeCompare(b.due||"9999")||(a.date||"9999").localeCompare(b.date||"9999");
-  let list;
-  if(r==="content"){
-    $("tdSub").textContent="Videos to make or fix. Tap one to open it in Review.";
-    const rank={changes:0,edit:1,shoot:2,script:3,idea:4};
-    list=all.filter(i=>i.status in rank).sort((a,b)=>rank[a.status]-rank[b.status]||byDue(a,b));
-  }else{
-    $("tdSub").textContent="Videos to review, then to post. Tap one to open it in Review.";
-    const rank={review:0,approved:1};
-    list=all.filter(i=>i.status in rank).sort((a,b)=>rank[a.status]-rank[b.status]||(a.date||"9999").localeCompare(b.date||"9999"));
-  }
-  $("tdList").innerHTML=list.length?list.slice(0,8).map(i=>chip(i,true)).join("")+(list.length>8?'<div class="empty">'+(list.length-8)+' more in Pipeline.</div>':""):'<div class="empty">Nothing waiting for you.</div>';
-}
-$("tdList").addEventListener("click",e=>{ const c=e.target.closest(".chip"); if(c) goReview(c.dataset.id) });
-
 /* Focus products */
 const monthKey=()=>cursor.getFullYear()+"-"+pad(cursor.getMonth()+1);
 function renderFocus(){
@@ -1051,13 +1142,14 @@ $("prev").onclick=()=>{cursor=new Date(cursor.getFullYear(),cursor.getMonth()-1,
 $("next").onclick=()=>{cursor=new Date(cursor.getFullYear(),cursor.getMonth()+1,1);render()};
 $("todayBtn").onclick=()=>{cursor=new Date(now.getFullYear(),now.getMonth(),1);render()};
 $("newBtn").onclick=()=>openItem(null,"");
+$("vHome").onclick=()=>{location.hash="home"};
 $("vCal").onclick=()=>{location.hash="calendar"};
 $("vRev").onclick=()=>{ $("desk").classList.remove("phone-detail"); location.hash="review" };
 $("dBack").onclick=()=>{ $("desk").classList.remove("phone-detail"); window.scrollTo(0,0) };
 $("vPipe").onclick=()=>{location.hash="pipeline"};
 $("vTask").onclick=()=>{location.hash="tasks"};
 $("vShoot").onclick=()=>{location.hash="shoots"};
-window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);view=VIEWS.includes(h)?h:"calendar";render()});
+window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);view=VIEWS.includes(h)?h:"home";render();window.scrollTo(0,0)});
 narrow.addEventListener("change",render);
 $("filters").addEventListener("click",e=>{const b=e.target.closest(".fchip"); if(!b) return; const s=b.dataset.series; filters.has(s)?filters.delete(s):filters.add(s); render()});
 $("main").addEventListener("click",e=>{
@@ -1173,6 +1265,7 @@ $("fbText").addEventListener("paste",e=>{
   e.preventDefault(); addPending("fb",fs); toast("Screenshot attached.");
 });
 $("vAdd").onclick=addVersion;
+$("vOpen").onclick=()=>{ vOpenFor=selId; renderDesk(); $("vNote").focus() };
 $("fbAdd").onclick=addFeedback;
 $("copyCap").onclick=()=>{ const t=$("fCaption").value.trim(); if(!t){toast("No caption yet.");return} copyText(t) };
 $("fCaption").addEventListener("blur",()=>{ if(editingId&&!readOnly){ const prev=items.get(editingId); if(prev&&prev.caption!==$("fCaption").value) persist(editingId,{...prev,caption:$("fCaption").value}) } });
@@ -1383,7 +1476,7 @@ function setPreview(r){
   teamF=""; selId=null; deskFor=undefined;
   applyPreview();
   if($("roleDlg").open) $("roleDlg").close();
-  if(previewRole==="hr") location.hash="shoots";
+  if(location.hash!=="#home") location.hash="home";
   render(); window.scrollTo(0,0);
   toast(previewRole?"Previewing as "+ROLES[previewRole].name+".":"Back to your own view.");
 }
