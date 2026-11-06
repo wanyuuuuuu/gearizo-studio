@@ -556,7 +556,7 @@ dialog{border-radius:18px}
     width:58px;height:58px;min-height:58px;padding:0;border-radius:50%;font-size:0;box-shadow:0 8px 22px color-mix(in srgb,var(--pink) 45%,transparent)}
   #newBtn::before{content:"+";font-family:var(--display);font-size:32px;font-weight:600;line-height:1;margin-top:-3px}
   /* the cat moves to the left so it doesn't sit under the + button */
-  .rail .mascot{right:auto;left:calc(env(safe-area-inset-left,0px) + 12px)}
+  .rail .mascot{position:fixed;right:auto;left:calc(env(safe-area-inset-left,0px) + 12px);bottom:calc(env(safe-area-inset-bottom,0px) + 74px);margin:0;z-index:21}
   .catsay{right:auto;left:calc(env(safe-area-inset-left,0px) + 70px)}
   .catsay::before{left:-7px;right:auto;transform:rotate(45deg)}
   /* quieter extras */
