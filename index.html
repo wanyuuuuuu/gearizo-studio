@@ -542,6 +542,21 @@ dialog{border-radius:18px}
 .team-add select{border:1px solid var(--line);border-radius:999px;padding:6px 10px;min-height:38px;background:var(--surface)}
 .role-legend{margin:12px 0 0;padding-left:18px;font-size:12.5px;color:var(--ink-2);display:grid;gap:4px}
 .tkcols{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+/* Phase 2: designs, references, team filter, preview */
+.atts.big{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.atts.big figure{margin:0;display:flex;flex-direction:column;gap:4px}
+.atts.big img{width:100%;height:auto;max-height:440px;object-fit:contain;background:var(--sunk);border-radius:10px;border:1px solid var(--line)}
+.atts.big figcaption{font-size:12px;color:var(--ink-2)}
+.atts.big figcaption b{font-family:var(--display);color:var(--ink)}
+.refs{display:flex;flex-direction:column;gap:4px;margin:0 0 10px}
+.refs b{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)}
+#fRefs .atts{margin:0 0 6px}
+#fSizeNote{margin-top:6px}
+#teamFilter{margin-right:4px}
+.pvbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;background:var(--pink-soft);border:1px solid var(--pink);color:var(--ink);border-radius:12px;padding:8px 12px;margin:0 0 12px;font-size:13.5px}
+.pvbar b{color:var(--pink)}
+.pvopts{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:12px;font-size:13px}
+.pvopts b{margin-right:4px;color:var(--ink-2)}
 
 /* ===== Phone layout (computer layout above stays as it is) ===== */
 @media (max-width:720px){
@@ -588,7 +603,7 @@ dialog{border-radius:18px}
   .desk.phone-detail .qcol{display:none}
   .dback{display:inline-flex;margin-bottom:10px}
   .queue .empty{display:none}
-  #nasBox{display:none}   /* Finder links don't work on a phone; the video comes first */
+  #nasBox .nas{display:none}   /* Finder links don't work on a phone; the video comes first */
   .detail{padding:14px 14px 16px;border-radius:14px}
   .detail .ver video{max-height:62vh}
   .banner .acts{width:100%}
@@ -636,12 +651,14 @@ dialog{border-radius:18px}
     </div>
   </header>
 
+  <div class="pvbar" id="pvBar" hidden role="status"><span>Previewing as <b id="pvRole"></b>. Read only: nothing you click here changes anything.</span><button class="btn sm" id="pvExit" type="button">Exit preview</button></div>
   <section class="nstrip" id="notifs" aria-labelledby="nTitle">
     <div class="nstrip-h"><h2 id="nTitle">Notifications<span class="ncount" id="nCount" hidden>0</span></h2><button class="btn sm ghost" id="nAll" type="button" hidden>Mark all read</button></div>
     <div class="nrow" id="nList"><div class="empty">Loading…</div></div>
   </section>
 
   <div class="bar">
+    <div class="tkseg" id="teamFilter" role="group" aria-label="Show team" hidden><button type="button" data-t="" aria-pressed="true">All</button><button type="button" data-t="marketing" aria-pressed="false">Marketing</button><button type="button" data-t="ecomm" aria-pressed="false">E-commerce</button></div>
     <div class="filters" id="filters" aria-label="Filter by series"></div>
     <span class="note" id="saveNote">Connecting…</span>
   </div>
@@ -675,13 +692,15 @@ dialog{border-radius:18px}
               <div id="vLatest"></div>
               <div class="inline-form" id="vForm">
                 <h4 class="form-h">Add a new version</h4>
+                <div id="vVideoRows" class="vrows">
                 <label class="fl" for="vLink">NAS link or file path</label>
                 <input type="text" id="vLink" placeholder="e.g. \\NASGREEN\Videos\TPMS_v2.mp4">
                 <label class="fl" for="vFile">Preview video <span class="hint">Optional, MP4 under 20 MB, so marketing can watch it here.</span></label>
                 <input type="file" id="vFile" accept="video/mp4,video/webm,image/*">
+                </div>
                 <label class="fl" for="vNote">What changed</label>
                 <textarea id="vNote" placeholder="One change per line, with the time:&#10;0:05 made the logo bigger&#10;0:12 cut 2 seconds"></textarea>
-                <div class="attach" id="vAttach"><label class="btn sm">Attach images or files<input type="file" id="vAtt" multiple accept="image/*,video/mp4,video/webm,application/pdf,.csv,.txt,.md,.json" aria-label="Attach images or files to this version"></label><div class="att-list" id="vFiles"></div></div>
+                <div class="attach" id="vAttach"><label class="btn sm"><span id="vAttTxt">Attach images or files</span><input type="file" id="vAtt" multiple accept="image/*,video/mp4,video/webm,application/pdf,.csv,.txt,.md,.json" aria-label="Attach images or files to this version"></label><div class="att-list" id="vFiles"></div></div>
                 <div class="row" style="justify-content:flex-end"><button class="btn primary" id="vAdd" type="button">Add version</button></div>
               </div>
               <div id="vOlder"></div>
@@ -690,7 +709,8 @@ dialog{border-radius:18px}
               <h3 class="sec-h" id="fbHead">Feedback</h3>
               <div class="fbwrap" id="fbList"></div>
               <div class="inline-form" id="fbForm">
-                <div class="tc-row"><b>At</b><input type="text" id="fbAt" placeholder="0:05" inputmode="numeric" autocomplete="off" aria-label="Start time, minutes:seconds"><span>to</span><input type="text" id="fbTo" placeholder="0:08" inputmode="numeric" autocomplete="off" aria-label="End time, optional"><button class="btn sm" id="fbTime" type="button">Use video time</button></div>
+                <div class="tc-row" id="fbImgRow" hidden><b>On</b><select id="fbImg" aria-label="Which image"></select></div>
+                <div class="tc-row" id="fbTimeRow"><b>At</b><input type="text" id="fbAt" placeholder="0:05" inputmode="numeric" autocomplete="off" aria-label="Start time, minutes:seconds"><span>to</span><input type="text" id="fbTo" placeholder="0:08" inputmode="numeric" autocomplete="off" aria-label="End time, optional"><button class="btn sm" id="fbTime" type="button">Use video time</button></div>
                 <textarea id="fbText" placeholder="What needs to change at this moment? e.g. Logo too small, make it twice as big" aria-label="What needs to change"></textarea>
                 <div class="attach" id="fbAttach"><label class="btn sm">Attach screenshot or file<input type="file" id="fbAtt" multiple accept="image/*,video/mp4,video/webm,application/pdf,.csv,.txt,.md,.json" aria-label="Attach screenshots or files to this feedback"></label><div class="att-list" id="fbFiles"></div></div>
                 <p class="hint" id="fbHint">Leave the time empty for a note about the whole video.</p>
@@ -735,6 +755,8 @@ dialog{border-radius:18px}
           <div class="f"><label for="fSeries">Series</label><select id="fSeries"></select></div>
           <div class="f"><label for="fStatus">Status</label><select id="fStatus"></select></div>
           <div class="f" id="fTeamWrap"><label for="fTeam">For team</label><select id="fTeam"><option value="marketing">Marketing</option><option value="ecomm">E-commerce</option></select></div>
+          <div class="f full"><span class="lab">Type</span><div class="toggles" id="fType"><label><input type="radio" name="itype" value="video"><span>Video</span></label><label><input type="radio" name="itype" value="design"><span>Design</span></label></div></div>
+          <div class="f full" id="fSizesWrap" hidden><span class="lab">Sizes</span><div class="toggles" id="fSizes"></div><input type="text" id="fSizeNote" placeholder="Other sizes or notes, e.g. 1200×628 Facebook ad" aria-label="Other sizes or notes"></div>
           <div class="f full"><span class="lab">Post date</span>
             <div class="datefield"><input type="date" id="fDate" aria-label="Post date"><button class="btn ghost" id="fClearDate" type="button">No date</button></div>
           </div>
@@ -742,8 +764,9 @@ dialog{border-radius:18px}
             <div class="datefield"><input type="date" id="fDue" aria-label="First cut due"><button class="btn ghost" id="fClearDue" type="button">No deadline</button></div>
           </div>
           <div class="f full"><span class="lab">Platforms</span><div class="toggles" id="fPlatforms"></div></div>
-          <div class="f full"><span class="lab">Video type</span><div class="toggles" id="fKind"><label><input type="radio" name="kind" value="ai"><span>AI video</span></label><label><input type="radio" name="kind" value="real"><span>Real people</span></label></div></div>
+          <div class="f full" id="fKindWrap"><span class="lab">Video type</span><div class="toggles" id="fKind"><label><input type="radio" name="kind" value="ai"><span>AI video</span></label><label><input type="radio" name="kind" value="real"><span>Real people</span></label></div></div>
           <div class="f full"><span class="lab">Language</span><div class="toggles" id="fLangs"></div></div>
+          <div class="f full"><span class="lab">References</span><div id="fRefs"></div><div class="attach"><label class="btn sm">Add reference images or files<input type="file" id="refAtt" multiple accept="image/*,video/mp4,video/webm,application/pdf,.csv,.txt,.md,.json" aria-label="Add reference images or files"></label><div class="att-list" id="refsFiles"></div></div></div>
           <div class="f full"><label for="fNotes">Notes</label><textarea id="fNotes" placeholder="Hook, script, shot list…"></textarea></div>
         </div>
       </section>
@@ -773,6 +796,7 @@ dialog{border-radius:18px}
         <select id="teamRole" aria-label="Role"></select>
         <button class="btn primary sm" type="submit">Add</button>
       </form>
+      <div class="pvopts"><b>Preview the app as</b><button type="button" class="btn sm" data-pv="marketing">Marketing</button><button type="button" class="btn sm" data-pv="ecomm">E-commerce</button><button type="button" class="btn sm" data-pv="hr">HR</button></div>
       <ul class="role-legend">
         <li><b>Content &amp; video</b> sees and makes everything (you).</li>
         <li><b>Marketing</b> and <b>E-commerce</b> each see only their own requests, review and approve them.</li>

@@ -40,7 +40,12 @@ let mode="local", readOnly=false, live={items:false,focus:false,team:false};
 let team={}, promptedRole=false, inbox=[], tasks=[];
 const ROLES={content:{name:"Content & video",k:"var(--blue)"},marketing:{name:"Marketing",k:"var(--mk)"},ecomm:{name:"E-commerce",k:"#E8772E"},hr:{name:"HR",k:"#8C6BD1"}};
 const TEAMS={marketing:"Marketing",ecomm:"E-commerce"};
-const myRole=()=>(myId&&team[myId])||"";
+const SIZES=[{id:"sq",name:"Square 1:1 (product)"},{id:"post",name:"Post 4:5"},{id:"story",name:"Story 9:16"},{id:"banner",name:"Banner 16:9"},{id:"wide",name:"Wide banner 3:1"},{id:"thumb",name:"Thumbnail 1280×720"}];
+const sizeName=id=>(SIZES.find(x=>x.id===id)||{}).name||id;
+/* Owner preview: see the app as another role (read only); raw holds the real data */
+let previewRole="", realRO=null, teamF="";
+const raw={items:null,versions:null,feedback:null,tasks:null,focus:null,inbox:null};
+const myRole=()=>previewRole||(myId&&team[myId])||"";
 /* isMk = a requesting team that reviews and approves (Marketing or E-commerce) */
 const isMk=()=>["marketing","ecomm"].includes(myRole()), isCr=()=>myRole()==="content", isHr=()=>myRole()==="hr";
 let focusRO=false, selId=null, nShow=20;
@@ -72,6 +77,10 @@ function normalize(id,d){
     product:String(d.product||""),
     kind:d.kind==="ai"||d.kind==="real"?d.kind:"",
     team:d.team==="ecomm"?"ecomm":"marketing",
+    type:d.type==="design"?"design":"video",
+    sizes:Array.isArray(d.sizes)?d.sizes.filter(x=>typeof x==="string").slice(0,12):[],
+    sizeNote:String(d.sizeNote||"").slice(0,300),
+    refs:normFiles(d.refs),
     notes:String(d.notes||""),
     caption:String(d.caption||""),
     approvedBy:String(d.approvedBy||""), approvedAt:Number(d.approvedAt)||0, postedAt:Number(d.postedAt)||0, postedBy:String(d.postedBy||""),
@@ -104,18 +113,19 @@ function who(id){ if(!id) return "Someone"; if(id===myId) return "You"; return n
 
 const vFor=id=>versions.filter(v=>v.item===id).sort((a,b)=>b.n-a.n);
 const fbFor=id=>feedback.filter(f=>f.item===id).sort((a,b)=>a.at-b.at);
-function visible(it){ return filters.size===0||filters.has(it.series) }
+function visible(it){ return (filters.size===0||filters.has(it.series))&&(!teamF||it.team===teamF) }
 function sorted(list){ return list.sort((a,b)=>(a.date||"9999").localeCompare(b.date||"9999")||a.created-b.created) }
 
 function chip(it,showDate,extra){
   const s=sMap[it.series];
   const meta=[];
   if(it.code) meta.push(it.code);
+  if(it.type==="design") meta.push("Design");
   if(showDate&&it.date) meta.push(shortDate(it.date));
   if(view!=="pipeline") meta.push(stMap[it.status].name);
   if(!showDate&&view==="calendar"){ const vs0=vFor(it.id); const open0=fbFor(it.id).filter(f=>!f.done).length;
     return '<button class="chip s-'+it.status+(it.status==="posted"?" posted":"")+(extra||"")+'" draggable="'+(!readOnly)+'" data-id="'+esc(it.id)+'" style="--c:'+s.c+'" title="'+esc(s.name+(it.code?" · "+it.code:""))+'">'+
-      '<span class="t">'+esc(it.title)+'</span><span class="m">'+esc((isCr()&&it.team==="ecomm"?"E-com · ":"")+stMap[it.status].name)+'</span>'+(open0?'<span class="flag">'+open0+' to fix</span>':"")+'</button>'; }
+      '<span class="t">'+esc(it.title)+'</span><span class="m">'+esc((isCr()&&it.team==="ecomm"?"E-com · ":"")+(it.type==="design"?"Design · ":"")+stMap[it.status].name)+'</span>'+(open0?'<span class="flag">'+open0+' to fix</span>':"")+'</button>'; }
   const vs=vFor(it.id); if(vs.length) meta.push("v"+vs[0].n);
   if(it.due&&["idea","script","shoot","edit","changes"].includes(it.status)) meta.push("Due "+shortDate(it.due));
 
@@ -163,6 +173,9 @@ function renderHeader(){
   $("prev").hidden=$("next").hidden=$("todayBtn").hidden=!isCal;
   $("vCal").setAttribute("aria-pressed",isCal); $("vRev").setAttribute("aria-pressed",view==="review"); $("vPipe").setAttribute("aria-pressed",view==="pipeline"); $("vTask").setAttribute("aria-pressed",view==="tasks");
   $("newBtn").hidden=readOnly||isHr();
+  $("teamFilter").hidden=!isCr()||view==="tasks";
+  $("teamFilter").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.t===teamF));
+  $("pvBar").hidden=!previewRole; if(previewRole) $("pvRole").textContent=ROLES[previewRole].name;
 }
 function stCls(list){
   list=list||[];
@@ -266,25 +279,25 @@ async function connect(){
       clearTimeout(timer); const wasLive=live.items; live.items=true;
       const m=new Map(); snap.docs.forEach(x=>{ if(x.exists) m.set(x.id,normalize(x.id,x.data())) });
       const before=wasLive?items:null;
-      items=m; saveCache(); setNote(); render(); resolveNames();
+      raw.items=m; applyPreview(); saveCache(); setNote(); render(); resolveNames();
       if(before) catWatch(before,m);
     },()=>{clearTimeout(timer);mode="local";setNote();toast("Couldn’t load the online plan. Showing the copy on this device.")});
     db.collection("versions").onSnapshot(snap=>{
-      versions=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,item:String(v.item||""),n:Number(v.n)||1,link:String(v.link||""),asset:String(v.asset||""),assetType:String(v.assetType||""),note:String(v.note||""),files:normFiles(v.files),at:Number(v.at)||0,by:String(v.by||"")}});
+      raw.versions=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,item:String(v.item||""),n:Number(v.n)||1,link:String(v.link||""),asset:String(v.asset||""),assetType:String(v.assetType||""),note:String(v.note||""),files:normFiles(v.files),at:Number(v.at)||0,by:String(v.by||"")}}); applyPreview();
       render(); resolveNames();
     },()=>{});
     db.collection("feedback").onSnapshot(snap=>{
-      feedback=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,item:String(v.item||""),text:String(v.text||""),version:Number(v.version)||0,t:secOrNull(v.t),t2:secOrNull(v.t2),files:normFiles(v.files),at:Number(v.at)||0,by:String(v.by||""),done:!!v.done}});
+      raw.feedback=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,item:String(v.item||""),text:String(v.text||""),version:Number(v.version)||0,img:Number(v.img)>0?Number(v.img):null,t:secOrNull(v.t),t2:secOrNull(v.t2),files:normFiles(v.files),at:Number(v.at)||0,by:String(v.by||""),done:!!v.done}}); applyPreview();
       render(); resolveNames();
     },()=>{});
     db.collection("tasks").onSnapshot(snap=>{
       live.tasks=true;
-      tasks=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,text:String(v.text||"").slice(0,200),for:ROLES[v.for]?v.for:"content",
+      raw.tasks=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,text:String(v.text||"").slice(0,200),for:ROLES[v.for]?v.for:"content",
         due:typeof v.due==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(v.due)?v.due:"",done:!!v.done,doneBy:String(v.doneBy||""),doneAt:Number(v.doneAt)||0,by:String(v.by||""),at:Number(v.at)||0}}).filter(t=>t.text);
-      render(); resolveNames(); taskWatch();
+      applyPreview(); render(); resolveNames(); taskWatch();
     },()=>{ live.tasks=true; renderTasks() });
     db.collection("inbox").onSnapshot(snap=>{
-      inbox=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,path:String(v.path||""),name:String(v.name||"video"),asset:String(v.asset||""),assetType:String(v.assetType||"video/mp4"),size:Number(v.size)||0,mtime:Number(v.mtime)||0,at:Number(v.at)||0}}).sort((a,b)=>a.at-b.at);
+      raw.inbox=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,path:String(v.path||""),name:String(v.name||"video"),asset:String(v.asset||""),assetType:String(v.assetType||"video/mp4"),size:Number(v.size)||0,mtime:Number(v.mtime)||0,at:Number(v.at)||0}}).sort((a,b)=>a.at-b.at); applyPreview();
       render();
     },()=>{});
     db.collection("team").onSnapshot(snap=>{
@@ -295,7 +308,7 @@ async function connect(){
     },()=>{});
     db.collection("focus").onSnapshot(snap=>{
       live.focus=true;
-      focus=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,name:String(v.name||""),month:String(v.month||""),created:Number(v.created)||0}}).filter(f=>f.name).sort((a,b)=>a.created-b.created);
+      raw.focus=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,name:String(v.name||""),month:String(v.month||""),created:Number(v.created)||0}}).filter(f=>f.name).sort((a,b)=>a.created-b.created); applyPreview();
       renderFocus();
     },()=>renderFocus());
   }catch(e){clearTimeout(timer);mode="local";setNote();renderNotifs();renderFocus()}
@@ -307,6 +320,7 @@ function buildForm(){
   $("fStatus").innerHTML=STATUSES.map(s=>'<option value="'+s.id+'">'+esc(s.name)+'</option>').join("");
   $("fPlatforms").innerHTML=PLATFORMS.map(p=>'<label><input type="checkbox" value="'+p.id+'"><span>'+esc(p.name)+'</span></label>').join("");
   $("fLangs").innerHTML=LANGS.map(p=>'<label><input type="checkbox" value="'+p.id+'"><span>'+esc(p.name)+'</span></label>').join("");
+  $("fSizes").innerHTML=SIZES.map(p=>'<label><input type="checkbox" value="'+p.id+'"><span>'+esc(p.name)+'</span></label>').join("");
 }
 function setTab(t){
   if(t!=="publish") t="plan";
@@ -317,7 +331,8 @@ function setTab(t){
 function openItem(id,presetDate,presetProduct){
   if(readOnly&&!id) return;
   editingId=id||null; editingProduct=id?"":(presetProduct||"");
-  const it=id?items.get(id):{title:presetProduct||"",series:presetProduct?"product":(filters.size===1?[...filters][0]:"garage"),status:"idea",platforms:["reel"],langs:[],kind:"",date:presetDate||"",notes:"",caption:""};
+  const it=id?items.get(id):{title:presetProduct||"",series:presetProduct?"product":(filters.size===1?[...filters][0]:"garage"),status:"idea",platforms:["reel"],langs:[],kind:"",date:presetDate||"",notes:"",caption:"",
+    type:myRole()==="ecomm"?"design":"video",sizes:[],sizeNote:"",refs:[],team:isMk()?myRole():(teamF||"marketing")};
   if(!it) return;
   $("fTitle").value=it.title==="Untitled"&&id?"":it.title;
   $("fStatus").querySelectorAll("option").forEach(o=>{ o.disabled=isCr()&&["approved","posted"].includes(o.value)&&o.value!==it.status });
@@ -326,6 +341,12 @@ function openItem(id,presetDate,presetProduct){
   $("fPlatforms").querySelectorAll("input").forEach(i=>i.checked=it.platforms.includes(i.value));
   $("fLangs").querySelectorAll("input").forEach(i=>i.checked=it.langs.includes(i.value));
   $("fKind").querySelectorAll("input").forEach(i=>i.checked=it.kind===i.value);
+  $("fType").querySelectorAll("input").forEach(i=>i.checked=(it.type||"video")===i.value);
+  $("fSizes").querySelectorAll("input").forEach(i=>i.checked=(it.sizes||[]).includes(i.value));
+  $("fSizeNote").value=it.sizeNote||"";
+  $("fRefs").innerHTML=attHtml(it.refs||[]);
+  pending.refs=[]; renderPending("refs");
+  typeFields();
   $("fCode").hidden=!(id&&it.code); $("fCode").textContent=id&&it.code?it.code:"";
   $("fDelete").hidden=!id||readOnly; $("fDelete").textContent="Delete"; $("fDelete").dataset.armed="";
   $("fSave").hidden=readOnly;
@@ -334,6 +355,7 @@ function openItem(id,presetDate,presetProduct){
   $("dlg").showModal();
   if(!id) setTimeout(()=>$("fTitle").focus(),30);
 }
+function typeFields(){ const d=(document.querySelector("#fType input:checked")||{}).value==="design"; $("fSizesWrap").hidden=!d; $("fKindWrap").hidden=d }
 function tint(){ $("dlgInner").style.setProperty("--c",sMap[$("fSeries").value].c) }
 function formData(prev,id){
   const d={id,title:$("fTitle").value.trim()||(prev?prev.title:"Untitled"),series:$("fSeries").value,status:$("fStatus").value,
@@ -341,19 +363,30 @@ function formData(prev,id){
     langs:[...$("fLangs").querySelectorAll("input:checked")].map(i=>i.value),
     kind:(document.querySelector("#fKind input:checked")||{}).value||"",
     date:$("fDate").value||"",due:$("fDue").value||"",notes:$("fNotes").value.trim(),caption:$("fCaption").value,
-    created:prev?prev.created:Date.now(),product:prev?prev.product:editingProduct};
+    created:prev?prev.created:Date.now(),product:prev?prev.product:editingProduct,
+    type:(document.querySelector("#fType input:checked")||{}).value==="design"?"design":"video",
+    sizes:[...$("fSizes").querySelectorAll("input:checked")].map(i=>i.value),
+    sizeNote:$("fSizeNote").value.trim().slice(0,300),
+    refs:prev?prev.refs||[]:[]};
   STAMP_KEYS.forEach(k=>{ d[k]=prev?prev[k]:(k.endsWith("By")?"":0) });
   d.createdBy=prev?prev.createdBy:(myId||"");
   d.code=prev&&prev.code?prev.code:nextCode();
   d.team=isMk()?myRole():(isCr()?$("fTeam").value:(prev?prev.team:"marketing"));
   return d;
 }
-function saveItem(close){
+async function saveItem(close){
   if(!$("fTitle").value.trim()){setTab("plan");$("fTitle").focus();toast("Give it a title first.");return}
   const isNew=!editingId;
   const id=editingId||newId();
   const prev=editingId?items.get(editingId):null;
   const data=formData(prev,id);
+  if(pending.refs.length){
+    if(!assets){ toast("You can’t upload files here. Remove the references or add them later."); return }
+    $("fSave").disabled=true; $("fSave").textContent="Uploading…";
+    try{ data.refs=[...data.refs,...await uploadPending("refs")]; pending.refs=[]; renderPending("refs") }
+    catch(e){ uploadErr(e); return }
+    finally{ $("fSave").disabled=false; $("fSave").textContent="Save" }
+  }
   if(!prev||prev.status!==data.status) Object.assign(data,stamp(data.status,id));
   persist(id,data);
   if(isNew){ editingId=id; $("fDelete").hidden=readOnly; toast("Added. Add videos and feedback for it in Review."); }
@@ -391,7 +424,7 @@ function attHtml(files){
     return '<button type="button" class="attf" data-dl="'+url+'" data-name="'+esc(f.name)+'" title="Save '+esc(f.name)+'"><b>'+esc(kind)+'</b>'+esc(f.name)+'</button>';
   }).join("")+'</div>';
 }
-const pending={fb:[],v:[]};
+const pending={fb:[],v:[],refs:[]};
 function renderPending(k){
   $(k+"Files").innerHTML=pending[k].map((f,i)=>'<span class="att-p">'+(f.type.startsWith("image/")?'<img src="'+(f._u||(f._u=URL.createObjectURL(f)))+'" alt="">':"")+esc(f.name)+'<button type="button" data-rm="'+k+':'+i+'" aria-label="Remove '+esc(f.name)+'">×</button></span>').join("");
 }
@@ -478,7 +511,13 @@ function pickSel(){
   for(const g of QGROUPS){ const f=all.find(i=>i.status===g.id); if(f){ selId=f.id; return } }
   selId=null;
 }
-function verCard(v,latest){
+function verCard(v,latest,it){
+  if(it&&it.type==="design"&&v.files&&v.files.length&&!v.asset){
+    const imgs=v.files.filter(f=>f.type.startsWith("image/")), other=v.files.filter(f=>!f.type.startsWith("image/"));
+    return '<div class="ver'+(latest?" latest":"")+'"><div class="ver-h"><b>v'+v.n+(latest?" (latest)":"")+'</b><span>'+esc(who(v.by))+', '+esc(fmtTime(v.at))+'</span></div>'+
+      '<div class="atts big">'+imgs.map((f,i)=>'<figure><button type="button" class="img" data-lb="/_blob/'+f.id+'" data-name="'+esc(f.name)+'" title="View '+esc(f.name)+'"><img src="/_blob/'+f.id+'" alt="Image '+(i+1)+': '+esc(f.name)+'" loading="lazy"></button><figcaption><b>Image '+(i+1)+'</b> · '+esc(f.name)+'</figcaption></figure>').join("")+'</div>'+
+      attHtml(other)+linkHtml(v.link)+(v.note?'<p>'+fbHtml(v.note)+'</p>':"")+'</div>';
+  }
   const media=v.asset?(v.assetType.startsWith("image/")?'<img src="'+esc(v.asset)+'" alt="Preview for v'+v.n+'" style="max-width:100%;border-radius:8px;margin:6px 0">':'<video src="'+esc(v.asset)+'" controls preload="metadata" playsinline></video>'):"";
   const cap=latest&&v.asset&&!v.assetType.startsWith("image/")&&assets&&!readOnly&&mode==="db"
     ?'<button type="button" class="camcap" data-cap aria-label="Capture this frame into your feedback" title="Capture this frame into your feedback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>':"";
@@ -528,7 +567,8 @@ function renderDesk(){
   $("detail").style.setProperty("--c",s.c);
   $("dSeries").textContent=s.name+(it.code?" · "+it.code:"");
   $("dTitle").textContent=it.title;
-  $("dMeta").textContent=[it.date?"Posting "+shortDate(it.date):"No post date yet", it.platforms.map(p=>pMap[p].name).join(", "),
+  $("dMeta").textContent=[TEAMS[it.team]+(it.type==="design"?" design":" video"), it.date?(it.type==="design"?"Needed ":"Posting ")+shortDate(it.date):"No date yet",
+    it.type==="design"?[...it.sizes.map(sizeName),it.sizeNote].filter(Boolean).join(", "):"", it.platforms.map(p=>pMap[p].name).join(", "),
     it.kind?(it.kind==="ai"?"AI video":"Real people"):"", it.langs.map(l=>(LANGS.find(x=>x.id===l)||{}).name).join(", ")].filter(Boolean).join(" · ");
   $("dEdit").textContent=readOnly?"View details":"Edit details";
 
@@ -540,26 +580,30 @@ function renderDesk(){
   if(["idea","script","shoot"].includes(st)){ head=stMap[st].name; sub=(mk?"Waiting for the content team to make the first cut.":"Not edited yet. Add the first cut when it’s ready.")+due; acts=submit; }
   else if(st==="edit"){ k="var(--edit)"; head="Editing"; sub=(mk?(latest?"v"+latest.n+" is in progress. You’ll get it once it’s sent for review.":"The content team is editing it."):(latest?"Latest is v"+latest.n+". Send it when it’s ready for marketing to check.":"Add the first cut, then send it for review."))+due; acts=submit; }
   else if(st==="changes"){ k="var(--edit)"; head="Needs changes"; sub=(it.changesBy?who(it.changesBy)+" asked for changes. ":"")+(mk?"Waiting for the content team to send a new version.":(open?open+" note"+(open>1?"s":"")+" to fix. Add a new version, then send it again.":"All notes fixed. Add the new version and send it again.")); acts=submit; }
-  else if(st==="review"){ k="var(--review)"; head="Waiting for approval"; sub=(it.submittedBy?who(it.submittedBy)+" sent ":"Sent ")+(latest?"v"+latest.n:"this")+" for review"+(it.submittedAt?" on "+fmtTime(it.submittedAt):"")+"."+(cr?" Marketing will approve it or ask for changes.":" Watch it, then approve it or leave feedback and ask for changes."); if(can&&!cr) acts='<button class="btn stop" data-act="changes">Ask for changes</button><button class="btn go" data-act="approve">Approve</button>'; }
-  else if(st==="approved"){ k="var(--ready)"; head="Approved"; sub=(it.approvedBy?"Approved by "+who(it.approvedBy)+(it.approvedAt?" on "+fmtTime(it.approvedAt):"")+". ":"")+(cr?"Marketing will post it.":"Open Publish to post it.")+" The file moves to Content Video / approve on the NAS within about 15 minutes."; if(can&&!cr) acts='<button class="btn" data-act="reopen">Back to editing</button><button class="btn go" data-act="gopub">Open Publish</button>'; }
+  else if(st==="review"){ k="var(--review)"; head="Waiting for approval"; sub=(it.submittedBy?who(it.submittedBy)+" sent ":"Sent ")+(latest?"v"+latest.n:"this")+" for review"+(it.submittedAt?" on "+fmtTime(it.submittedAt):"")+"."+(cr?" "+TEAMS[it.team]+" will approve it or ask for changes.":(it.type==="design"?" Check it, then approve it or leave feedback and ask for changes.":" Watch it, then approve it or leave feedback and ask for changes.")); if(can&&!cr) acts='<button class="btn stop" data-act="changes">Ask for changes</button><button class="btn go" data-act="approve">Approve</button>'; }
+  else if(st==="approved"){ k="var(--ready)"; head="Approved"; sub=(it.approvedBy?"Approved by "+who(it.approvedBy)+(it.approvedAt?" on "+fmtTime(it.approvedAt):"")+". ":"")+(cr?TEAMS[it.team]+" will take it from here.":"Open Publish to post it.")+(it.type==="design"?"":" The file moves to Content Video / approve on the NAS within a few minutes."); if(can&&!cr) acts='<button class="btn" data-act="reopen">Back to editing</button><button class="btn go" data-act="gopub">Open Publish</button>'; }
   else { k="var(--blue)"; head="Posted"; sub=it.postedAt?"Marked as posted on "+fmtTime(it.postedAt)+".":"This video is live."; }
   setHTML($("vStatus"),'<div class="banner" style="--k:'+k+'"><div><b>'+esc(head)+'</b><span>'+esc(sub)+'</span></div>'+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>');
 
-  setHTML($("nasBox"),nasBoxHtml(it));
-  setHTML($("vLatest"),latest?verCard(latest,true):'<p class="empty">No video yet.'+(can?" Add the first cut below.":" The editor hasn’t added one.")+'</p>');
-  setHTML($("vOlder"),vs.length>1?'<details class="older"><summary>Earlier versions ('+(vs.length-1)+')</summary>'+vs.slice(1).map(v=>verCard(v,false)).join("")+'</details>':"");
+  const isD=it.type==="design";
+  setHTML($("nasBox"),(isD?"":nasBoxHtml(it))+(it.refs.length?'<div class="refs"><b>References</b>'+attHtml(it.refs)+'</div>':""));
+  setHTML($("vLatest"),latest?verCard(latest,true,it):'<p class="empty">'+(isD?"No design yet.":"No video yet.")+(can?" Add the first "+(isD?"version":"cut")+" below.":" The content team hasn’t added one.")+'</p>');
+  setHTML($("vOlder"),vs.length>1?'<details class="older"><summary>Earlier versions ('+(vs.length-1)+')</summary>'+vs.slice(1).map(v=>verCard(v,false,it)).join("")+'</details>':"");
+  $("vVideoRows").hidden=isD; $("vAttTxt").textContent=isD?"Add design images":"Attach images or files";
+  $("fbTimeRow").hidden=isD; $("fbImgRow").hidden=!isD;
+  if(isD){ const imgs=latest?(latest.files||[]).filter(f=>f.type.startsWith("image/")):[]; const o='<option value="">Whole design</option>'+imgs.map((f,i)=>'<option value="'+(i+1)+'">Image '+(i+1)+' · '+esc(f.name)+'</option>').join(""); const sel=$("fbImg"); if(sel._o!==o){ const keep=sel.value; sel.innerHTML=o; sel._o=o; sel.value=keep } }
   $("vForm").hidden=!can||mk;
   $("fbText").placeholder=cr?"Reply or add a note for marketing, e.g. Fixed, or Can we keep the music?":"What needs to change at this moment? e.g. Logo too small, make it twice as big";
   $("vAdd").textContent="Add v"+((latest?latest.n:0)+1);
   $("vAttach").hidden=$("fbAttach").hidden=!assets;
-  $("fbHint").textContent="No time = whole video."+(assets?" Paste screenshots straight in.":"");
+  $("fbHint").textContent=(isD?"Pick an image, or leave it on Whole design.":"No time = whole video.")+(assets?" Paste screenshots straight in.":"");
 
   setHTML($("fbHead"),'Feedback'+(open?'<span class="flagc">'+open+' to fix</span>':""));
   const fbVers=[...new Set(fbs.map(f=>f.version))].sort((a,b)=>b-a);
   setHTML($("fbList"),fbs.length?fbVers.map(n=>'<div class="fbv">'+(n?"Feedback on v"+n:"General feedback")+'</div>'+
-    fbs.filter(f=>f.version===n).sort((a,b)=>(a.t==null?-1:a.t)-(b.t==null?-1:b.t)||a.at-b.at).map(f=>{
+    fbs.filter(f=>f.version===n).sort((a,b)=>(a.img||0)-(b.img||0)||(a.t==null?-1:a.t)-(b.t==null?-1:b.t)||a.at-b.at).map(f=>{
     const mine=f.by&&f.by===myId;
-    const tc=f.t!=null?'<button type="button" class="tcb ts" data-t="'+f.t+'" title="Play from '+fmtSec(f.t)+'">'+fmtSec(f.t)+(f.t2!=null&&f.t2>f.t?'–'+fmtSec(f.t2):"")+'</button>':'<span class="tcg">Whole video</span>';
+    const tc=f.img?'<button type="button" class="tcb" data-img="'+f.img+'" data-v="'+f.version+'" title="Open image '+f.img+'">Image '+f.img+'</button>':f.t!=null?'<button type="button" class="tcb ts" data-t="'+f.t+'" title="Play from '+fmtSec(f.t)+'">'+fmtSec(f.t)+(f.t2!=null&&f.t2>f.t?'–'+fmtSec(f.t2):"")+'</button>':'<span class="tcg">'+(isD?"Whole design":"Whole video")+'</span>';
     return '<div class="fb'+(f.done?" done":"")+'" data-id="'+esc(f.id)+'"><div class="fb-top">'+tc+'</div>'+(f.text?'<p>'+fbHtml(f.text)+'</p>':"")+attHtml(f.files)+'<div class="rmeta"><span>'+esc(who(f.by))+', '+esc(fmtTime(f.at))+(f.done?", fixed":"")+'</span>'+
       (can?'<button type="button" data-fb="done">'+(f.done?"Reopen":"Mark fixed")+'</button>':"")+((mine||amOwner)&&can?'<button type="button" class="del" data-fb="del">Delete</button>':"")+'</div></div>';
   }).join("")).join(""):'<p class="empty">No feedback yet.'+(can?" Write what should change, with the video time if it helps.":"")+'</p>');
@@ -577,7 +621,9 @@ async function addVersion(){
   if(!db||!selId) return;
   const id=selId;
   const link=$("vLink").value.trim(), file=$("vFile").files[0], note=$("vNote").value.trim();
-  if(!link&&!file){toast("Paste the NAS link or path, or choose a preview file.");$("vLink").focus();return}
+  const isD=(items.get(id)||{}).type==="design";
+  if(isD&&!pending.v.length&&!link){ toast("Add the design images for this version."); return }
+  if(!isD&&!link&&!file){toast("Paste the NAS link or path, or choose a preview file.");$("vLink").focus();return}
   const btn=$("vAdd"); let asset="", assetType="";
   if(file){
     if(file.size>20*1024*1024){toast("That file is "+(file.size/1048576).toFixed(0)+" MB. Export a smaller preview under 20 MB, or just add the NAS link.");return}
@@ -609,7 +655,9 @@ async function addVersion(){
 async function addFeedback(){
   if(!db||!selId) return;
   const id=selId, text=$("fbText").value.trim();
-  const t=parseTime($("fbAt").value), t2=parseTime($("fbTo").value);
+  const isD=(items.get(id)||{}).type==="design";
+  const img=isD?(Number($("fbImg").value)||null):null;
+  const t=isD?null:parseTime($("fbAt").value), t2=isD?null:parseTime($("fbTo").value);
   if(Number.isNaN(t)){ toast("Write the time as minutes:seconds, e.g. 0:05."); $("fbAt").focus(); return }
   if(Number.isNaN(t2)){ toast("Write the end time as minutes:seconds, e.g. 0:08, or leave it empty."); $("fbTo").focus(); return }
   if(t==null&&t2!=null){ toast("Add the start time too, or clear the end time."); $("fbAt").focus(); return }
@@ -624,7 +672,7 @@ async function addFeedback(){
     try{ files=await uploadPending("fb") }catch(e){ uploadErr(e); btn.disabled=false; renderDesk(); return }
   }
   try{
-    await db.collection("feedback").add({item:id,text,version:latest?latest.n:0,t,t2,files,at:Date.now(),by:myId||"",done:false});
+    await db.collection("feedback").add({item:id,text,version:latest?latest.n:0,t,t2,img,files,at:Date.now(),by:myId||"",done:false});
     $("fbText").value=""; $("fbAt").value=""; $("fbTo").value=""; pending.fb=[]; renderPending("fb");
     toast("Feedback posted.");
   }catch(e){ writeErr(e,"feedback") }
@@ -1025,6 +1073,8 @@ $("desk").addEventListener("click",e=>{
     return;
   }
   const cp2=e.target.closest("[data-cap]"); if(cp2){ captureFrame(cp2); return }
+  const ib2=e.target.closest("[data-img]");
+  if(ib2&&selId){ const v=vFor(selId).find(x=>x.n===Number(ib2.dataset.v))||vFor(selId)[0]; const f=v&&(v.files||[]).filter(x=>x.type.startsWith("image/"))[Number(ib2.dataset.img)-1]; if(f) openLb("/_blob/"+f.id,f.name); else toast("That image isn’t in this version any more."); return }
   const ts=e.target.closest(".ts"); if(ts){ seek(Number(ts.dataset.t),ts); return }
   const rm=e.target.closest("[data-rm]"); if(rm){ const [k,i]=rm.dataset.rm.split(":"); pending[k].splice(Number(i),1); renderPending(k); return }
   const id=selId; if(!id) return;
@@ -1121,6 +1171,36 @@ document.addEventListener("drop",e=>{
   else { const d=t.dataset.date; if(!d||it.date===d) return; next.date=d }
   persist(it.id,next);
 });
+
+/* Phase 2 wiring: type fields, references, team filter, owner preview */
+$("fType").addEventListener("change",typeFields);
+$("refAtt").addEventListener("change",e=>{ addPending("refs",e.target.files); e.target.value="" });
+$("dlg").addEventListener("click",e=>{ const rm=e.target.closest("#refsFiles [data-rm]"); if(rm){ const [k,i]=rm.dataset.rm.split(":"); pending[k].splice(Number(i),1); renderPending(k) } });
+$("teamFilter").addEventListener("click",e=>{ const b=e.target.closest("button[data-t]"); if(!b) return; teamF=b.dataset.t; selId=null; render() });
+function applyPreview(){
+  const r=previewRole;
+  if(raw.items) items=r?new Map([...raw.items].filter(([,it])=>["marketing","ecomm"].includes(r)&&it.team===r)):raw.items;
+  const ok=id=>items.has(id);
+  if(raw.versions) versions=r?raw.versions.filter(v=>ok(v.item)):raw.versions;
+  if(raw.feedback) feedback=r?raw.feedback.filter(f=>ok(f.item)):raw.feedback;
+  if(raw.tasks) tasks=r?raw.tasks.filter(t=>t.for===r):raw.tasks;
+  if(raw.focus) focus=r==="hr"?[]:raw.focus;
+  if(raw.inbox) inbox=r?[]:raw.inbox;
+}
+function setPreview(r){
+  if(r&&!amOwner) return;
+  if(r&&!previewRole) realRO=readOnly;
+  previewRole=r||"";
+  readOnly=previewRole?true:(realRO===null?readOnly:realRO);
+  teamF=""; selId=null; deskFor=undefined;
+  applyPreview();
+  if($("roleDlg").open) $("roleDlg").close();
+  if(previewRole==="hr") location.hash="tasks"; else if(!previewRole&&view==="tasks"&&location.hash!=="#tasks") location.hash="tasks";
+  render(); window.scrollTo(0,0);
+  toast(previewRole?"Previewing as "+ROLES[previewRole].name+".":"Back to your own view.");
+}
+$("roleDlg").addEventListener("click",e=>{ const b=e.target.closest("[data-pv]"); if(b) setPreview(b.dataset.pv) });
+$("pvExit").onclick=()=>setPreview("");
 
 buildForm(); loadCache(); setNote(); render(); renderNotifs(); connect();
 })();
