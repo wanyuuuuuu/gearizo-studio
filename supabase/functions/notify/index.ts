@@ -33,7 +33,7 @@ const mmss = (s: number) => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const shortDate = (d: string) => { const [, m, day] = d.split("-").map(Number); return day + " " + MONTHS[m - 1]; };
 const TZ = "Asia/Kuala_Lumpur";
-const PLAT: Record<string, string> = { reel: "Reel", carousel: "Carousel", story: "Story", tiktok: "TikTok", fb: "FB", shop: "Shop" };
+const PLAT: Record<string, string> = { reel: "Reel", carousel: "Carousel", story: "Story", tiktok: "TikTok", fb: "FB", shop: "Shop", shopee: "Shopee", lazada: "Lazada", web: "Website" };
 const plats = (d: Record<string, any>) => (Array.isArray(d.platforms) ? d.platforms : []).map((p: string) => PLAT[p] || p).join(", ");
 const when = (ms: number) => new Intl.DateTimeFormat("en-GB", { timeZone: TZ, weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(ms));
 

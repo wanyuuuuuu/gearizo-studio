@@ -15,13 +15,18 @@ const STATUSES=[
 ];
 const PLATFORMS=[
   {id:"reel",name:"IG Reel",s:"Reel"},{id:"carousel",name:"IG Carousel",s:"Carousel"},{id:"story",name:"IG Story",s:"Story"},
-  {id:"tiktok",name:"TikTok",s:"TikTok"},{id:"fb",name:"Facebook",s:"FB"},{id:"shop",name:"Shopee / Lazada",s:"Shop"}
+  {id:"tiktok",name:"TikTok",s:"TikTok"},{id:"fb",name:"Facebook",s:"FB"},{id:"shop",name:"Shopee / Lazada",s:"Shop"},
+  {id:"shopee",name:"Shopee",s:"Shopee"},{id:"lazada",name:"Lazada",s:"Lazada"},{id:"web",name:"Website",s:"Website"}
 ];
 const LANGS=[{id:"en",name:"English"},{id:"manglish",name:"Manglish"},{id:"bm",name:"BM"},{id:"zh",name:"中文"}];
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DOW=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const CACHE_KEY="gearizo-plan-cache-v1";
 const sMap=Object.fromEntries(SERIES.map(s=>[s.id,s]));
+const SHOP_P=["shopee","lazada","web"];                       // E-commerce works on these, not social
+/* E-commerce sees fewer, plainer stages */
+const EC_PIPE=[{id:"req",name:"Requested",sts:["idea","script","shoot"],k:"var(--ink-3)"},{id:"making",name:"Making",sts:["edit","changes"],k:"var(--edit)"},
+  {id:"review",name:"To review",sts:["review"],k:"var(--review)"},{id:"ready",name:"Approved",sts:["approved","scheduled"],k:"var(--ready)"},{id:"live",name:"Live",sts:["posted"],k:"var(--pink)"}];
 const stMap=Object.fromEntries(STATUSES.map(s=>[s.id,s]));
 const pMap=Object.fromEntries(PLATFORMS.map(s=>[s.id,s]));
 
@@ -48,7 +53,7 @@ let previewRole="", realRO=null, teamF="";
 const raw={items:null,versions:null,feedback:null,tasks:null,focus:null,inbox:null};
 const myRole=()=>previewRole||(myId&&team[myId])||"";
 /* isMk = a requesting team that reviews and approves (Marketing or E-commerce) */
-const isMk=()=>["marketing","ecomm"].includes(myRole()), isCr=()=>myRole()==="content", isHr=()=>myRole()==="hr";
+const isMk=()=>["marketing","ecomm"].includes(myRole()), isCr=()=>myRole()==="content", isHr=()=>myRole()==="hr", isEc=()=>myRole()==="ecomm";
 let focusRO=false, selId=null, nShow=20, vOpenFor=null;
 const NOTIF_KEY="gearizo-notif-read-v1";
 function saveRead(s){ try{localStorage.setItem(NOTIF_KEY,JSON.stringify({floor:s.floor,ids:[...s.ids].slice(-400)}))}catch(e){} }
@@ -121,7 +126,7 @@ const fbFor=id=>feedback.filter(f=>f.item===id).sort((a,b)=>a.at-b.at);
 function visible(it){ return (filters.size===0||filters.has(it.series))&&(!teamF||it.team===teamF) }
 function sorted(list){ return list.sort((a,b)=>(a.date||"9999").localeCompare(b.date||"9999")||a.created-b.created) }
 
-const stLabel=it=>it.status==="scheduled"&&it.postAt?"Scheduled "+hm(it.postAt):stMap[it.status].name;
+const stLabel=it=>it.status==="scheduled"&&it.postAt?"Scheduled "+hm(it.postAt):it.status==="posted"&&it.team==="ecomm"?"Live":stMap[it.status].name;
 function chip(it,showDate,extra){
   const s=sMap[it.series];
   const meta=[];
@@ -169,10 +174,10 @@ function renderHeader(){
     const inMonth=all.filter(i=>i.date.startsWith(prefix));
     const posted=inMonth.filter(i=>i.status==="posted").length;
     const nodate=all.filter(i=>!i.date).length;
-    $("stats").innerHTML=stat(inMonth.length,"planned")+stat(waiting,"in review",waiting>0)+stat(posted,"posted")+(nodate?stat(nodate,"no date"):"");
+    $("stats").innerHTML=stat(inMonth.length,"planned")+stat(waiting,isEc()?"to review":"in review",waiting>0)+stat(posted,isEc()?"live":"posted")+(nodate?stat(nodate,"no date"):"");
   }else if(view==="review"){
-    const ch=all.filter(i=>i.status==="changes").length, ap=all.filter(i=>i.status==="approved").length;
-    $("stats").innerHTML=stat(waiting,"to approve",waiting>0)+stat(ch,"being fixed")+stat(ap,"ready to post");
+    const ch=all.filter(i=>i.status==="changes"||(isEc()&&i.status==="edit")).length, ap=all.filter(i=>i.status==="approved"||(isEc()&&i.status==="scheduled")).length;
+    $("stats").innerHTML=stat(waiting,isEc()?"to review":"to approve",waiting>0)+stat(ch,"being fixed")+stat(ap,isEc()?"approved":"ready to post");
   }else if(view==="shoots"){
     const now=Date.now(), mine=isHr()?shoots.filter(x=>x.talent.includes(myId)):shoots;
     const ask=mine.filter(x=>x.status==="proposed"&&x.end>now).length, conf=mine.filter(x=>x.status==="confirmed"&&x.end>now).length, no=mine.filter(x=>x.status==="declined"&&x.end>now).length;
@@ -181,7 +186,8 @@ function renderHeader(){
     const r0=myRole(), mineT=tasks.filter(t=>!r0||t.for===r0), openT=mineT.filter(t=>!t.done), lateT=openT.filter(t=>t.due&&t.due<todayStr);
     $("stats").innerHTML=stat(openT.length,r0?"open for you":"open",openT.length>0)+stat(lateT.length,"overdue",lateT.length>0)+stat(tasks.filter(t=>t.done).length,"done");
   }else{
-    $("stats").innerHTML=stat(all.filter(i=>!["idea","posted"].includes(i.status)).length,"in production")+stat(all.filter(i=>i.status==="idea").length,"ideas");
+    $("stats").innerHTML=isEc()?stat(all.filter(i=>["idea","script","shoot"].includes(i.status)).length,"requested")+stat(all.filter(i=>["edit","changes"].includes(i.status)).length,"making")
+      :stat(all.filter(i=>!["idea","posted"].includes(i.status)).length,"in production")+stat(all.filter(i=>i.status==="idea").length,"ideas");
   }
   $("prev").hidden=$("next").hidden=$("todayBtn").hidden=!isCal;
   $("vHome").setAttribute("aria-pressed",isHome); $("vCal").setAttribute("aria-pressed",isCal); $("vRev").setAttribute("aria-pressed",view==="review"); $("vPipe").setAttribute("aria-pressed",view==="pipeline"); $("vTask").setAttribute("aria-pressed",view==="tasks"); $("vShoot").setAttribute("aria-pressed",view==="shoots");
@@ -231,10 +237,11 @@ function qbtn(id,name,n,open,attr,o){ o=o||{};
   return '<button type="button" class="qbtn" '+attr+'="'+esc(id)+'" aria-expanded="'+open+'"'+(o.can===false||(o.can==null&&!n)?" disabled":"")+'><i></i><span>'+esc(name)+'</span><b class="dn'+(o.hot?" hot":"")+'">'+n+'</b>'+CHEV+'</button>' }
 const pipeOpen=new Set();
 function renderColumns(cols){
-  const all=sorted([...items.values()].filter(visible));
-  $("main").innerHTML='<div class="gboard">'+cols.map(c=>{
-    const list=all.filter(i=>i.status===c.id), open=pipeOpen.has(c.id)&&list.length>0;
-    return '<section class="col qg'+(open?" open":"")+'" data-status="'+c.id+'" style="--k:'+(ST_K[c.id]||"var(--ink-3)")+'">'+qbtn(c.id,c.name,list.length,open,"data-pg")+
+  const all=sorted([...items.values()].filter(visible)), ec=isEc();
+  const groups=ec?EC_PIPE:cols.map(c=>({id:c.id,name:c.name,sts:[c.id],k:ST_K[c.id]||"var(--ink-3)"}));
+  $("main").innerHTML='<div class="gboard">'+groups.map(g=>{
+    const list=all.filter(i=>g.sts.includes(i.status)), open=pipeOpen.has(g.id)&&list.length>0;
+    return '<section class="'+(ec?"":"col ")+'qg'+(open?" open":"")+'"'+(ec?"":' data-status="'+g.id+'"')+' style="--k:'+g.k+'">'+qbtn(g.id,g.name,list.length,open,"data-pg")+
       (open?'<div class="qlist">'+list.map(i=>chip(i,true)).join("")+'</div>':"")+'</section>';
   }).join("")+'</div>';
 }
@@ -247,7 +254,7 @@ function render(){
   const hv=view==="home", sv=view==="shoots";
   $("homeView").hidden=!hv; $("shoots").hidden=!sv;
   const rev=view==="review", tv=view==="tasks"||sv;
-  $("layout").classList.toggle("full",rev||tv||hv); $("main").hidden=rev||tv||hv; $("desk").hidden=!rev; $("tasks").hidden=!tv; $("fbar").hidden=hv; $("filters").hidden=tv;
+  $("layout").classList.toggle("full",rev||tv||hv||isEc()); $("main").hidden=rev||tv||hv; $("desk").hidden=!rev; $("tasks").hidden=!tv; $("fbar").hidden=hv; $("filters").hidden=tv||isEc();
   if(hv) renderHome();
   else if(view==="calendar") renderCalendar();
   else if(rev) renderDesk();
@@ -375,7 +382,7 @@ function setTab(t){
 function openItem(id,presetDate,presetProduct){
   if(readOnly&&!id) return;
   editingId=id||null; editingProduct=id?"":(presetProduct||"");
-  const it=id?items.get(id):{title:presetProduct||"",series:presetProduct?"product":(filters.size===1?[...filters][0]:"garage"),status:"idea",platforms:["reel"],langs:[],kind:"",date:presetDate||"",notes:"",caption:"",
+  const it=id?items.get(id):{title:presetProduct||"",series:presetProduct||isEc()?"product":(filters.size===1?[...filters][0]:"garage"),status:"idea",platforms:isEc()?["shopee","lazada"]:["reel"],langs:[],kind:"",date:presetDate||"",notes:"",caption:"",
     type:myRole()==="ecomm"?"design":"video",sizes:[],sizeNote:"",refs:[],team:isMk()?myRole():(teamF||"marketing")};
   if(!it) return;
   $("fTitle").value=it.title==="Untitled"&&id?"":it.title;
@@ -391,7 +398,7 @@ function openItem(id,presetDate,presetProduct){
   $("fRefs").innerHTML=attHtml(it.refs||[]);
   pending.refs=[]; renderPending("refs");
   $("fMore").open=!!(it.kind||(it.langs||[]).length||(it.refs||[]).length||it.notes);
-  typeFields();
+  typeFields(); platVis();
   $("fCode").hidden=!(id&&it.code); $("fCode").textContent=id&&it.code?it.code:"";
   $("fDelete").hidden=!id||readOnly; $("fDelete").textContent="Delete"; $("fDelete").dataset.armed="";
   $("fSave").hidden=readOnly; $("pubInfo")._h="";
@@ -399,6 +406,13 @@ function openItem(id,presetDate,presetProduct){
   setTab(id&&["approved","scheduled"].includes(it.status)?"publish":"plan");
   $("dlg").showModal();
   if(!id) setTimeout(()=>$("fTitle").focus(),30);
+}
+/* Platforms follow the team: E-commerce → Shopee, Lazada, Website; marketing → social */
+function platVis(){
+  const team=isCr()?$("fTeam").value:(isMk()?myRole():"marketing"), shop=team==="ecomm";
+  $("fPlatforms").querySelectorAll("label").forEach(l=>{ const v=l.querySelector("input").value; l.hidden=shop?!SHOP_P.includes(v):SHOP_P.includes(v) });
+  const lab=$("fDate").closest(".f").querySelector(".lab"); if(lab) lab.textContent=shop?"Needed by":"Post";
+  $("fSeries").closest(".f").hidden=isEc();
 }
 function typeFields(){ const d=(document.querySelector("#fType input:checked")||{}).value==="design"; $("fSizesWrap").hidden=!d; $("fKindWrap").hidden=d }
 function tint(){ $("dlgInner").style.setProperty("--c",sMap[$("fSeries").value].c) }
@@ -544,19 +558,22 @@ function linkHtml(link){
   return '<div class="path"><span>NAS:</span><code>'+esc(link)+'</code><button class="btn sm ghost" data-copy="'+esc(link)+'" type="button">Copy path</button></div>';
 }
 let qOpen=null;
-function goReview(id){ selId=id||null; const gi=id&&items.get(id); if(gi) qOpen=gi.status; $("desk").classList.toggle("phone-detail",!!id&&narrow.matches); window.scrollTo(0,0); if(view!=="review") location.hash="review"; else render(); }
+function goReview(id){ selId=id||null; const gi=id&&items.get(id); if(gi) qOpen=groupOf(gi.status); $("desk").classList.toggle("phone-detail",!!id&&narrow.matches); window.scrollTo(0,0); if(view!=="review") location.hash="review"; else render(); }
 const QGROUPS=[
   {id:"review",name:"In review",k:"var(--review)"},
   {id:"changes",name:"Needs changes",k:"var(--edit)"},
   {id:"edit",name:"Editing",k:"var(--ink-3)"},
   {id:"approved",name:"Approved",k:"var(--ready)"},
   {id:"scheduled",name:"Scheduled",k:"var(--sched)"}];
+const qgroups=()=>isEc()?[{id:"review",name:"To review",sts:["review"],k:"var(--review)"},{id:"changes",name:"Being fixed",sts:["changes","edit"],k:"var(--edit)"},{id:"approved",name:"Approved",sts:["approved","scheduled"],k:"var(--ready)"}]
+  :QGROUPS.map(g=>({...g,sts:[g.id]}));
+const groupOf=st=>(qgroups().find(g=>g.sts.includes(st))||{id:st}).id;
 function setHTML(el,h){ if(el._h!==h){ el.innerHTML=h; el._h=h } }
 function pickSel(){
-  if(wantSel&&items.has(wantSel)){ selId=wantSel; qOpen=items.get(wantSel).status; wantSel=null; return }
+  if(wantSel&&items.has(wantSel)){ selId=wantSel; qOpen=groupOf(items.get(wantSel).status); wantSel=null; return }
   if(selId&&items.has(selId)) return;
   const all=sorted([...items.values()].filter(visible));
-  for(const g of QGROUPS){ const f=all.find(i=>i.status===g.id); if(f){ selId=f.id; return } }
+  for(const g of qgroups()){ const f=all.find(i=>g.sts.includes(i.status)); if(f){ selId=f.id; return } }
   selId=null;
 }
 function verCard(v,latest,it){
@@ -603,8 +620,8 @@ function renderDesk(){
   pickSel(); renderInbox();
   const all=sorted([...items.values()].filter(visible));
   /* Only the status buttons show; tap one to open its videos */
-  setHTML($("queue"),QGROUPS.map(g=>{
-    const list=all.filter(i=>i.status===g.id), open=qOpen===g.id&&list.length>0;
+  setHTML($("queue"),qgroups().map(g=>{
+    const list=all.filter(i=>g.sts.includes(i.status)), open=qOpen===g.id&&list.length>0;
     return '<div class="qg'+(open?" open":"")+'" style="--k:'+g.k+'">'+qbtn(g.id,g.name,list.length,open,"data-qg")+
       (open?'<div class="qlist">'+list.map(i=>chip(i,true,i.id===selId?" sel":"")).join("")+'</div>':"")+'</div>';
   }).join(""));
@@ -631,9 +648,9 @@ function renderDesk(){
   else if(st==="edit"){ k="var(--edit)"; head="Editing"; sub=[latest?"v"+latest.n:"",due].filter(Boolean).join(" · ")||"No cut yet"; acts=submit; }
   else if(st==="changes"){ k="var(--edit)"; head="Needs changes"; sub=[it.changesBy?who(it.changesBy):"",open?open+" to fix":"All fixed, send the new version"].filter(Boolean).join(" · "); acts=submit; }
   else if(st==="review"){ k="var(--review)"; head="In review"; sub=[latest?"v"+latest.n:"",by(it.submittedBy,it.submittedAt)].filter(Boolean).join(" · "); if(can&&!cr) acts='<button class="btn stop" data-act="changes">Ask for changes</button><button class="btn go" data-act="approve">Approve</button>'; }
-  else if(st==="approved"){ k="var(--ready)"; head="Approved"; sub=by(it.approvedBy,it.approvedAt); if(can&&!cr) acts='<button class="btn" data-act="reopen">Back to editing</button><button class="btn go" data-act="gopub">Schedule</button>'; }
+  else if(st==="approved"){ k="var(--ready)"; head="Approved"; sub=by(it.approvedBy,it.approvedAt); if(can&&!cr) acts='<button class="btn" data-act="reopen">Back to editing</button><button class="btn go" data-act="gopub">'+(it.team==="ecomm"?"Mark live":"Schedule")+'</button>'; }
   else if(st==="scheduled"){ const due=it.postAt&&it.postAt<=Date.now(); k=due?"var(--pink)":"var(--sched)"; head=due?"Time to post":"Scheduled"; sub=[it.postAt?postWhen(it.postAt):"",it.platforms.map(p=>pMap[p].s).join(", ")].filter(Boolean).join(" · "); if(can&&!cr) acts='<button class="btn go" data-act="gopub">Open Publish</button>'; }
-  else { k="var(--blue)"; head="Posted"; sub=it.postedAt?fmtTime(it.postedAt):""; if(it.postUrl) acts='<a class="btn sm" href="'+esc(it.postUrl)+'" target="_blank" rel="noopener">Open post ↗</a>'; }
+  else { k="var(--blue)"; head=it.team==="ecomm"?"Live":"Posted"; sub=it.postedAt?fmtTime(it.postedAt):""; if(it.postUrl) acts='<a class="btn sm" href="'+esc(it.postUrl)+'" target="_blank" rel="noopener">'+(it.team==="ecomm"?"Open listing ↗":"Open post ↗")+'</a>'; }
   setHTML($("vStatus"),'<div class="banner" style="--k:'+k+'"><div><b>'+esc(head)+'</b><span>'+esc(sub)+'</span></div>'+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>');
 
   const isD=it.type==="design";
@@ -738,6 +755,15 @@ function renderPublish(){
   const it=items.get(editingId); if(!it) return;
   const latest=vFor(it.id)[0], now=Date.now(), plats=it.platforms.map(p=>pMap[p].s).join(", ");
   const banner=(k,b,t,extra)=>'<div class="banner" style="--k:'+k+';margin-top:14px"><div><b>'+esc(b)+'</b>'+(t?'<span>'+esc(t)+'</span>':"")+'</div>'+(extra?'<div class="acts">'+extra+'</div>':"")+'</div>';
+  $("capWrap").hidden=it.team==="ecomm";
+  if(it.team==="ecomm"){
+    if(it.status==="posted"){ setHTML(box,banner("var(--blue)","Live",it.postedAt?fmtTime(it.postedAt):"",it.postUrl?'<a class="btn sm" href="'+esc(it.postUrl)+'" target="_blank" rel="noopener">Open listing ↗</a>':"")); return }
+    if(!["approved","scheduled"].includes(it.status)){ setHTML(box,banner("var(--ink-3)","Not approved yet","")); return }
+    setHTML(box,banner("var(--ready)","Approved",plats)+(!readOnly&&mode==="db"&&isMk()
+      ?'<div class="pubdone"><input type="url" id="pubLink" placeholder="Listing link (optional)" aria-label="Link to the live listing"><button class="btn go sm" type="button" data-pub="posted">Mark live</button></div>'
+      :'<p class="waitnote pubnote">E-commerce marks it live.</p>'));
+    return;
+  }
   if(it.status==="posted"){ setHTML(box,banner("var(--blue)","Posted",it.postedAt?fmtTime(it.postedAt):"",it.postUrl?'<a class="btn sm" href="'+esc(it.postUrl)+'" target="_blank" rel="noopener">Open post ↗</a>':"")); return }
   if(!["approved","scheduled"].includes(it.status)){ setHTML(box,banner("var(--ink-3)","Not approved yet","You can pick a time once it’s approved.")); return }
   const can=!readOnly&&mode==="db"&&isMk(), sch=it.status==="scheduled"&&it.postAt>0, due=sch&&it.postAt<=now;
@@ -778,7 +804,7 @@ $("pubInfo").addEventListener("click",e=>{
     $("fStatus").value="approved"; persist(id,{...base,status:"approved",postAt:0,remindedAt:0}); toast("Unscheduled.");
   }else if(act==="posted"){
     const url=($("pubLink").value||"").trim(); if(url&&!/^https?:\/\/\S+$/i.test(url)){ toast("The link should start with https://"); return }
-    $("fStatus").value="posted"; persist(id,{...base,status:"posted",...stamp("posted",id),postUrl:url||base.postUrl||""}); catMove("hop"); toast("Marked as posted.");
+    $("fStatus").value="posted"; persist(id,{...base,status:"posted",...stamp("posted",id),postUrl:url||base.postUrl||""}); catMove("hop"); toast(base.team==="ecomm"?"Marked live.":"Marked as posted.");
   }
 });
 async function copyText(t){
@@ -827,6 +853,7 @@ function nText(e){
   if(e.type==="approve") return w+' approved '+t;
   if(e.type==="scheduled") return w+' scheduled '+t+' for '+esc(postWhen(e.item.postAt));
   if(e.by==="auto") return t+' was posted automatically';
+  if(e.item&&e.item.team==="ecomm") return w+' marked '+t+' live';
   return w+' marked '+t+' as posted';
 }
 function renderNotifs(){
@@ -874,7 +901,7 @@ const ST_K={idea:"var(--ink-3)",script:"var(--ink-3)",shoot:"var(--ink-3)",edit:
 const ago=ms=>{ const m=Math.max(0,Math.round((Date.now()-ms)/60000)); return m<1?"now":m<60?m+"m":m<1440?Math.round(m/60)+"h":Math.round(m/1440)+"d" };
 const byDue=(a,b)=>(a.due||a.date||"9999").localeCompare(b.due||b.date||"9999")||(a.date||"9999").localeCompare(b.date||"9999");
 function nextUp(){
-  const rank=isMk()?{review:0}:{changes:0,edit:1,shoot:2,script:3,idea:4};
+  const rank=isEc()?{review:0,approved:1}:isMk()?{review:0}:{changes:0,edit:1,shoot:2,script:3,idea:4};
   return [...items.values()].filter(i=>i.status in rank).sort((a,b)=>rank[a.status]-rank[b.status]||byDue(a,b));
 }
 function tile(cls,icon,word,n,o){
@@ -891,13 +918,18 @@ function renderHome(){
   const myShoots=shoots.filter(x=>x.end>nowMs&&x.status!=="cancelled"&&(!isHr()||x.talent.includes(myId))).sort((a,b)=>a.start-b.start);
   const first=list=>list.slice().sort(byDue)[0];
   const tasksTile=tile("c"+(isHr()?" solo":""),IC.tasks,"Tasks",myT.length,{go:"view:tasks",pill:lateT?lateT+" late":"",cap:myT.length?myT[0].text:"All done"});
-  const toPost=cnt(["approved","scheduled"]), sched=toPost.filter(i=>i.status==="scheduled"&&i.postAt).sort((a,b)=>a.postAt-b.postAt), noTime=toPost.length-sched.length, dueN=sched.filter(i=>i.postAt<=nowMs).length, nextP=sched.find(i=>i.postAt>nowMs);
+  const toPost=cnt(["approved","scheduled"]).filter(i=>i.team!=="ecomm"), sched=toPost.filter(i=>i.status==="scheduled"&&i.postAt).sort((a,b)=>a.postAt-b.postAt), noTime=toPost.length-sched.length, dueN=sched.filter(i=>i.postAt<=nowMs).length, nextP=sched.find(i=>i.postAt>nowMs);
   const postedTile=tile("b green",IC.posted,"To post",toPost.length,{go:"scroll:posting",pill:dueN?dueN+" due":noTime?noTime+" no time":"",cap:nextP?"Next · "+postWhen(nextP.postAt):toPost.length?"No times yet":"All posted"});
   let tiles;
   if(isHr()){
     const ask=myShoots.filter(x=>x.status==="proposed"), conf=myShoots.filter(x=>x.status==="confirmed");
     tiles=tile("a pink",IC.shoot,"To confirm",ask.length,{go:"view:shoots",cap:ask.length?shootWhen(ask[0]):"All replied"})+
       tile("b green",IC.booked,"Booked",conf.length,{go:"view:shoots",cap:conf.length?shootWhen(conf[0]):"Nothing booked"})+tasksTile;
+  }else if(isEc()){
+    const rv=cnt(["review"]), ap=cnt(["approved","scheduled"]), wip=cnt(["idea","script","shoot","edit","changes"]), f=first(rv), g=first(ap), w=first(wip);
+    tiles=tile("a pink",IC.review,"To review",rv.length,{go:f?"item:"+f.id:"view:review",cap:f?f.title:"All clear"})+
+      tile("b green",IC.ready,"Approved",ap.length,{go:g?"publish:"+g.id:"view:review",cap:g?g.title:"Nothing to upload"})+tasksTile+
+      tile("d",IC.next,"Requests",wip.length,{go:"view:pipeline",cap:w?w.title+(w.due||w.date?" · "+shortDate(w.due||w.date):""):"None open"});
   }else if(isMk()){
     const rv=cnt(["review"]), ap=cnt(["approved"]), f=first(rv), g=first(ap);
     tiles=tile("a pink",IC.review,"To review",rv.length,{go:f?"item:"+f.id:"view:review",cap:f?f.title:"All clear"})+postedTile+tasksTile+
@@ -907,7 +939,7 @@ function renderHome(){
     tiles=tile("a pink",IC.fix,"To fix",ch.length,{go:f?"item:"+f.id:"view:review",pill:inbox.length?inbox.length+" new file"+(inbox.length>1?"s":""):"",cap:f?f.title:"All clear"})+postedTile+tasksTile+
       tile("d",IC.shoot,"Shoots",upS.length,{go:"view:shoots",pill:wait?wait+" waiting":"",cap:upS.length?shootWhen(upS[0]):"None booked"});
   }
-  const strip=isHr()?"":'<div class="hstrip">'+[
+  const strip=isHr()?"":isEc()?'<div class="hstrip">'+EC_PIPE.map(g=>'<button type="button" class="hs" data-go="'+(g.id==="review"?"view:review":"view:pipeline")+'"><span class="dn">'+cnt(g.sts).length+'</span><span class="pl" style="--k:'+g.k+'"><i></i>'+g.name+'</span></button>').join("")+'</div>':'<div class="hstrip">'+[
     ["Ideas",cnt(["idea","script"]).length,"var(--ink-3)","view:pipeline"],
     ["Making",cnt(["shoot","edit","changes"]).length,"var(--edit)","view:pipeline"],
     ["Review",cnt(["review"]).length,"var(--review)","view:review"],
@@ -942,7 +974,7 @@ function renderHome(){
   const newCard=(readOnly||isHr())?"":'<button type="button" class="newc" data-go="new"><span class="plus" aria-hidden="true">+</span><span><b>'+(isMk()?"New request":"New")+'</b><small>Video or design</small></span><span class="stack" aria-hidden="true"><i></i><i></i><i></i></span></button>';
   /* Posting: a 14-day ruler (3 days back, 10 ahead) with a dot per post; the pill shows the chosen one */
   let posting="";
-  if(!isHr()){
+  if(!isHr()&&!isEc()){
     const DAYS=14, start=new Date(t0.getFullYear(),t0.getMonth(),t0.getDate()-3).getTime();
     const dayIdx=ms=>{ const d=new Date(ms); d.setHours(0,0,0,0); return Math.round((d.getTime()-start)/864e5) };
     const evs=[...sched.map(i=>({i,at:i.postAt,k:i.postAt<=nowMs?"due":"sch"})),...cnt(["posted"]).filter(i=>i.postedAt>=start).map(i=>({i,at:i.postedAt,k:"done"}))];
@@ -1174,7 +1206,7 @@ function catSummary(){
   if(dueP.length){ const f=dueP[0]; return catSays("Time to post","“"+f.title+"” was set for "+postWhen(f.postAt)+".",{label:"Open Publish",fn:()=>{ openItem(f.id); setTab("publish") }}) }
   const rv=all.filter(i=>i.status==="review"), ap=all.filter(i=>i.status==="approved");
   if(rv.length){ const f=first(rv); return catSays(rv.length+" to review","“"+f.title+"” is waiting for you"+(ap.length?". "+ap.length+" approved and ready to post.":"."),{label:"Watch it",fn:()=>goReview(f.id)}) }
-  if(ap.length){ const f=first(ap); return catSays(ap.length+" to schedule","“"+f.title+"” is approved. Pick a posting time.",{label:"Open Publish",fn:()=>{ openItem(f.id); setTab("publish") }}) }
+  if(ap.length){ const f=first(ap); return catSays(ap.length+(isEc()?" approved":" to schedule"),"“"+f.title+"” is approved. "+(isEc()?"Mark it live once it’s up.":"Pick a posting time."),{label:"Open Publish",fn:()=>{ openItem(f.id); setTab("publish") }}) }
   return catSays("All clear!","Nothing to review. Maybe assign the next video?");
 }
 function catWatch(before,after){
@@ -1601,6 +1633,13 @@ function shootWatch(){
 
 /* Phase 2 wiring: type fields, references, team filter, owner preview */
 $("fType").addEventListener("change",typeFields);
+/* Content switching a request's team: swap social platforms for Shopee/Lazada/Website and back */
+$("fTeam").addEventListener("change",()=>{
+  const shop=$("fTeam").value==="ecomm", boxes=[...$("fPlatforms").querySelectorAll("input")];
+  if(!boxes.some(b=>b.checked&&(shop?SHOP_P.includes(b.value):!SHOP_P.includes(b.value)))) boxes.forEach(b=>{ b.checked=shop?["shopee","lazada"].includes(b.value):b.value==="reel" });
+  else boxes.forEach(b=>{ if(shop?!SHOP_P.includes(b.value):SHOP_P.includes(b.value)) b.checked=false });
+  platVis();
+});
 $("refAtt").addEventListener("change",e=>{ addPending("refs",e.target.files); e.target.value="" });
 $("dlg").addEventListener("click",e=>{ const rm=e.target.closest("#refsFiles [data-rm]"); if(rm){ const [k,i]=rm.dataset.rm.split(":"); pending[k].splice(Number(i),1); renderPending(k) } });
 $("teamFilter").addEventListener("click",e=>{ const b=e.target.closest("button[data-t]"); if(!b) return; teamF=b.dataset.t; selId=null; render() });
