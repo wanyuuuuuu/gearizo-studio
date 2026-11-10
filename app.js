@@ -314,7 +314,7 @@ async function connect(){
       if(before) catWatch(before,m);
     },()=>{clearTimeout(timer);mode="local";setNote();toast("Couldn’t load the online plan. Showing the copy on this device.")});
     db.collection("versions").onSnapshot(snap=>{
-      raw.versions=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,item:String(v.item||""),n:Number(v.n)||1,link:String(v.link||""),asset:String(v.asset||""),assetType:String(v.assetType||""),note:String(v.note||""),files:normFiles(v.files),at:Number(v.at)||0,by:String(v.by||"")}}); applyPreview();
+      raw.versions=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,item:String(v.item||""),n:Number(v.n)||1,link:String(v.link||""),asset:String(v.asset||""),assetType:String(v.assetType||""),note:String(v.note||""),files:normFiles(v.files),at:Number(v.at)||0,by:String(v.by||""),gone:Number(v.previewGone)||0}}); applyPreview();
       render(); resolveNames();
     },()=>{});
     db.collection("feedback").onSnapshot(snap=>{
@@ -583,7 +583,7 @@ function verCard(v,latest,it){
       '<div class="atts big">'+imgs.map((f,i)=>'<figure><button type="button" class="img" data-lb="/_blob/'+f.id+'" data-name="'+esc(f.name)+'" title="View '+esc(f.name)+'"><img src="/_blob/'+f.id+'" alt="Image '+(i+1)+': '+esc(f.name)+'" loading="lazy"></button><figcaption><b>Image '+(i+1)+'</b> · '+esc(f.name)+'</figcaption></figure>').join("")+'</div>'+
       attHtml(other)+linkHtml(v.link)+(v.note?'<p>'+fbHtml(v.note)+'</p>':"")+'</div>';
   }
-  const media=v.asset?(v.assetType.startsWith("image/")?'<img src="'+esc(v.asset)+'" alt="Preview for v'+v.n+'" style="max-width:100%;border-radius:8px;margin:6px 0">':'<video src="'+esc(v.asset)+'" controls preload="metadata" playsinline></video>'):"";
+  const media=v.asset?(v.assetType.startsWith("image/")?'<img src="'+esc(v.asset)+'" alt="Preview for v'+v.n+'" style="max-width:100%;border-radius:8px;margin:6px 0">':'<video src="'+esc(v.asset)+'" controls preload="metadata" playsinline></video>'):v.gone?'<div class="vgone">Preview cleared after posting · full video on the NAS</div>':"";
   const cap=latest&&v.asset&&!v.assetType.startsWith("image/")&&assets&&!readOnly&&mode==="db"
     ?'<button type="button" class="camcap" data-cap aria-label="Capture this frame into your feedback" title="Capture this frame into your feedback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>':"";
   return '<div class="ver'+(latest?" latest":"")+'"><div class="ver-h"><b>v'+v.n+(latest?" (latest)":"")+'</b><span>'+esc(who(v.by))+', '+esc(fmtTime(v.at))+'</span></div>'+(cap?'<div class="vwrap">'+media+cap+'</div>':media)+linkHtml(v.link)+(v.note?'<p>'+fbHtml(v.note)+'</p>':"")+attHtml(v.files)+'</div>';

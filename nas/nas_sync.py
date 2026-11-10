@@ -4,10 +4,12 @@
 - New videos in  Marketing Content/Content Video/Checking  -> small preview -> uploaded ->
   a new version of the matching item, sent for review (or "New in Checking" if no match)
 - Items marked approved/posted -> their approved file moves from Checking to approve
+- 14 days after a video is posted, its small previews are removed from the app's storage
+  (the free plan holds 1 GB). The full video on the NAS is never touched.
 
 It only ever moves files from Checking to approve; it never deletes or renames anything on the NAS.
 """
-import fcntl, json, os, sys, time, traceback, urllib.parse, urllib.request, uuid
+import fcntl, json, os, sys, time, traceback, urllib.error, urllib.parse, urllib.request, uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -20,6 +22,8 @@ OWNER_ID = S.OWNER_ID  # the content owner: versions found on the NAS are credit
 LOG = os.path.join(S.DATA, "sync.log")
 CHECKING_PREFIX = os.path.join(NP.CHECKING, "")
 MAX_NEW_PER_RUN = 3
+KEEP_DAYS = 14          # previews of a posted video are kept this long after posting
+MAX_CLEAN_PER_RUN = 20
 
 
 def log(msg):
@@ -95,6 +99,51 @@ def move_approved(items, versions):
         log(f"moved approved file of {it.get('title')} -> {r['to']}" + (" (copied; the original could not be removed from Checking)" if r.get("original_left") else ""))
 
 
+def nas_file(link):
+    """The NAS file a version points to, if it is still there."""
+    for pre in ("/Volumes/Marketing Content/", os.path.join(NP.ROOT, "")):
+        if link.startswith(pre):
+            p = os.path.join(NP.ROOT, link[len(pre):])
+            return p if os.path.isfile(p) else None
+    return None
+
+
+def clean_previews(items, versions):
+    """Free the app's file storage: remove video previews of videos posted KEEP_DAYS+ days ago.
+    Older versions (drafts) lose their preview; the final version only when its full file is on the NAS."""
+    now = int(time.time() * 1000)
+    done = 0
+    for item_id, it in items.items():
+        posted = it.get("postedAt") or 0
+        if it.get("status") != "posted" or not posted or now - posted < KEEP_DAYS * 86400000:
+            continue
+        mine = [(vid, v) for vid, v in versions.items() if v.get("item") == item_id]
+        if not mine:
+            continue
+        want = it.get("submittedV")
+        final = next((vid for vid, v in mine if want and v.get("n") == want), None) or max(mine, key=lambda x: x[1].get("n", 0))[0]
+        for vid, v in mine:
+            asset = v.get("asset") or ""
+            if not asset.startswith("/_blob/") or (v.get("assetType") or "").startswith("image/"):
+                continue
+            if vid == final and not nas_file(v.get("link") or ""):
+                continue  # keep the only viewable copy of the final video
+            if any(o.get("asset") == asset for ovid, o in versions.items() if ovid != vid):
+                continue  # the same file is used elsewhere
+            try:
+                api("DELETE", "/storage/v1/object/media/" + asset[len("/_blob/"):])
+            except urllib.error.HTTPError as e:
+                if e.code not in (400, 404):  # 400/404: already gone
+                    log(f"couldn't remove preview v{v.get('n')} of {it.get('title')}: {e}")
+                    continue
+            merge("versions", vid, {"asset": "", "previewGone": now})
+            v["asset"] = ""
+            log(f"removed the preview of v{v.get('n')} of {it.get('title')} (posted {(now - posted) // 86400000} days ago)")
+            done += 1
+            if done >= MAX_CLEAN_PER_RUN:
+                return
+
+
 def handle_new(items, versions):
     listing = [{"id": k, "title": v.get("title", ""), "status": v.get("status", ""), "code": v.get("code", "")} for k, v in items.items()]
     new = NP.find_new(listing)[:MAX_NEW_PER_RUN]
@@ -157,6 +206,10 @@ def run():
     if S.SYNC:
         move_approved(items, versions)
         handle_new(items, versions)
+        try:
+            clean_previews(items, versions)
+        except Exception:
+            log("cleanup ERROR " + traceback.format_exc().strip().replace("\n", " | "))
     if not S.AUTOPOST:
         return
     try:
