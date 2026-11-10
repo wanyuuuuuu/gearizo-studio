@@ -168,9 +168,10 @@
       const { data } = await sb.from("calendar_links").select("ics_url,feed_token,last_sync,last_error").eq("user_id", session.user.id).maybeSingle();
       if (!data) return { connected: false, feedUrl: null };
       const u = data.ics_url || "";
-      // a Google link without "private-" is a public calendar (e.g. "Holidays in Malaysia"), not the person's own
+      // publicLink: a Google "Public address" (works only while the calendar is public, free/busy is enough)
+      // holiday: one of Google's own calendars (e.g. "Holidays in Malaysia"), never the person's
       const publicLink = /calendar\.google\.com/i.test(u) && !/\/private-/i.test(u);
-      return { connected: !!u, publicLink, holiday: /(#|%23)holiday(@|%40)/i.test(u), feedUrl: cfg.supabaseUrl + "/functions/v1/notify?feed=" + data.feed_token, lastSync: data.last_sync, error: data.last_error };
+      return { connected: !!u, publicLink, holiday: /(#|%23)holiday(@|%40)|group\.v\.calendar\.google\.com/i.test(decodeURIComponent(u)), feedUrl: cfg.supabaseUrl + "/functions/v1/notify?feed=" + data.feed_token, lastSync: data.last_sync, error: data.last_error };
     },
     async ensure() {
       const { data } = await sb.from("calendar_links").select("user_id").eq("user_id", session.user.id).maybeSingle();
