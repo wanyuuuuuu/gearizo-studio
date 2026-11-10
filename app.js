@@ -224,12 +224,17 @@ function renderCalendar(){
   }
   $("main").innerHTML=html;
 }
+/* A liquid-glass group button: dot, one word, count; tap to open its list */
+const CHEV='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+function qbtn(id,name,n,open,attr,o){ o=o||{};
+  return '<button type="button" class="qbtn" '+attr+'="'+esc(id)+'" aria-expanded="'+open+'"'+(o.can===false||(o.can==null&&!n)?" disabled":"")+'><i></i><span>'+esc(name)+'</span><b class="dn'+(o.hot?" hot":"")+'">'+n+'</b>'+CHEV+'</button>' }
+const pipeOpen=new Set();
 function renderColumns(cols){
   const all=sorted([...items.values()].filter(visible));
-  $("main").innerHTML='<div class="board">'+cols.map(c=>{
-    const list=all.filter(i=>i.status===c.id);
-    return '<section class="col" data-status="'+c.id+'"'+(c.k?' style="--k:'+c.k+'"':"")+'><h2>'+esc(c.name)+'<span>'+list.length+'</span></h2>'+(c.p?'<p>'+esc(c.p)+'</p>':"")+
-      (list.length?list.map(i=>chip(i,true)).join(""):'<div class="empty">Nothing here.</div>')+'</section>';
+  $("main").innerHTML='<div class="gboard">'+cols.map(c=>{
+    const list=all.filter(i=>i.status===c.id), open=pipeOpen.has(c.id)&&list.length>0;
+    return '<section class="col qg'+(open?" open":"")+'" data-status="'+c.id+'" style="--k:'+(ST_K[c.id]||"var(--ink-3)")+'">'+qbtn(c.id,c.name,list.length,open,"data-pg")+
+      (open?'<div class="qlist">'+list.map(i=>chip(i,true)).join("")+'</div>':"")+'</section>';
   }).join("")+'</div>';
 }
 function render(){
@@ -594,8 +599,7 @@ function renderDesk(){
   /* Only the status buttons show; tap one to open its videos */
   setHTML($("queue"),QGROUPS.map(g=>{
     const list=all.filter(i=>i.status===g.id), open=qOpen===g.id&&list.length>0;
-    return '<div class="qg'+(open?" open":"")+'" style="--k:'+g.k+'"><button type="button" class="qbtn" data-qg="'+g.id+'" aria-expanded="'+open+'"'+(list.length?"":" disabled")+'>'+
-      '<i></i><span>'+esc(g.name)+'</span><b class="dn">'+list.length+'</b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>'+
+    return '<div class="qg'+(open?" open":"")+'" style="--k:'+g.k+'">'+qbtn(g.id,g.name,list.length,open,"data-qg")+
       (open?'<div class="qlist">'+list.map(i=>chip(i,true,i.id===selId?" sel":"")).join("")+'</div>':"")+'</div>';
   }).join(""));
   const it=selId?items.get(selId):null;
@@ -951,7 +955,7 @@ $("homeView").addEventListener("click",e=>{
   if(ps){ const it=items.get(ps.dataset.psel); if(postSel===ps.dataset.psel&&it){ if(isMk()&&it.status!=="posted"){ openItem(it.id); setTab("publish") } else goReview(it.id); return } postSel=ps.dataset.psel; renderHome(); return }
   const b=e.target.closest("[data-go]"); if(!b||!b.dataset.go) return;
   const i=b.dataset.go.indexOf(":"), k=i<0?b.dataset.go:b.dataset.go.slice(0,i), v=i<0?"":b.dataset.go.slice(i+1);
-  if(k==="view"){ window.scrollTo(0,0); location.hash=v }
+  if(k==="view"){ if(v==="tasks") taskOpen.add(myRole()||"content"); window.scrollTo(0,0); location.hash=v }
   else if(k==="item") goReview(v);
   else if(k==="publish"){ openItem(v); setTab("publish") }
   else if(k==="new") openItem(null,"");
@@ -961,7 +965,7 @@ $("homeView").addEventListener("click",e=>{
 
 /* Tasks: its own page in the rail, one column per role */
 const ROLE_SHORT={content:"Content",marketing:"Marketing",ecomm:"E-commerce",hr:"HR"};
-const tkShowDone={};
+const tkShowDone={}, taskOpen=new Set();
 const taskCols=()=>{ const r=myRole(); return !r||r==="content"?["content","marketing","ecomm","hr"]:[r,"content"] };
 function taskRow(t){
   const late=!t.done&&t.due&&t.due<todayStr, today=!t.done&&t.due===todayStr;
@@ -982,18 +986,19 @@ function renderTasks(){
   if(sel._opts!==opts){ sel.innerHTML=opts; sel._opts=opts; sel.dataset.touched="" }
   if(!sel.dataset.touched) sel.value="content";
   $("tkCols").innerHTML=cols.map(role=>{
-    if(!ready) return '<div class="tkcol" style="--k:'+ROLES[role].k+'"><h2>'+esc(ROLE_SHORT[role])+'</h2><div class="empty">'+(mode==="db"?"Loading…":"Sign in to see tasks.")+'</div></div>';
+    if(!ready) return '<section class="qg tkg" style="--k:'+ROLES[role].k+'">'+qbtn(role,ROLE_SHORT[role],0,false,"data-tg",{can:false})+'</section>';
     const all=tasks.filter(t=>t.for===role);
     const open=all.filter(t=>!t.done).sort((a,b)=>(a.due||"9999").localeCompare(b.due||"9999")||a.at-b.at);
     const done=all.filter(t=>t.done).sort((a,b)=>b.doneAt-a.doneAt).slice(0,20);
     const show=!!tkShowDone[role];
-    return '<div class="tkcol'+(role===r?" mine":"")+'" style="--k:'+ROLES[role].k+'"><h2>'+esc(role===r&&r!=="content"?"Yours":ROLE_SHORT[role])+(open.length?'<span class="ncount">'+open.length+'</span>':"")+'</h2>'+
-      '<div class="list">'+(open.length?open.map(taskRow).join(""):'<div class="empty">'+(all.length?"All done.":"No tasks yet.")+'</div>')+'</div>'+
-      (done.length?'<button class="tkdone-t" type="button" data-for="'+role+'">'+(show?"Hide":"Show")+' done ('+done.length+')</button>'+(show?'<div class="list">'+done.map(taskRow).join("")+'</div>':""):"")+'</div>';
+    const isOpen=taskOpen.has(role)&&all.length>0, late=open.some(t=>t.due&&t.due<todayStr);
+    return '<section class="qg tkg'+(isOpen?" open":"")+(role===r?" mine":"")+'" style="--k:'+ROLES[role].k+'">'+qbtn(role,role===r&&r!=="content"?"Yours":ROLE_SHORT[role],open.length,isOpen,"data-tg",{can:all.length>0,hot:late})+
+      (isOpen?'<div class="qlist tklist"><div class="list">'+(open.length?open.map(taskRow).join(""):'<div class="empty">All done.</div>')+'</div>'+
+      (done.length?'<button class="tkdone-t" type="button" data-for="'+role+'">'+(show?"Hide":"Show")+' done ('+done.length+')</button>'+(show?'<div class="list">'+done.map(taskRow).join("")+'</div>':""):"")+'</div>':"")+'</section>';
   }).join("");
 }
 $("tkFor").addEventListener("change",()=>{ $("tkFor").dataset.touched="1" });
-$("tasks").addEventListener("click",e=>{ const b=e.target.closest(".tkdone-t"); if(b){ tkShowDone[b.dataset.for]=!tkShowDone[b.dataset.for]; renderTasks() } });
+$("tasks").addEventListener("click",e=>{ const g=e.target.closest("[data-tg]"); if(g){ const k=g.dataset.tg; taskOpen.has(k)?taskOpen.delete(k):taskOpen.add(k); renderTasks(); return } const b=e.target.closest(".tkdone-t"); if(b){ tkShowDone[b.dataset.for]=!tkShowDone[b.dataset.for]; renderTasks() } });
 $("tkForm").addEventListener("submit",async e=>{
   e.preventDefault();
   const text=$("tkText").value.trim(); if(!text||!db){ $("tkText").focus(); return }
@@ -1019,7 +1024,7 @@ async function taskClick(e){
   if(x){ if(!x.dataset.armed){ x.dataset.armed="1"; x.textContent="Delete?"; return } try{ await ref.delete() }catch(err){ writeErr(err,"tasks") } }
 }
 $("tasks").addEventListener("click",taskClick);
-function goTasks(){ window.scrollTo(0,0); if(view!=="tasks") location.hash="tasks"; else render() }
+function goTasks(){ taskOpen.add(myRole()||"content"); window.scrollTo(0,0); if(view!=="tasks") location.hash="tasks"; else render() }
 
 /* Roles: set by the studio owner in the Team screen */
 const ROLE_HINT={content:"Sees and makes everything.",marketing:"Asks for videos, reviews and approves its own work.",ecomm:"Asks for designs and videos, reviews and approves its own work.",hr:"Sees only tasks for now (shoot schedule comes next)."};
@@ -1219,6 +1224,7 @@ window.addEventListener("hashchange",()=>{ const h=hashView(); view=h.v; if(h.v=
 narrow.addEventListener("change",render);
 $("filters").addEventListener("click",e=>{const b=e.target.closest(".fchip"); if(!b) return; const s=b.dataset.series; filters.has(s)?filters.delete(s):filters.add(s); render()});
 $("main").addEventListener("click",e=>{
+  const pg=e.target.closest("[data-pg]"); if(pg){ const k=pg.dataset.pg; pipeOpen.has(k)?pipeOpen.delete(k):pipeOpen.add(k); renderColumns(STATUSES); return }
   if(e.target.closest(".shootchip")){ location.hash="shoots"; return }
   const c=e.target.closest(".chip"); if(c){openItem(c.dataset.id);return}
   const cell=e.target.closest(".cell"); if(cell&&!readOnly) openItem(null,cell.dataset.date);
