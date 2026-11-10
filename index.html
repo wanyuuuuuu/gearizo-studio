@@ -570,6 +570,18 @@ dialog{border-radius:18px}
 .shcard .what{display:flex;flex-direction:column;gap:3px;min-width:0}
 .shcard .what b{font-size:14.5px}
 .shcard .what span{font-size:13px;color:var(--ink-2);word-break:break-word}
+.shitems{max-height:200px;overflow:auto;padding:2px}
+.shitems em{font-style:normal;opacity:.6;font-size:12px}
+.shscripts{grid-column:1/-1;display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.shscript{background:var(--surface);border-radius:10px;padding:8px 10px;font-size:13px}
+.shscript summary{cursor:pointer;font-weight:600;display:flex;align-items:center;gap:6px;list-style:none}
+.shscript summary::-webkit-details-marker{display:none}
+.shscript summary::after{content:"Show";margin-left:auto;font-size:12px;font-weight:600;color:var(--blue)}
+.shscript[open] summary::after{content:"Hide"}
+.shscript.none{color:var(--ink-3);display:flex;align-items:center;gap:6px}
+.shscript .sctext{white-space:pre-wrap;word-break:break-word;margin-top:8px;font-size:14px;line-height:1.55;color:var(--ink)}
+.shscript .atts{margin-top:8px}
+.shcard .shscript .spill{font-size:10.5px;color:var(--ink-2);flex:none}
 .shcard .acts{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .shcard .acts input{flex:1 1 180px;min-width:0;border:1px solid var(--line);border-radius:999px;padding:6px 12px;min-height:36px}
 .spill{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border-radius:999px;padding:2px 8px;background:var(--surface);color:var(--ink-2)}
@@ -1430,9 +1442,9 @@ dialog::backdrop{background:rgba(60,48,70,.18);-webkit-backdrop-filter:blur(8px)
       <label class="fl">Length<select id="shLen"><option value="30">30 min</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">Half day</option></select></label>
     </div>
     <p class="shwarn" id="shWarn" hidden></p>
-    <label class="fl">Video<select id="shItem"><option value="">None</option></select></label>
+    <div class="fl" role="group" aria-labelledby="shItemsL"><span id="shItemsL">Videos <span class="hint">Tick all you’ll film. Their scripts go to the person you book.</span></span><div class="toggles shitems" id="shItems"></div></div>
     <label class="fl">Place<input id="shLoc" placeholder="Office studio" autocomplete="off"></label>
-    <label class="fl">Prepare<textarea id="shNotes" placeholder="Black Gearizo tee, script…"></textarea></label>
+    <label class="fl">Prepare<textarea id="shNotes" placeholder="Black Gearizo tee, props…"></textarea></label>
     <div class="row" style="display:flex;justify-content:flex-end;gap:8px"><button class="btn" type="button" id="shClose">Close</button><button class="btn primary" type="submit" id="shSave">Send</button></div>
   </form>
 </dialog>

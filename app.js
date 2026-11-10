@@ -310,7 +310,7 @@ async function connect(){
       clearTimeout(timer); const wasLive=live.items; live.items=true;
       const m=new Map(); snap.docs.forEach(x=>{ if(x.exists) m.set(x.id,normalize(x.id,x.data())) });
       const before=wasLive?items:null;
-      raw.items=m; applyPreview(); saveCache(); setNote(); render(); resolveNames();
+      raw.items=m; applyPreview(); saveCache(); setNote(); render(); resolveNames(); syncShootScripts();
       if(before) catWatch(before,m);
     },()=>{clearTimeout(timer);mode="local";setNote();toast("Couldn’t load the online plan. Showing the copy on this device.")});
     db.collection("versions").onSnapshot(snap=>{
@@ -329,10 +329,10 @@ async function connect(){
     },()=>{ live.tasks=true; renderTasks() });
     db.collection("shoots").onSnapshot(snap=>{
       live.shoots=true;
-      shoots=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,talent:Array.isArray(v.talent)?v.talent.map(String):[],item:String(v.item||""),title:String(v.title||""),
+      shoots=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,talent:Array.isArray(v.talent)?v.talent.map(String):[],item:String(v.item||""),items:Array.isArray(v.items)?v.items.map(String).filter(Boolean).slice(0,12):v.item?[String(v.item)]:[],scripts:shScripts(v.scripts),title:String(v.title||""),
         start:Number(v.start)||0,end:Number(v.end)||0,location:String(v.location||""),notes:String(v.notes||""),status:["proposed","confirmed","declined","cancelled"].includes(v.status)?v.status:"proposed",
         reply:String(v.reply||""),by:String(v.by||""),at:Number(v.at)||0,respondedBy:String(v.respondedBy||""),respondedAt:Number(v.respondedAt)||0}}).filter(x=>x.start&&x.end>x.start);
-      render(); shootWatch();
+      render(); shootWatch(); syncShootScripts();
     },()=>{ live.shoots=true });
     db.collection("availability").onSnapshot(snap=>{
       avail=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,user:String(v.user||""),start:Number(v.start)||0,end:Number(v.end)||0}}).filter(x=>x.end>x.start);
@@ -1074,7 +1074,7 @@ $("tasks").addEventListener("click",taskClick);
 function goTasks(){ taskOpen.add(myRole()||"content"); window.scrollTo(0,0); if(view!=="tasks") location.hash="tasks"; else render() }
 
 /* Roles: set by the studio owner in the Team screen */
-const ROLE_HINT={content:"Sees and makes everything.",marketing:"Asks for videos, reviews and approves its own work.",ecomm:"Asks for designs and videos, reviews and approves its own work.",hr:"Sees only tasks for now (shoot schedule comes next)."};
+const ROLE_HINT={content:"Sees and makes everything.",marketing:"Asks for videos, reviews and approves its own work.",ecomm:"Asks for designs and videos, reviews and approves its own work.",hr:"Sees their shoots with the scripts, and their tasks."};
 function maybeAskRole(){}
 async function renderRoleDlg(){
   const r=myRole();
@@ -1487,6 +1487,32 @@ function shootChips(ds){
   if(!isCr()) return "";
   return shoots.filter(x=>x.status!=="cancelled"&&ymdOf(x.start)===ds).sort((a,b)=>a.start-b.start).map(x=>'<button class="chip shootchip" type="button" draggable="false" title="Shoot"><span class="t">Shoot '+esc(hm(x.start))+'</span><span class="m">'+esc(x.talent.map(who).join(", ")+" · "+({proposed:"Waiting",confirmed:"Confirmed",declined:"Can’t make it"}[x.status]||""))+'</span></button>').join("");
 }
+/* A shoot can cover several videos. It keeps a copy of each video's script (the item's Notes) and reference
+   files, because HR can't open items themselves. The hub's app refreshes that copy when a script changes. */
+const shScripts=a=>Array.isArray(a)?a.filter(s=>s&&typeof s==="object").slice(0,12).map(s=>({id:String(s.id||""),title:String(s.title||"").slice(0,200),script:String(s.script||"").slice(0,20000),refs:normFiles(s.refs)})):[];
+const shLabel=i=>(i.code?i.code+" ":"")+i.title;
+function shScriptsFor(ids,old){ return shScripts(ids.map(id=>{ const i=items.get(id); return i?{id,title:shLabel(i),script:i.notes,refs:i.refs}:(old||[]).find(s=>s.id===id) }).filter(Boolean)) }
+let shSyncT=0; const shSyncing=new Set();
+function syncShootScripts(){
+  if(!isCr()||previewRole||readOnly||mode!=="db"||!db||!live.items||!live.shoots) return;
+  clearTimeout(shSyncT);
+  shSyncT=setTimeout(()=>{
+    const now=Date.now();
+    shoots.filter(x=>x.items.length&&x.end>now&&["proposed","confirmed"].includes(x.status)&&!shSyncing.has(x.id)).forEach(x=>{
+      const sc=shScriptsFor(x.items,x.scripts), title=sc.map(s=>s.title).join(" · ")||x.title;
+      if(JSON.stringify(sc)===JSON.stringify(x.scripts)&&title===x.title) return;
+      shSyncing.add(x.id);
+      db.collection("shoots").doc(x.id).update({scripts:sc,title}).catch(()=>{}).finally(()=>shSyncing.delete(x.id));
+    });
+  },1500);
+}
+function shootScriptsHtml(x){
+  const list=x.scripts.length?x.scripts:shScriptsFor(x.items,[]);
+  if(!list.length) return "";
+  return '<div class="shscripts">'+list.map(s=>(s.script||s.refs.length)?
+    '<details class="shscript"><summary><span class="spill">Script</span>'+esc(s.title)+'</summary>'+(s.script?'<div class="sctext">'+esc(s.script)+'</div>':"")+attHtml(s.refs)+'</details>':
+    '<div class="shscript none"><span class="spill">Script</span>'+esc(s.title)+' · not written yet</div>').join("")+'</div>';
+}
 function shootCard(x,forHr){
   const d=new Date(x.start), past=x.end<Date.now();
   const pill='<span class="spill '+x.status+'">'+({proposed:forHr?"Reply":"Waiting",confirmed:"Confirmed",declined:"Can’t",cancelled:"Cancelled"}[x.status])+'</span>';
@@ -1499,7 +1525,7 @@ function shootCard(x,forHr){
   if(x.status==="confirmed"&&!past) acts+='<a class="btn sm" href="'+esc(gcalLink(x))+'" target="_blank" rel="noopener" title="Add to Google Calendar">+ Google Calendar</a>';
   return '<div class="shcard"><div class="when"><small>'+DOW[(d.getDay()+6)%7]+'</small>'+d.getDate()+' '+MONTHS[d.getMonth()].slice(0,3)+'<small>'+esc(hm(x.start))+'</small></div>'+
     '<div class="what"><b>'+esc(x.title||"Shoot")+' '+pill+'</b><span>'+esc(hm(x.start)+"–"+hm(x.end))+(forHr?"":" · with "+esc(x.talent.map(who).join(", ")))+(x.location?" · "+esc(x.location):"")+'</span>'+
-    (x.notes?'<span>'+esc(x.notes)+'</span>':"")+(x.reply?'<span><b>Reply:</b> '+esc(x.reply)+'</span>':"")+'</div>'+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>';
+    (x.notes?'<span>'+esc(x.notes)+'</span>':"")+(x.reply?'<span><b>Reply:</b> '+esc(x.reply)+'</span>':"")+'</div>'+shootScriptsHtml(x)+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>';
 }
 function dayBar(uid,day){
   const d0=new Date(day+"T00:00:00").getTime(), from=d0+DAY_FROM*3600e3, to=d0+DAY_TO*3600e3, span=to-from;
@@ -1562,15 +1588,16 @@ function openShoot(pre){
   $("shH").textContent=editingShoot?"New time":"Book a shoot";
   $("shSave").textContent="Send";
   $("shWho").innerHTML=people.map(id=>'<option value="'+esc(id)+'">'+esc(who(id))+'</option>').join("");
-  const vids=[...items.values()].filter(i=>i.type!=="design"&&i.status!=="posted").sort((a,b)=>a.title.localeCompare(b.title));
-  $("shItem").innerHTML='<option value="">None</option>'+vids.map(i=>'<option value="'+esc(i.id)+'">'+esc((i.code?i.code+" ":"")+i.title)+'</option>').join("");
-  const ex=editingShoot?shoots.find(x=>x.id===editingShoot):null;
+  const ex=editingShoot?shoots.find(x=>x.id===editingShoot):null, picked=new Set(ex?ex.items:[]);
+  const stage={shoot:0,script:1,idea:2}, vids=[...items.values()].filter(i=>picked.has(i.id)||(i.type!=="design"&&i.status!=="posted"))
+    .sort((a,b)=>(stage[a.status]??3)-(stage[b.status]??3)||(a.code||"~").localeCompare(b.code||"~")||a.title.localeCompare(b.title));
+  $("shItems").innerHTML=vids.length?vids.map(i=>'<label><input type="checkbox" value="'+esc(i.id)+'"'+(picked.has(i.id)?" checked":"")+'><span>'+esc(shLabel(i))+(i.notes.trim()?"":' <em>no script</em>')+'</span></label>').join(""):'<p class="hint">No videos to shoot yet.</p>';
   const start=ex?ex.start:pre.start||null;
   $("shWho").value=ex?ex.talent[0]:(pre.user||people[0]);
   $("shDate").value=start?ymdOf(start):(pre.day||todayStr);
   $("shStart").value=start?pad(new Date(start).getHours())+":"+pad(new Date(start).getMinutes()):"10:00";
   $("shLen").value=ex?String(Math.round((ex.end-ex.start)/60000)):"60"; if(!$("shLen").value) $("shLen").value="60";
-  $("shItem").value=ex?ex.item:""; $("shLoc").value=ex?ex.location:""; $("shNotes").value=ex?ex.notes:"";
+  $("shLoc").value=ex?ex.location:""; $("shNotes").value=ex?ex.notes:"";
   shootWarn(); $("shootDlg").showModal();
 }
 function shootTimes(){
@@ -1590,10 +1617,11 @@ $("shootForm").addEventListener("submit",async e=>{
   e.preventDefault();
   const tm=shootTimes(); if(!tm){ toast("Pick a date and start time."); return }
   if(tm.end<Date.now()){ toast("That time has already passed."); return }
-  const it=items.get($("shItem").value);
-  const data={talent:[$("shWho").value],item:it?it.id:"",title:it?((it.code?it.code+" ":"")+it.title):"Shoot",start:tm.start,end:tm.end,location:$("shLoc").value.trim(),notes:$("shNotes").value.trim(),status:"proposed",reply:"",by:myId||"",at:Date.now(),respondedBy:"",respondedAt:0};
+  const ids=[...$("shItems").querySelectorAll("input:checked")].map(c=>c.value).filter(id=>items.has(id));
+  const sc=shScriptsFor(ids,[]);
+  const data={talent:[$("shWho").value],item:ids[0]||"",items:ids,scripts:sc,title:sc.length?sc.map(s=>s.title).join(" · "):"Shoot",start:tm.start,end:tm.end,location:$("shLoc").value.trim(),notes:$("shNotes").value.trim(),status:"proposed",reply:"",by:myId||"",at:Date.now(),respondedBy:"",respondedAt:0};
   try{
-    if(editingShoot) await db.collection("shoots").doc(editingShoot).update({start:data.start,end:data.end,item:data.item,title:data.title,location:data.location,notes:data.notes,talent:data.talent,status:"proposed",reply:"",respondedBy:"",respondedAt:0});
+    if(editingShoot) await db.collection("shoots").doc(editingShoot).update({start:data.start,end:data.end,item:data.item,items:data.items,scripts:data.scripts,title:data.title,location:data.location,notes:data.notes,talent:data.talent,status:"proposed",reply:"",respondedBy:"",respondedAt:0});
     else await db.collection("shoots").add(data);
     $("shootDlg").close(); toast(editingShoot?"New time sent. They’ll get a notification.":"Request sent. "+who(data.talent[0])+" gets a notification to confirm.");
   }catch(err){ writeErr(err,"the shoot") }
