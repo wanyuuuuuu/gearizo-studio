@@ -1082,14 +1082,14 @@ details.more .toggles input:checked + span{background:var(--green);color:#fff}
 }
 html{background:#ECE9EC}
 html,body{background-color:transparent}
-body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
-  background:
+:root{--aurora:
     radial-gradient(60vmax 50vmax at 0% 0%,#CDE3EE 0%,rgba(205,227,238,0) 60%),
     radial-gradient(55vmax 45vmax at 100% 0%,#F6D4E2 0%,rgba(246,212,226,0) 62%),
     radial-gradient(60vmax 55vmax at 100% 100%,#EFD9C4 0%,rgba(239,217,196,0) 60%),
     radial-gradient(55vmax 50vmax at 0% 100%,#D1E9DD 0%,rgba(209,233,221,0) 62%),
     linear-gradient(160deg,#EEF1F5 0%,#F4ECEF 50%,#F1EAE3 100%)}
-.gz-auth{background:transparent}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--aurora)}
+.gz-auth{background:#F0ECEE;background:var(--aurora)}
 
 /* Glass panels */
 .hcard,.hstrip,.tile:not(.pink):not(.green),.newc,.tray,.col,.queue,.detail,.tkcol,.shsec,.grid,.aday,.tkview .tkadd,.stat,.inbox{
