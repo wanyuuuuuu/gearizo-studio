@@ -532,7 +532,8 @@ function linkHtml(link){
   if(/^https?:\/\//i.test(link)) return '<div class="path"><a class="btn sm" href="'+esc(link)+'" target="_blank" rel="noopener">Open on NAS</a><code>'+esc(link)+'</code><button class="btn sm ghost" data-copy="'+esc(link)+'" type="button">Copy</button></div>';
   return '<div class="path"><span>NAS:</span><code>'+esc(link)+'</code><button class="btn sm ghost" data-copy="'+esc(link)+'" type="button">Copy path</button></div>';
 }
-function goReview(id){ selId=id||null; $("desk").classList.toggle("phone-detail",!!id&&narrow.matches); window.scrollTo(0,0); if(view!=="review") location.hash="review"; else render(); }
+let qOpen=null;
+function goReview(id){ selId=id||null; const gi=id&&items.get(id); if(gi) qOpen=gi.status; $("desk").classList.toggle("phone-detail",!!id&&narrow.matches); window.scrollTo(0,0); if(view!=="review") location.hash="review"; else render(); }
 const QGROUPS=[
   {id:"review",name:"In review",k:"var(--review)"},
   {id:"changes",name:"Needs changes",k:"var(--edit)"},
@@ -541,7 +542,7 @@ const QGROUPS=[
   {id:"scheduled",name:"Scheduled",k:"var(--sched)"}];
 function setHTML(el,h){ if(el._h!==h){ el.innerHTML=h; el._h=h } }
 function pickSel(){
-  if(wantSel&&items.has(wantSel)){ selId=wantSel; wantSel=null; return }
+  if(wantSel&&items.has(wantSel)){ selId=wantSel; qOpen=items.get(wantSel).status; wantSel=null; return }
   if(selId&&items.has(selId)) return;
   const all=sorted([...items.values()].filter(visible));
   for(const g of QGROUPS){ const f=all.find(i=>i.status===g.id); if(f){ selId=f.id; return } }
@@ -590,10 +591,12 @@ async function assignInbox(xid,itemId){
 function renderDesk(){
   pickSel(); renderInbox();
   const all=sorted([...items.values()].filter(visible));
+  /* Only the status buttons show; tap one to open its videos */
   setHTML($("queue"),QGROUPS.map(g=>{
-    const list=all.filter(i=>i.status===g.id);
-    return '<div class="qh"><span><i style="--k:'+g.k+'"></i>'+esc(g.name)+'</span><span>'+list.length+'</span></div>'+
-      (list.length?list.map(i=>chip(i,true,i.id===selId?" sel":"")).join(""):'<div class="empty">Nothing here.</div>');
+    const list=all.filter(i=>i.status===g.id), open=qOpen===g.id&&list.length>0;
+    return '<div class="qg'+(open?" open":"")+'" style="--k:'+g.k+'"><button type="button" class="qbtn" data-qg="'+g.id+'" aria-expanded="'+open+'"'+(list.length?"":" disabled")+'>'+
+      '<i></i><span>'+esc(g.name)+'</span><b class="dn">'+list.length+'</b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>'+
+      (open?'<div class="qlist">'+list.map(i=>chip(i,true,i.id===selId?" sel":"")).join("")+'</div>':"")+'</div>';
   }).join(""));
   const it=selId?items.get(selId):null;
   $("dEmpty").hidden=!!it; $("dBody").hidden=!it;
@@ -1291,6 +1294,7 @@ $("desk").addEventListener("click",e=>{
   }
 });
 $("dEdit").onclick=()=>{ if(selId) openItem(selId) };
+$("queue").addEventListener("click",e=>{ const b=e.target.closest("[data-qg]"); if(!b) return; qOpen=qOpen===b.dataset.qg?null:b.dataset.qg; renderDesk() });
 function setFbTime(sec){
   const now=fmtSec(sec);
   if(!$("fbAt").value.trim()||$("fbTo").value.trim()) { $("fbAt").value=now; $("fbTo").value=""; }
