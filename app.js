@@ -50,6 +50,10 @@ const SIZES=[{id:"sq",name:"Square 1:1 (product)",s:"1:1"},{id:"post",name:"Post
 const sizeName=id=>(SIZES.find(x=>x.id===id)||{}).name||id;
 /* Owner preview: see the app as another role (read only); raw holds the real data */
 let previewRole="", realRO=null, teamF="";
+/* The studio cat can be switched off per person (kept on this device and in their private settings) */
+const CAT_KEY="gearizo-cat-v1";
+let catOn=true; try{ catOn=localStorage.getItem(CAT_KEY)!=="off" }catch(e){}
+document.body.classList.toggle("nocat",!catOn);
 const raw={items:null,versions:null,feedback:null,tasks:null,focus:null,inbox:null};
 const myRole=()=>previewRole||(myId&&team[myId])||"";
 /* isMk = a requesting team that reviews and approves (Marketing or E-commerce) */
@@ -305,6 +309,7 @@ async function connect(){
     if(!d){clearTimeout(timer);mode="local";setNote();renderNotifs();renderFocus();return}
     db=d; mode="db";
     /* Private note of this viewer's own id, so a personal alert job can skip their own actions */
+    if(myId) db.collection("data/users/"+myId).doc("prefs").get().then(s=>{ const p=s&&s.exists?s.data()||{}:{}; if(typeof p.cat==="boolean"&&p.cat!==catOn) setCat(p.cat,false) }).catch(()=>{});
     if(myId){ const me=db.collection("data/users/"+myId).doc("whoami"); me.get().then(s=>{ if(!s.exists||(s.data()||{}).id!==myId) return me.set({id:myId}) }).catch(()=>{}) }
     db.collection("items").onSnapshot(snap=>{
       clearTimeout(timer); const wasLive=live.items; live.items=true;
@@ -1133,6 +1138,12 @@ $("socialBox").addEventListener("click",async e=>{
   setTimeout(()=>{ toast(ok?"Facebook & Instagram connected.":"Couldn’t connect: "+why); if(ok) openRole() },1500);
 })();
 $("roleBtn").onclick=openRole;
+function applyCat(){ document.body.classList.toggle("nocat",!catOn); if($("catPref")) $("catPref").checked=catOn; if(!catOn){ stopWalk(); $("catSay").hidden=true } }
+function setCat(on,save){
+  catOn=!!on; try{ localStorage.setItem(CAT_KEY,catOn?"on":"off") }catch(e){} applyCat();
+  if(save&&db&&myId&&mode==="db"&&!previewRole) db.collection("data/users/"+myId).doc("prefs").set({cat:catOn}).catch(()=>{});
+}
+if($("catPref")) $("catPref").addEventListener("change",e=>{ setCat(e.target.checked,true); if(catOn){ catMove("hop"); catSays("Meow, I’m back!","Tap me any time to see what’s waiting for you.") } });
 $("roleClose").onclick=()=>$("roleDlg").close();
 $("roleDlg").addEventListener("click",async e=>{
   if(e.target===$("roleDlg")){ $("roleDlg").close(); return }
@@ -1181,12 +1192,13 @@ function taskWatch(){
 /* Studio cat */
 let catT, catGo=null;
 function catSays(title,text,go){
+  if(!catOn) return;
   const b=$("catSay");
   b.innerHTML='<b>'+esc(title)+'</b>'+esc(text)+(go?'<br><button type="button" class="go">'+esc(go.label)+' →</button>':"");
   catGo=go||null; b.hidden=false;
   clearTimeout(catT); catT=setTimeout(()=>{ b.hidden=true },7000);
 }
-function catMove(cls){ stopWalk(); const c=$("cat"); c.classList.remove("hop","poke"); void c.offsetWidth; c.classList.add(cls) }
+function catMove(cls){ if(!catOn) return; stopWalk(); const c=$("cat"); c.classList.remove("hop","poke"); void c.offsetWidth; c.classList.add(cls) }
 const CHEERS=["Meow. Keep going.","Good videos take a few tries.","Stretch break? Then one more cut.","Hooks in the first 2 seconds!","You’re doing great."];
 function catSummary(){
   const r=myRole(), all=[...items.values()], first=a=>a.slice().sort((x,y)=>(x.due||x.date||"9999").localeCompare(y.due||y.date||"9999"))[0];
@@ -1238,7 +1250,7 @@ function catHome(){
 function stopWalk(){ if(walking){ walking.stop=true; catHome() } }
 async function catWalk(){
   const c=$("cat");
-  if(walking||calmMotion.matches||document.hidden||!$("catSay").hidden||$("dlg").open||$("roleDlg").open||typeof c.animate!=="function") return;
+  if(!catOn||walking||calmMotion.matches||document.hidden||!$("catSay").hidden||$("dlg").open||$("roleDlg").open||typeof c.animate!=="function") return;
   const r=c.getBoundingClientRect(); if(!r.width) return;
   const vw=document.documentElement.clientWidth, minX=16, maxX=vw-16-r.width;
   if(maxX-minX<160) return;
@@ -1258,6 +1270,7 @@ async function catWalk(){
 }
 (function strollLater(first){ setTimeout(()=>{ catWalk(); strollLater(false) }, first?6000:30000) })(true);
 window.addEventListener("resize",stopWalk);
+applyCat();
 
 /* Focus products */
 const monthKey=()=>cursor.getFullYear()+"-"+pad(cursor.getMonth()+1);

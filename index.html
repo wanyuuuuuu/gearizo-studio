@@ -178,6 +178,15 @@ details.older summary{cursor:pointer;font-weight:600;color:var(--ink-2);font-siz
 .role-wrap{padding:20px 22px;display:flex;flex-direction:column;gap:12px}
 .role-wrap h2{font-family:var(--display);font-weight:700;font-size:28px;line-height:1.05;margin:0;text-wrap:balance}
 .role-wrap > p{margin:0}
+body.nocat #cat,body.nocat #catSay{display:none!important}
+.prefrow{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--sunk);border-radius:14px;padding:10px 12px;cursor:pointer}
+.prefrow .pt{display:flex;flex-direction:column;gap:2px;font-size:14px}
+.prefrow .pt .hint{font-size:12.5px}
+.switch{appearance:none;-webkit-appearance:none;flex:none;width:46px;height:28px;border-radius:999px;background:#C9CDD3;position:relative;cursor:pointer;transition:background .2s;margin:0}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
+.switch:checked{background:var(--green)}
+.switch:checked::after{transform:translateX(18px)}
+.switch:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .role-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .role-opt{display:flex;flex-direction:column;gap:4px;text-align:left;border:1px solid var(--line);border-top:5px solid var(--k);background:var(--bg);border-radius:10px;padding:14px;color:var(--ink)}
 .role-opt b{font-family:var(--display);font-size:21px;font-weight:600}
@@ -1404,6 +1413,7 @@ dialog::backdrop{background:rgba(60,48,70,.18);-webkit-backdrop-filter:blur(8px)
   <div class="role-wrap">
     <h2 id="roleH">Your role</h2>
     <p class="hint" id="myRoleLine"></p>
+    <label class="prefrow"><span class="pt"><b>Studio cat</b><span class="hint">The cat in the corner and its little tips.</span></span><input type="checkbox" id="catPref" class="switch" role="switch" checked></label>
     <div id="teamBox" hidden>
       <h3 class="sec-h">Team</h3>
       <p class="hint">Add their email, then they sign up with it.</p>
