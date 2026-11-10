@@ -1218,6 +1218,17 @@ dialog::backdrop{background:rgba(60,48,70,.18);-webkit-backdrop-filter:blur(8px)
 .tklist{padding:8px 6px}
 .tklist .tk:hover{background:rgba(255,255,255,.6)}
 .qbtn b.hot{color:var(--pink)}
+
+/* Social connection + auto-post status */
+.socline{margin:0 0 8px}
+.socline .ok{color:var(--green)} .socline .err{color:var(--danger)}
+.socacts{display:flex;flex-wrap:wrap;gap:6px}
+.metasteps{margin:6px 0 4px;padding-left:20px;display:grid;gap:6px;font-size:12.5px;color:var(--ink-2)}
+.metasteps code{font-size:11.5px;word-break:break-all;background:rgba(255,255,255,.6);border-radius:8px;padding:3px 6px}
+.metasteps .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px}
+.aplrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.apl{font-size:12px;font-weight:600;border-radius:999px;padding:5px 11px;background:rgba(255,255,255,.62);box-shadow:inset 0 0 0 1px rgba(255,255,255,.85);color:var(--ink-2)}
+.apl.auto{color:var(--sched)} .apl.uploaded,.apl.scheduled{color:var(--green)} .apl.posted{color:var(--green);background:var(--green-soft)} .apl.failed{color:var(--danger);background:color-mix(in srgb,var(--danger) 10%,#fff)}
 </style>
 </head>
 <body>
@@ -1395,6 +1406,15 @@ dialog::backdrop{background:rgba(60,48,70,.18);-webkit-backdrop-filter:blur(8px)
         <li><b>Marketing</b> and <b>E-commerce</b> see only their own requests, and review and approve them.</li>
         <li><b>HR</b> sees their tasks and shoot requests.</li>
       </ul></details>
+    </div>
+    <div id="socialBox" hidden>
+      <h3 class="sec-h">Social</h3>
+      <p class="hint socline" id="socialLine">Checking…</p>
+      <div id="socialSetup" hidden>
+        <div class="team-add"><input id="metaAppId" placeholder="Meta App ID" autocomplete="off" inputmode="numeric" aria-label="Meta App ID"><input id="metaSecret" type="password" placeholder="App Secret" autocomplete="off" aria-label="Meta App Secret"></div>
+        <details class="role-help"><summary class="hint">How?</summary><ol class="metasteps" id="metaSteps"></ol></details>
+      </div>
+      <div class="socacts" id="socialActs"></div>
     </div>
     <div class="row" style="display:flex;justify-content:space-between;gap:8px"><button class="btn ghost" id="gzSignOutBtn" type="button" onclick="window.gzSignOut&&window.gzSignOut()">Sign out</button><button class="btn" id="roleClose" type="button">Close</button></div>
   </div>

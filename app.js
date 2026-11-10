@@ -37,7 +37,8 @@ const newId=()=>"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6
 let items=new Map(), versions=[], feedback=[], focus=[];
 let db=null, assets=null, userNs=null, myId=null, amOwner=false, names={}, myName="";
 let mode="local", readOnly=false, live={items:false,focus:false,team:false};
-let team={}, promptedRole=false, inbox=[], tasks=[], shoots=[], avail=[], busy=[];
+let team={}, promptedRole=false, inbox=[], tasks=[], shoots=[], avail=[], busy=[], jobs={}, metaState=null;
+const AUTO_P=["reel","fb"];
 const ROLES={content:{name:"Content & video",k:"var(--blue)"},marketing:{name:"Marketing",k:"var(--mk)"},ecomm:{name:"E-commerce",k:"#E8772E"},hr:{name:"HR",k:"#8C6BD1"}};
 const TEAMS={marketing:"Marketing",ecomm:"E-commerce"};
 const SIZES=[{id:"sq",name:"Square 1:1 (product)",s:"1:1"},{id:"post",name:"Post 4:5",s:"4:5"},{id:"story",name:"Story 9:16",s:"9:16"},{id:"banner",name:"Banner 16:9",s:"16:9"},{id:"wide",name:"Wide banner 3:1",s:"3:1"},{id:"thumb",name:"Thumbnail 1280×720",s:"Thumbnail"}];
@@ -113,7 +114,7 @@ function saveCache(){ try{localStorage.setItem(CACHE_KEY,JSON.stringify([...item
 let toastT;
 function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),3000)}
 function setNote(){ $("saveNote").textContent=readOnly?"View only":mode==="db"?"Live":(items.size===0?"Sign in to see the plan":"This device only") }
-function who(id){ if(!id) return "Someone"; if(id===myId) return "You"; return names[id]||"Someone" }
+function who(id){ if(!id) return "Someone"; if(id==="auto") return "Auto-post"; if(id===myId) return "You"; return names[id]||"Someone" }
 
 const vFor=id=>versions.filter(v=>v.item===id).sort((a,b)=>b.n-a.n);
 const fbFor=id=>feedback.filter(f=>f.item===id).sort((a,b)=>a.at-b.at);
@@ -344,6 +345,11 @@ async function connect(){
       team=t; render(); resolveNames(); maybeAskRole();
       if($("roleDlg").open) renderRoleDlg();
     },()=>{});
+    db.collection("postjobs").onSnapshot(snap=>{
+      const j={}; snap.docs.forEach(x=>{ if(x.exists) j[x.id]=x.data()||{} }); jobs=j;
+      if(view==="home") renderHome(); if($("dlg").open&&editingId) renderPublish();
+    },()=>{});
+    loadMeta();
     db.collection("focus").onSnapshot(snap=>{
       live.focus=true;
       raw.focus=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,name:String(v.name||""),month:String(v.month||""),created:Number(v.created)||0}}).filter(f=>f.name).sort((a,b)=>a.created-b.created); applyPreview();
@@ -744,6 +750,14 @@ function renderPublish(){
       '<button class="btn primary sm" type="button" data-pub="schedule">'+(sch?"Update time":"Schedule")+'</button>'+(sch?'<button class="btn ghost sm" type="button" data-pub="unschedule">Unschedule</button>':"")+'</div>'+
       '<div class="pubdone"><input type="url" id="pubLink" placeholder="Post link (optional)" aria-label="Link to the live post"><button class="btn go sm" type="button" data-pub="posted">Mark posted</button></div>';
   }else html+='<p class="waitnote pubnote">'+(sch?"Marketing posts it at this time.":"Marketing picks the time.")+'</p>';
+  const autoOn=!!(metaState&&metaState.connected), job=jobs[it.id]||{};
+  if(it.platforms.length) html+='<div class="aplrow">'+it.platforms.map(p=>{
+    const nm=pMap[p].s;
+    if(!autoOn||!AUTO_P.includes(p)) return '<span class="apl man" title="Post this one yourself">'+esc(nm)+' · You</span>';
+    const j=(p==="reel"?job.ig:job.fb)||{}, st=j.state;
+    const lab=st==="posted"?"Posted ✓":st==="uploaded"||st==="scheduled"?"Ready ✓":st==="failed"?"Failed":"Auto";
+    return '<span class="apl '+(st||"auto")+'" title="'+esc(st==="failed"?(j.error||""):st==="uploaded"||st==="scheduled"?"Uploaded, goes out at the time":"Uploads up to a day before")+'">'+esc(nm)+' · '+lab+'</span>';
+  }).join("")+'</div>'+(autoOn&&job.error==="nofile"?'<p class="waitnote pubnote">Final video not found on the NAS.</p>':"");
   html+='<div class="pubacts">'+(latest&&latest.link?'<button class="btn sm" type="button" data-copy="'+esc(latest.link)+'">Copy v'+latest.n+' path</button>':"")+
     (ig||!tt?'<a class="btn sm" href="https://business.facebook.com/" target="_blank" rel="noopener">Meta ↗</a>':"")+(tt?'<a class="btn sm" href="https://www.tiktok.com/tiktokstudio" target="_blank" rel="noopener">TikTok ↗</a>':"")+'</div>';
   setHTML(box,html);
@@ -812,6 +826,7 @@ function nText(e){
   if(e.type==="changes") return w+' asked for changes on '+t;
   if(e.type==="approve") return w+' approved '+t;
   if(e.type==="scheduled") return w+' scheduled '+t+' for '+esc(postWhen(e.item.postAt));
+  if(e.by==="auto") return t+' was posted automatically';
   return w+' marked '+t+' as posted';
 }
 function renderNotifs(){
@@ -937,7 +952,7 @@ function renderHome(){
     const ruler='<div class="pt-rail">'+cols.map((c,d)=>{ const day=new Date(start+d*864e5);
       return '<div class="pt-col'+(d===3?" today":d<3?" past":"")+'"><div class="pt-dots">'+c.sort((a,b)=>a.at-b.at).slice(0,3).map(e=>'<button type="button" class="pt-dot '+e.k+(pick&&e.i.id===pick.i.id?" sel":"")+'" data-psel="'+esc(e.i.id)+'" title="'+esc(e.i.title+" · "+postWhen(e.at))+'" aria-label="'+esc(e.i.title+", "+postWhen(e.at))+'"></button>').join("")+'</div>'+
         '<i class="pt-tick"></i><span class="pt-lab">'+(d===3?"Today":day.getDate())+'</span></div>' }).join("")+(later?'<span class="pt-later">+'+later+' later</span>':"")+'</div>';
-    const pill=pick?'<button type="button" class="pt-pill '+pick.k+'" data-go="'+(isMk()&&pick.k!=="done"?"publish:":"item:")+esc(pick.i.id)+'"><span class="pt-ic">'+IC.posted+'</span><span class="pt-tx"><b>'+esc(pick.i.title)+'</b><span>'+esc(postWhen(pick.at))+(pick.i.platforms.length?" · "+esc(pick.i.platforms.map(x=>pMap[x].s).join(", ")):"")+'</span></span><span class="pt-st">'+(pick.k==="done"?"Posted":pick.k==="due"?"Due now":"Scheduled")+'</span></button>'
+    const pill=pick?'<button type="button" class="pt-pill '+pick.k+'" data-go="'+(isMk()&&pick.k!=="done"?"publish:":"item:")+esc(pick.i.id)+'"><span class="pt-ic">'+IC.posted+'</span><span class="pt-tx"><b>'+esc(pick.i.title)+'</b><span>'+esc(postWhen(pick.at))+(pick.i.platforms.length?" · "+esc(pick.i.platforms.map(x=>pMap[x].s).join(", ")):"")+'</span></span><span class="pt-st">'+(pick.k==="done"?"Posted":pick.k==="due"?"Due now":(metaState&&metaState.connected&&pick.i.platforms.length&&pick.i.platforms.every(p=>AUTO_P.includes(p))?"Auto":"Scheduled"))+'</span></button>'
       :'<div class="pt-pill empty"><span class="pt-ic">'+IC.posted+'</span><span class="pt-tx"><b>Nothing scheduled</b><span>'+(toPost.length?toPost.length+" waiting for a time":"All posted")+'</span></span></div>';
     const nt=toPost.filter(i=>!(i.status==="scheduled"&&i.postAt));
     const ntRow=nt.length?'<div class="pt-nt"><span class="pt-ntl">No time</span>'+nt.slice(0,6).map(i=>'<button type="button" class="pt-chip" data-go="'+(isMk()?"publish:":"item:")+esc(i.id)+'" style="--c:'+sMap[i.series].c+'">'+esc(i.title)+'</button>').join("")+(nt.length>6?'<span class="pt-ntl">+'+(nt.length-6)+'</span>':"")+'</div>':"";
@@ -1033,6 +1048,7 @@ async function renderRoleDlg(){
   const r=myRole();
   $("myRoleLine").textContent=r?("You’re "+ROLES[r].name+"."+(amOwner?"":" The owner can change it.")):"No role yet. Ask the owner to add you.";
   $("teamBox").hidden=!amOwner;
+  renderSocial();
   if(!amOwner||!window.gzTeam) return;
   const roleOpts=v=>Object.entries(ROLES).map(([k,x])=>'<option value="'+k+'"'+(v===k?" selected":"")+'>'+esc(x.name)+'</option>').join("");
   $("teamRole").innerHTML=roleOpts("ecomm");
@@ -1043,6 +1059,47 @@ async function renderRoleDlg(){
     '<button type="button" class="btn ghost sm" data-rm="'+esc(m.email)+'">Remove</button></span>')+'</div>').join("");
 }
 function openRole(){ renderRoleDlg(); $("roleDlg").showModal() }
+/* Social: connect Facebook & Instagram so Reels and Page posts go out by themselves */
+async function loadMeta(){
+  if(!window.gzMeta||mode!=="db") return;
+  try{ metaState=await window.gzMeta.status() }catch(e){ metaState={connected:false,error:e.message} }
+  if($("roleDlg").open) renderSocial(); if(view==="home") renderHome(); if($("dlg").open&&editingId) renderPublish();
+}
+function renderSocial(){
+  const can=!!window.gzMeta&&!previewRole&&(amOwner||isMk());
+  $("socialBox").hidden=!can; if(!can) return;
+  const m=metaState;
+  if(!m){ $("socialLine").textContent="Checking…"; $("socialSetup").hidden=true; $("socialActs").innerHTML=""; loadMeta(); return }
+  const on=!!m.connected;
+  $("socialLine").innerHTML=on?'<b class="ok">✓ Connected</b> '+esc([m.page,m.ig?"@"+m.ig:""].filter(Boolean).join(" · "))+(m.error?'<br><span class="err">'+esc(m.error)+'</span>':"")
+    :(m.error?'<span class="err">'+esc(m.error)+'</span>':"Not connected. Once connected, Reels and Facebook posts go out by themselves.");
+  $("socialSetup").hidden=on;
+  $("metaSteps").innerHTML='<li>Instagram must be a <b>Business</b> account linked to the Gearizo <b>Facebook Page</b>, and you must be an admin of that Page.</li>'+
+    '<li>On <b>developers.facebook.com</b>: My Apps → <b>Create app</b> → <b>Other</b> → <b>Business</b>.</li>'+
+    '<li>In the app, add <b>Facebook Login for Business</b> and <b>Instagram</b> (API setup with Facebook login).</li>'+
+    '<li>Facebook Login for Business → Settings → <b>Valid OAuth Redirect URIs</b>: paste this, then Save.<div class="row"><code>'+esc(m.callback||"")+'</code><button class="btn ghost sm" type="button" data-copy="'+esc(m.callback||"")+'">Copy</button></div></li>'+
+    '<li>App settings → <b>Basic</b>: copy the <b>App ID</b> and <b>App Secret</b> into the boxes above.</li>'+
+    '<li>Press <b>Connect</b>, sign in, tick the Gearizo Page and Instagram account, and allow everything.</li>';
+  $("socialActs").innerHTML=on?'<button class="btn sm" type="button" data-meta="check">Check</button><button class="btn ghost sm danger" type="button" data-meta="off">Disconnect</button>'
+    :'<button class="btn primary sm" type="button" data-meta="go">Connect Facebook &amp; Instagram</button>';
+}
+$("socialBox").addEventListener("click",async e=>{
+  const cp=e.target.closest("[data-copy]"); if(cp){ copyText(cp.dataset.copy); return }
+  const b=e.target.closest("[data-meta]"); if(!b||!window.gzMeta) return;
+  const act=b.dataset.meta;
+  try{
+    if(act==="go"){ b.disabled=true; b.textContent="Opening Facebook…"; await window.gzMeta.start($("metaAppId").value.trim(),$("metaSecret").value.trim()); return }
+    if(act==="check"){ b.disabled=true; b.textContent="Checking…"; const r=await window.gzMeta.check(); toast(r.ok?"Working: "+[r.page,r.ig?"@"+r.ig:""].filter(Boolean).join(" · "):"Problem: "+r.error) }
+    if(act==="off"){ if(!b.dataset.armed){ b.dataset.armed="1"; b.textContent="Tap again to disconnect"; return } await window.gzMeta.disconnect(); toast("Disconnected. Posts go back to reminders.") }
+  }catch(err){ toast("Couldn’t do that: "+err.message); b.disabled=false }
+  metaState=null; loadMeta();
+});
+/* Back from Facebook sign-in */
+(function(){ const q=new URLSearchParams(location.search); if(!q.has("meta")) return;
+  const ok=q.get("meta")==="ok", why=q.get("why")||"";
+  history.replaceState(null,"",location.pathname+location.hash);
+  setTimeout(()=>{ toast(ok?"Facebook & Instagram connected.":"Couldn’t connect: "+why); if(ok) openRole() },1500);
+})();
 $("roleBtn").onclick=openRole;
 $("roleClose").onclick=()=>$("roleDlg").close();
 $("roleDlg").addEventListener("click",async e=>{

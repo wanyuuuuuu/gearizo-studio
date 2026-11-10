@@ -147,6 +147,22 @@
     me: () => ({ ...member }),
   };
   /* Each person's private Google Calendar link (only they can read it) and their shoot feed */
+  /* Facebook & Instagram connection for auto-posting (marketing or the owner connects it) */
+  window.gzMeta = {
+    async call(action, extra) {
+      const { data, error } = await sb.functions.invoke("notify", { body: Object.assign({ action }, extra || {}) });
+      if (error) { let msg = error.message; try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch (e) {} throw new Error(msg); }
+      if (data && data.error) throw new Error(data.error);
+      return data;
+    },
+    status() { return this.call("meta_status"); },
+    check() { return this.call("meta_check"); },
+    disconnect() { return this.call("meta_disconnect"); },
+    async start(appId, appSecret) {
+      const r = await this.call("meta_start", { app_id: appId || "", app_secret: appSecret || "", return_url: location.origin + location.pathname });
+      location.href = r.url;
+    },
+  };
   window.gzCal = {
     async get() {
       const { data } = await sb.from("calendar_links").select("ics_url,feed_token,last_sync,last_error").eq("user_id", session.user.id).maybeSingle();
