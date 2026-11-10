@@ -1,0 +1,7 @@
+previews/
+processed.json
+status.json
+*.log
+.sync.lock
+*.bak*
+gearizo.json

@@ -1,0 +1,10 @@
+{
+  "url": "https://YOUR-PROJECT.supabase.co",
+  "secretKey": "sb_secret_PASTE_FROM_SUPABASE_KEEP_PRIVATE",
+  "ownerId": "user id of the content owner (Supabase > Authentication > Users)",
+  "nasRoot": "/Volumes/Marketing Content",
+  "ffmpeg": "",
+  "dataDir": "",
+  "sync": true,
+  "autopost": true
+}

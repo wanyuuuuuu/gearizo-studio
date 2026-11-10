@@ -1,0 +1,13 @@
+# On the UGREEN NAS: Docker app > Project > Create, paste this file, adjust the two left-hand paths.
+services:
+  gearizo-nas:
+    build: .
+    container_name: gearizo-nas
+    restart: unless-stopped
+    volumes:
+      # left side: the "Marketing Content" shared folder on the NAS (check its real path in the Files app)
+      - /volume1/Marketing Content:/Volumes/Marketing Content
+      # left side: a folder on the NAS holding gearizo.json (copy config.example.json, fill it in, keep it private)
+      - /volume1/docker/gearizo:/config
+    environment:
+      - GEARIZO_CONFIG=/config/gearizo.json
