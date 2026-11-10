@@ -1,5 +1,6 @@
-// Gearizo server function. Three jobs:
-//  1. Push notifications when something happens in the studio (called by the docs_push database trigger).
+// Gearizo server function. Four jobs:
+//  1. Push notifications when something happens in the studio (called by the docs_push database trigger),
+//     plus a "time to post" reminder for scheduled posts (pg_cron calls action "postdue" every minute).
 //  2. Calendar sync: read each linked Google Calendar (private iCal link) and store only busy times.
 //  3. Shoot feed: an iCal feed of a person's shoots that Google Calendar can subscribe to.
 import webpush from "npm:web-push@3.6.7";
@@ -30,6 +31,8 @@ const mmss = (s: number) => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const shortDate = (d: string) => { const [, m, day] = d.split("-").map(Number); return day + " " + MONTHS[m - 1]; };
 const TZ = "Asia/Kuala_Lumpur";
+const PLAT: Record<string, string> = { reel: "Reel", carousel: "Carousel", story: "Story", tiktok: "TikTok", fb: "FB", shop: "Shop" };
+const plats = (d: Record<string, any>) => (Array.isArray(d.platforms) ? d.platforms : []).map((p: string) => PLAT[p] || p).join(", ");
 const when = (ms: number) => new Intl.DateTimeFormat("en-GB", { timeZone: TZ, weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(ms));
 
 async function nameOf(id?: string | null) {
@@ -86,23 +89,33 @@ async function describe(type: string, rec: Doc, old: Doc | null, roleOf: Record<
         const mk = ["marketing", "ecomm"].includes(roleOf[d.createdBy]);
         return { role: mk ? "content" : itemTeam, body: `${await nameOf(d.createdBy)} ${mk ? "assigned" : "planned"} ${title}` + (d.date ? ` for ${shortDate(d.date)}` : ""), url: "./#calendar", tag: "item-" + rec.id };
       }
-      if (type !== "UPDATE" || d.status === o.status) return null;
+      if (type !== "UPDATE") return null;
+      if (d.status === "scheduled" && Number(d.postAt) > 0 && (o.status !== "scheduled" || Number(d.postAt) !== Number(o.postAt))) {
+        const moved = o.status === "scheduled";
+        return { role: "content", body: `${await nameOf(d.scheduledBy || actor)} ${moved ? "moved" : "scheduled"} ${title} ${moved ? "to" : "for"} ${when(Number(d.postAt))}` + (plats(d) ? ` · ${plats(d)}` : ""), url: "./#review/" + rec.id, tag: "item-" + rec.id };
+      }
+      if (d.status === o.status) return null;
       if (d.status === "review") return { role: itemTeam, body: `${await nameOf(d.submittedBy || actor)} sent ${title}` + (d.submittedV ? ` v${d.submittedV}` : "") + " for review", url: "./#review", tag: "item-" + rec.id };
       if (d.status === "changes") return { role: "content", body: `${await nameOf(d.changesBy || actor)} asked for changes on ${title}`, url: "./#review", tag: "item-" + rec.id };
       if (d.status === "approved") return { role: "content", body: `${await nameOf(d.approvedBy || actor)} approved ${title}`, url: "./#review", tag: "item-" + rec.id };
-      if (d.status === "posted") return { role: "content", body: `${await nameOf(d.postedBy || actor)} marked ${title} as posted`, url: "./#calendar", tag: "item-" + rec.id };
+      if (d.status === "posted") return { role: "content", body: `${await nameOf(d.postedBy || actor)} posted ${title}` + (plats(d) ? ` on ${plats(d)}` : ""), url: "./#review/" + rec.id, tag: "item-" + rec.id };
       return null;
     }
   }
   return null;
 }
 
-async function notify(type: string, record: Doc, old_record: Doc | null) {
+async function roles(): Promise<Record<string, string>> {
   const { data: team } = await sb.rpc("team_roles");
-  const roleOf: Record<string, string> = Object.fromEntries((team || []).map((r: any) => [r.user_id, r.role]));
+  return Object.fromEntries((team || []).map((r: any) => [r.user_id, r.role]));
+}
+async function notify(type: string, record: Doc, old_record: Doc | null) {
+  const roleOf = await roles();
   const msg = await describe(type, record, old_record, roleOf);
   if (!msg) return { sent: 0, note: "nothing to send" };
-  const actor = record.updated_by;
+  return send(msg, record.updated_by, roleOf);
+}
+async function send(msg: Msg, actor: string | null, roleOf: Record<string, string>) {
   const { data: subs } = await sb.from("push_subs").select("endpoint,user_id,sub");
   const targets = (subs || []).filter((s: any) =>
     s.user_id !== actor &&
@@ -114,6 +127,24 @@ async function notify(type: string, record: Doc, old_record: Doc | null) {
     catch (e: any) { if (e?.statusCode === 404 || e?.statusCode === 410) await sb.from("push_subs").delete().eq("endpoint", s.endpoint); }
   }));
   return { sent };
+}
+
+/* Scheduled posts that are due: remind the team that posts them, once */
+async function postDue() {
+  const now = Date.now();
+  const { data: rows } = await sb.from("docs").select("id,data").eq("collection", "items").eq("data->>status", "scheduled");
+  const due = (rows || []).filter((r: any) => Number(r.data?.postAt) > 0 && Number(r.data.postAt) <= now + 60000 && !Number(r.data.remindedAt));
+  if (!due.length) return { due: 0 };
+  const roleOf = await roles();
+  let sent = 0;
+  for (const r of due) {
+    const d = r.data || {};
+    await sb.from("docs").update({ data: { ...d, remindedAt: now } }).eq("collection", "items").eq("id", r.id);
+    const title = (d.code ? d.code + " " : "") + (d.title || "a video");
+    const res = await send({ role: d.team === "ecomm" ? "ecomm" : "marketing", body: `Time to post ${title}` + (plats(d) ? ` on ${plats(d)}` : "") + ". The caption is ready in the app.", url: "./#review/" + r.id, tag: "post-" + r.id }, null, roleOf);
+    sent += res.sent;
+  }
+  return { due: due.length, sent };
 }
 
 /* ---------- 2. Google Calendar → busy times (only start and end are kept) ---------- */
@@ -230,5 +261,6 @@ Deno.serve(async (req) => {
     return json({ synced: await calsync(me) });
   }
   if (!fromDb) return json({ error: "forbidden" }, 401);
+  if (body.action === "postdue") return json(await postDue());
   return json(await notify(body.type, body.record, body.old_record));
 });

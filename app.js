@@ -11,7 +11,7 @@ const SERIES=[
 const STATUSES=[
   {id:"idea",name:"Idea"},{id:"script",name:"Scripting"},{id:"shoot",name:"Shooting"},
   {id:"edit",name:"Editing"},{id:"review",name:"In review"},{id:"changes",name:"Needs changes"},
-  {id:"approved",name:"Approved"},{id:"posted",name:"Posted"}
+  {id:"approved",name:"Approved"},{id:"scheduled",name:"Scheduled"},{id:"posted",name:"Posted"}
 ];
 const PLATFORMS=[
   {id:"reel",name:"IG Reel",s:"Reel"},{id:"carousel",name:"IG Carousel",s:"Carousel"},{id:"story",name:"IG Story",s:"Story"},
@@ -56,7 +56,8 @@ let nRead=(()=>{
   const s={floor:Date.now(),ids:new Set()}; saveRead(s); return s;
 })();
 const VIEWS=["home","calendar","review","pipeline","tasks","shoots"];
-let view=VIEWS.includes(location.hash.slice(1))?location.hash.slice(1):"home";
+function hashView(){ const h=location.hash.slice(1), i=h.indexOf("/"), v=i<0?h:h.slice(0,i); return {v:VIEWS.includes(v)?v:"home",a:i<0?"":decodeURIComponent(h.slice(i+1))} }
+let view=hashView().v, wantSel=hashView().v==="review"&&hashView().a||null;
 const now=new Date(); const todayStr=ymd(now);
 let cursor=new Date(now.getFullYear(),now.getMonth(),1);
 let filters=new Set();
@@ -86,6 +87,8 @@ function normalize(id,d){
     approvedBy:String(d.approvedBy||""), approvedAt:Number(d.approvedAt)||0, postedAt:Number(d.postedAt)||0, postedBy:String(d.postedBy||""),
     submittedBy:String(d.submittedBy||""), submittedAt:Number(d.submittedAt)||0, submittedV:Number(d.submittedV)||0,
     changesBy:String(d.changesBy||""), changesAt:Number(d.changesAt)||0,
+    postAt:Number(d.postAt)||0, scheduledBy:String(d.scheduledBy||""), scheduledAt:Number(d.scheduledAt)||0, remindedAt:Number(d.remindedAt)||0,
+    postUrl:/^https?:\/\//i.test(String(d.postUrl||""))?String(d.postUrl).slice(0,500):"",
     createdBy:String(d.createdBy||""), created:Number(d.created)||0,
     code:/^GZ\d{3,5}$/.test(String(d.code||""))?String(d.code):""};
 }
@@ -93,13 +96,14 @@ function normalize(id,d){
 const codeNum=c=>{ const m=/^GZ(\d+)$/.exec(c||""); return m?Number(m[1]):0 };
 function nextCode(){ let max=0; items.forEach(i=>{ max=Math.max(max,codeNum(i.code)) }); return "GZ"+String(max+1).padStart(3,"0") }
 const fileSafe=t=>String(t||"").replace(/[\/\\:*?"<>|]+/g,"-").replace(/\s+/g," ").trim().slice(0,60);
-const STAMP_KEYS=["approvedBy","approvedAt","postedAt","postedBy","submittedBy","submittedAt","submittedV","changesBy","changesAt"];
+const STAMP_KEYS=["approvedBy","approvedAt","postedAt","postedBy","submittedBy","submittedAt","submittedV","changesBy","changesAt","postAt","scheduledBy","scheduledAt","remindedAt","postUrl"];
 /* Who moved an item into a status, and when. Feeds the notifications. */
 function stamp(st,id){
   const t=Date.now(), me=myId||"";
   if(st==="review"){ const l=vFor(id)[0]; return {submittedBy:me,submittedAt:t,submittedV:l?l.n:0} }
   if(st==="changes") return {changesBy:me,changesAt:t};
   if(st==="approved") return {approvedBy:me,approvedAt:t};
+  if(st==="scheduled") return {scheduledBy:me,scheduledAt:t};
   if(st==="posted") return {postedBy:me,postedAt:t};
   return {};
 }
@@ -116,16 +120,17 @@ const fbFor=id=>feedback.filter(f=>f.item===id).sort((a,b)=>a.at-b.at);
 function visible(it){ return (filters.size===0||filters.has(it.series))&&(!teamF||it.team===teamF) }
 function sorted(list){ return list.sort((a,b)=>(a.date||"9999").localeCompare(b.date||"9999")||a.created-b.created) }
 
+const stLabel=it=>it.status==="scheduled"&&it.postAt?"Scheduled "+hm(it.postAt):stMap[it.status].name;
 function chip(it,showDate,extra){
   const s=sMap[it.series];
   const meta=[];
   if(it.code) meta.push(it.code);
   if(it.type==="design") meta.push("Design");
   if(showDate&&it.date) meta.push(shortDate(it.date));
-  if(view!=="pipeline") meta.push(stMap[it.status].name);
+  if(view!=="pipeline") meta.push(stLabel(it)); else if(it.status==="scheduled"&&it.postAt) meta.push(hm(it.postAt));
   if(!showDate&&view==="calendar"){ const vs0=vFor(it.id); const open0=fbFor(it.id).filter(f=>!f.done).length;
     return '<button class="chip s-'+it.status+(it.status==="posted"?" posted":"")+(extra||"")+'" draggable="'+(!readOnly)+'" data-id="'+esc(it.id)+'" style="--c:'+s.c+'" title="'+esc(s.name+(it.code?" · "+it.code:""))+'">'+
-      '<span class="t">'+esc(it.title)+'</span><span class="m">'+esc((isCr()&&it.team==="ecomm"?"E-com · ":"")+(it.type==="design"?"Design · ":"")+stMap[it.status].name)+'</span>'+(open0?'<span class="flag">'+open0+' to fix</span>':"")+'</button>'; }
+      '<span class="t">'+esc(it.title)+'</span><span class="m">'+esc((isCr()&&it.team==="ecomm"?"E-com · ":"")+(it.type==="design"?"Design · ":"")+stLabel(it))+'</span>'+(open0?'<span class="flag">'+open0+' to fix</span>':"")+'</button>'; }
   const vs=vFor(it.id); if(vs.length) meta.push("v"+vs[0].n);
   if(it.due&&["idea","script","shoot","edit","changes"].includes(it.status)) meta.push("Due "+shortDate(it.due));
 
@@ -188,7 +193,7 @@ function stCls(list){
   list=list||[];
   if(list.some(i=>i.status==="edit"||i.status==="changes")) return " st-edit";
   if(list.some(i=>i.status==="review")) return " st-review";
-  if(list.some(i=>i.status==="approved")) return " st-ready";
+  if(list.some(i=>["approved","scheduled"].includes(i.status))) return " st-ready";
   return "";
 }
 const LEGEND='<div class="legend"><span><i style="--k:var(--edit)"></i>Editing or needs changes</span><span><i style="--k:var(--review)"></i>In review</span><span><i style="--k:var(--ready)"></i>Approved, ready to post</span></div>';
@@ -363,7 +368,7 @@ function openItem(id,presetDate,presetProduct){
     type:myRole()==="ecomm"?"design":"video",sizes:[],sizeNote:"",refs:[],team:isMk()?myRole():(teamF||"marketing")};
   if(!it) return;
   $("fTitle").value=it.title==="Untitled"&&id?"":it.title;
-  $("fStatus").querySelectorAll("option").forEach(o=>{ o.disabled=isCr()&&["approved","posted"].includes(o.value)&&o.value!==it.status });
+  $("fStatus").querySelectorAll("option").forEach(o=>{ o.disabled=o.value!==it.status&&(o.value==="scheduled"||isCr()&&["approved","posted"].includes(o.value)) });
   $("fTeamWrap").hidden=!isCr(); $("fTeam").value=it.team||(isMk()?myRole():"marketing");
   $("fSeries").value=it.series; $("fStatus").value=it.status; $("fDate").value=it.date; $("fDue").value=it.due||""; $("fNotes").value=it.notes; $("fCaption").value=it.caption||"";
   $("fPlatforms").querySelectorAll("input").forEach(i=>i.checked=it.platforms.includes(i.value));
@@ -378,9 +383,9 @@ function openItem(id,presetDate,presetProduct){
   typeFields();
   $("fCode").hidden=!(id&&it.code); $("fCode").textContent=id&&it.code?it.code:"";
   $("fDelete").hidden=!id||readOnly; $("fDelete").textContent="Delete"; $("fDelete").dataset.armed="";
-  $("fSave").hidden=readOnly;
+  $("fSave").hidden=readOnly; $("pubInfo")._h="";
   tint();
-  setTab(id&&it.status==="approved"?"publish":"plan");
+  setTab(id&&["approved","scheduled"].includes(it.status)?"publish":"plan");
   $("dlg").showModal();
   if(!id) setTimeout(()=>$("fTitle").focus(),30);
 }
@@ -532,9 +537,11 @@ const QGROUPS=[
   {id:"review",name:"In review",k:"var(--review)"},
   {id:"changes",name:"Needs changes",k:"var(--edit)"},
   {id:"edit",name:"Editing",k:"var(--ink-3)"},
-  {id:"approved",name:"Approved",k:"var(--ready)"}];
+  {id:"approved",name:"Approved",k:"var(--ready)"},
+  {id:"scheduled",name:"Scheduled",k:"var(--sched)"}];
 function setHTML(el,h){ if(el._h!==h){ el.innerHTML=h; el._h=h } }
 function pickSel(){
+  if(wantSel&&items.has(wantSel)){ selId=wantSel; wantSel=null; return }
   if(selId&&items.has(selId)) return;
   const all=sorted([...items.values()].filter(visible));
   for(const g of QGROUPS){ const f=all.find(i=>i.status===g.id); if(f){ selId=f.id; return } }
@@ -611,8 +618,9 @@ function renderDesk(){
   else if(st==="edit"){ k="var(--edit)"; head="Editing"; sub=[latest?"v"+latest.n:"",due].filter(Boolean).join(" · ")||"No cut yet"; acts=submit; }
   else if(st==="changes"){ k="var(--edit)"; head="Needs changes"; sub=[it.changesBy?who(it.changesBy):"",open?open+" to fix":"All fixed, send the new version"].filter(Boolean).join(" · "); acts=submit; }
   else if(st==="review"){ k="var(--review)"; head="In review"; sub=[latest?"v"+latest.n:"",by(it.submittedBy,it.submittedAt)].filter(Boolean).join(" · "); if(can&&!cr) acts='<button class="btn stop" data-act="changes">Ask for changes</button><button class="btn go" data-act="approve">Approve</button>'; }
-  else if(st==="approved"){ k="var(--ready)"; head="Approved"; sub=by(it.approvedBy,it.approvedAt); if(can&&!cr) acts='<button class="btn" data-act="reopen">Back to editing</button><button class="btn go" data-act="gopub">Open Publish</button>'; }
-  else { k="var(--blue)"; head="Posted"; sub=it.postedAt?fmtTime(it.postedAt):""; }
+  else if(st==="approved"){ k="var(--ready)"; head="Approved"; sub=by(it.approvedBy,it.approvedAt); if(can&&!cr) acts='<button class="btn" data-act="reopen">Back to editing</button><button class="btn go" data-act="gopub">Schedule</button>'; }
+  else if(st==="scheduled"){ const due=it.postAt&&it.postAt<=Date.now(); k=due?"var(--pink)":"var(--sched)"; head=due?"Time to post":"Scheduled"; sub=[it.postAt?postWhen(it.postAt):"",it.platforms.map(p=>pMap[p].s).join(", ")].filter(Boolean).join(" · "); if(can&&!cr) acts='<button class="btn go" data-act="gopub">Open Publish</button>'; }
+  else { k="var(--blue)"; head="Posted"; sub=it.postedAt?fmtTime(it.postedAt):""; if(it.postUrl) acts='<a class="btn sm" href="'+esc(it.postUrl)+'" target="_blank" rel="noopener">Open post ↗</a>'; }
   setHTML($("vStatus"),'<div class="banner" style="--k:'+k+'"><div><b>'+esc(head)+'</b><span>'+esc(sub)+'</span></div>'+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>');
 
   const isD=it.type==="design";
@@ -713,22 +721,45 @@ async function addFeedback(){
 /* Publish tab */
 function renderPublish(){
   const box=$("pubInfo");
-  if(!editingId){ box.innerHTML='<p class="hint" style="margin-top:12px">Save the item first.</p>'; return }
+  if(!editingId){ setHTML(box,'<p class="hint" style="margin-top:12px">Save the item first.</p>'); return }
   const it=items.get(editingId); if(!it) return;
-  const latest=vFor(it.id)[0];
-  const plats=it.platforms.map(p=>pMap[p].s).join(", ");
-  const banner=(k,b,t)=>'<div class="banner" style="--k:'+k+';margin-top:14px"><div><b>'+esc(b)+'</b>'+(t?'<span>'+esc(t)+'</span>':"")+'</div></div>';
-  if(it.status==="posted"){ box.innerHTML=banner("var(--blue)","Posted",it.postedAt?fmtTime(it.postedAt):""); return }
-  if(it.status!=="approved"){ box.innerHTML=banner("var(--ink-3)","Not approved yet","Posting links show here once it’s approved."); return }
+  const latest=vFor(it.id)[0], now=Date.now(), plats=it.platforms.map(p=>pMap[p].s).join(", ");
+  const banner=(k,b,t,extra)=>'<div class="banner" style="--k:'+k+';margin-top:14px"><div><b>'+esc(b)+'</b>'+(t?'<span>'+esc(t)+'</span>':"")+'</div>'+(extra?'<div class="acts">'+extra+'</div>':"")+'</div>';
+  if(it.status==="posted"){ setHTML(box,banner("var(--blue)","Posted",it.postedAt?fmtTime(it.postedAt):"",it.postUrl?'<a class="btn sm" href="'+esc(it.postUrl)+'" target="_blank" rel="noopener">Open post ↗</a>':"")); return }
+  if(!["approved","scheduled"].includes(it.status)){ setHTML(box,banner("var(--ink-3)","Not approved yet","You can pick a time once it’s approved.")); return }
+  const can=!readOnly&&mode==="db"&&isMk(), sch=it.status==="scheduled"&&it.postAt>0, due=sch&&it.postAt<=now;
   const ig=it.platforms.some(p=>["reel","carousel","story","fb"].includes(p)), tt=it.platforms.includes("tiktok");
-  box.innerHTML=banner("var(--ready)","Ready to post",[plats,it.date?shortDate(it.date):""].filter(Boolean).join(" · "))+
-    '<div class="pubacts">'+
-    (latest&&latest.link?'<button class="btn sm" type="button" data-copy="'+esc(latest.link)+'">Copy v'+latest.n+' path</button>':"")+
-    (ig||!tt?'<a class="btn sm" href="https://business.facebook.com/" target="_blank" rel="noopener">Meta ↗</a>':"")+
-    (tt?'<a class="btn sm" href="https://www.tiktok.com/tiktokstudio" target="_blank" rel="noopener">TikTok ↗</a>':"")+
-    (!readOnly&&mode==="db"&&!isCr()?'<button class="btn go sm" data-act="posted" type="button">Mark posted</button>':'<span class="waitnote">Marketing marks it posted</span>')+
-    '</div>';
+  const d0=sch?new Date(it.postAt):null, today=ymd(new Date());
+  const dv=sch?ymd(d0):(it.date&&it.date>=today?it.date:today), tv=sch?pad(d0.getHours())+":"+pad(d0.getMinutes()):"20:00";
+  let html=sch?banner(due?"var(--pink)":"var(--sched)",due?"Time to post":"Scheduled",[postWhen(it.postAt),plats].filter(Boolean).join(" · ")):banner("var(--ready)","Ready to post",plats||"Pick platforms in Plan");
+  if(can){
+    html+='<div class="pubwhen"><input type="date" id="pubDate" value="'+dv+'" aria-label="Post date"><input type="time" id="pubTime" value="'+tv+'" step="300" aria-label="Post time">'+
+      '<button class="btn primary sm" type="button" data-pub="schedule">'+(sch?"Update time":"Schedule")+'</button>'+(sch?'<button class="btn ghost sm" type="button" data-pub="unschedule">Unschedule</button>':"")+'</div>'+
+      '<div class="pubdone"><input type="url" id="pubLink" placeholder="Post link (optional)" aria-label="Link to the live post"><button class="btn go sm" type="button" data-pub="posted">Mark posted</button></div>';
+  }else html+='<p class="waitnote pubnote">'+(sch?"Marketing posts it at this time.":"Marketing picks the time.")+'</p>';
+  html+='<div class="pubacts">'+(latest&&latest.link?'<button class="btn sm" type="button" data-copy="'+esc(latest.link)+'">Copy v'+latest.n+' path</button>':"")+
+    (ig||!tt?'<a class="btn sm" href="https://business.facebook.com/" target="_blank" rel="noopener">Meta ↗</a>':"")+(tt?'<a class="btn sm" href="https://www.tiktok.com/tiktokstudio" target="_blank" rel="noopener">TikTok ↗</a>':"")+'</div>';
+  setHTML(box,html);
 }
+$("pubInfo").addEventListener("click",e=>{
+  const b=e.target.closest("[data-pub]"); if(!b||!editingId) return;
+  if(readOnly||!isMk()){ toast("Marketing schedules and posts."); return }
+  const id=editingId, prev=items.get(id); if(!prev) return;
+  const base=formData(prev,id), act=b.dataset.pub;
+  if(act==="schedule"){
+    const d=$("pubDate").value, t=$("pubTime").value; if(!d||!t){ toast("Pick a date and time."); return }
+    const at=new Date(d+"T"+t+":00").getTime(); if(!(at>Date.now()-60000)){ toast("That time has already passed."); return }
+    if(!base.platforms.length){ toast("Pick at least one platform in Plan first."); setTab("plan"); return }
+    const next={...base,status:"scheduled",postAt:at,date:ymd(new Date(at)),remindedAt:0,scheduledBy:myId||"",scheduledAt:Date.now()};
+    $("fStatus").value="scheduled"; $("fDate").value=next.date;
+    persist(id,next); toast((prev.status==="scheduled"?"Moved to ":"Scheduled for ")+postWhen(at)+".");
+  }else if(act==="unschedule"){
+    $("fStatus").value="approved"; persist(id,{...base,status:"approved",postAt:0,remindedAt:0}); toast("Unscheduled.");
+  }else if(act==="posted"){
+    const url=($("pubLink").value||"").trim(); if(url&&!/^https?:\/\/\S+$/i.test(url)){ toast("The link should start with https://"); return }
+    $("fStatus").value="posted"; persist(id,{...base,status:"posted",...stamp("posted",id),postUrl:url||base.postUrl||""}); catMove("hop"); toast("Marked as posted.");
+  }
+});
 async function copyText(t){
   try{ await navigator.clipboard.writeText(t); toast("Copied."); return }catch(e){}
   const ta=document.createElement("textarea"); ta.value=t; ta.style.position="fixed"; ta.style.opacity="0"; $("dlg").appendChild(ta); ta.select();
@@ -737,7 +768,7 @@ async function copyText(t){
 }
 
 /* Notifications: built from versions, feedback and status stamps */
-const NT={shoot:"var(--pink)",shootreply:"var(--ready)",task:"var(--pink)",taskdone:"var(--ready)",planned:"var(--ink-2)",version:"var(--ink-3)",submit:"var(--review)",feedback:"var(--blue)",changes:"var(--edit)",approve:"var(--ready)",posted:"var(--blue)"};
+const NT={scheduled:"var(--sched)",shoot:"var(--pink)",shootreply:"var(--ready)",task:"var(--pink)",taskdone:"var(--ready)",planned:"var(--ink-2)",version:"var(--ink-3)",submit:"var(--review)",feedback:"var(--blue)",changes:"var(--edit)",approve:"var(--ready)",posted:"var(--blue)"};
 function events(){
   const ev=[];
   versions.forEach(v=>{ const it=items.get(v.item); if(it) ev.push({id:"v:"+v.id,at:v.at,by:v.by,item:it,type:"version",n:v.n}) });
@@ -747,6 +778,7 @@ function events(){
     if(it.submittedAt) ev.push({id:"s:"+it.id+":"+it.submittedAt,at:it.submittedAt,by:it.submittedBy,item:it,type:"submit",n:it.submittedV});
     if(it.changesAt) ev.push({id:"c:"+it.id+":"+it.changesAt,at:it.changesAt,by:it.changesBy,item:it,type:"changes"});
     if(it.approvedAt) ev.push({id:"a:"+it.id+":"+it.approvedAt,at:it.approvedAt,by:it.approvedBy,item:it,type:"approve"});
+    if(it.scheduledAt&&it.postAt&&["scheduled","posted"].includes(it.status)) ev.push({id:"sc:"+it.id+":"+it.scheduledAt,at:it.scheduledAt,by:it.scheduledBy,item:it,type:"scheduled"});
     if(it.postedAt) ev.push({id:"p:"+it.id+":"+it.postedAt,at:it.postedAt,by:it.postedBy,item:it,type:"posted"});
   });
   tasks.forEach(t=>{
@@ -772,6 +804,7 @@ function nText(e){
   if(e.type==="feedback") return w+' left feedback on '+t+v+(e.t!=null?' at '+fmtSec(e.t):'');
   if(e.type==="changes") return w+' asked for changes on '+t;
   if(e.type==="approve") return w+' approved '+t;
+  if(e.type==="scheduled") return w+' scheduled '+t+' for '+esc(postWhen(e.item.postAt));
   return w+' marked '+t+' as posted';
 }
 function renderNotifs(){
@@ -814,12 +847,12 @@ const IC={
   pulse:ic('<path d="M3 12h4l3-7 4 14 3-7h4"/>'),
   next:ic('<path d="M5 12h14M13 6l6 6-6 6"/>')
 };
-const ST1={idea:"Idea",script:"Script",shoot:"Shoot",edit:"Edit",review:"Review",changes:"Fix",approved:"Ready",posted:"Live"};
-const ST_K={idea:"var(--ink-3)",script:"var(--ink-3)",shoot:"var(--ink-3)",edit:"var(--edit)",changes:"var(--edit)",review:"var(--review)",approved:"var(--ready)",posted:"var(--pink)"};
+const ST1={idea:"Idea",script:"Script",shoot:"Shoot",edit:"Edit",review:"Review",changes:"Fix",approved:"Ready",scheduled:"Scheduled",posted:"Live"};
+const ST_K={idea:"var(--ink-3)",script:"var(--ink-3)",shoot:"var(--ink-3)",edit:"var(--edit)",changes:"var(--edit)",review:"var(--review)",approved:"var(--ready)",scheduled:"var(--sched)",posted:"var(--pink)"};
 const ago=ms=>{ const m=Math.max(0,Math.round((Date.now()-ms)/60000)); return m<1?"now":m<60?m+"m":m<1440?Math.round(m/60)+"h":Math.round(m/1440)+"d" };
 const byDue=(a,b)=>(a.due||a.date||"9999").localeCompare(b.due||b.date||"9999")||(a.date||"9999").localeCompare(b.date||"9999");
 function nextUp(){
-  const rank=isMk()?{review:0,approved:1}:{changes:0,edit:1,shoot:2,script:3,idea:4};
+  const rank=isMk()?{review:0}:{changes:0,edit:1,shoot:2,script:3,idea:4};
   return [...items.values()].filter(i=>i.status in rank).sort((a,b)=>rank[a.status]-rank[b.status]||byDue(a,b));
 }
 function tile(cls,icon,word,n,o){
@@ -836,7 +869,8 @@ function renderHome(){
   const myShoots=shoots.filter(x=>x.end>nowMs&&x.status!=="cancelled"&&(!isHr()||x.talent.includes(myId))).sort((a,b)=>a.start-b.start);
   const first=list=>list.slice().sort(byDue)[0];
   const tasksTile=tile("c"+(isHr()?" solo":""),IC.tasks,"Tasks",myT.length,{go:"view:tasks",pill:lateT?lateT+" late":"",cap:myT.length?myT[0].text:"All done"});
-  const postedTile=tile("b green",IC.posted,"Posted",postedM,{go:"view:calendar",ticks:inMonth.length?(postedM/inMonth.length).toFixed(3):0,cap:"of "+inMonth.length+" in "+MONTHS[t0.getMonth()]});
+  const toPost=cnt(["approved","scheduled"]), sched=toPost.filter(i=>i.status==="scheduled"&&i.postAt).sort((a,b)=>a.postAt-b.postAt), noTime=toPost.length-sched.length, dueN=sched.filter(i=>i.postAt<=nowMs).length, nextP=sched.find(i=>i.postAt>nowMs);
+  const postedTile=tile("b green",IC.posted,"To post",toPost.length,{go:"scroll:posting",pill:dueN?dueN+" due":noTime?noTime+" no time":"",cap:nextP?"Next · "+postWhen(nextP.postAt):toPost.length?"No times yet":"All posted"});
   let tiles;
   if(isHr()){
     const ask=myShoots.filter(x=>x.status==="proposed"), conf=myShoots.filter(x=>x.status==="confirmed");
@@ -845,7 +879,7 @@ function renderHome(){
   }else if(isMk()){
     const rv=cnt(["review"]), ap=cnt(["approved"]), f=first(rv), g=first(ap);
     tiles=tile("a pink",IC.review,"To review",rv.length,{go:f?"item:"+f.id:"view:review",cap:f?f.title:"All clear"})+postedTile+tasksTile+
-      tile("d",IC.ready,"Ready",ap.length,{go:g?"publish:"+g.id:"view:review",cap:g?g.title:"Nothing yet"});
+      tile("d",IC.ready,"To schedule",ap.length,{go:g?"publish:"+g.id:"scroll:posting",cap:g?g.title:"All set"});
   }else{
     const ch=cnt(["changes"]), f=first(ch), wait=myShoots.filter(x=>x.status==="proposed").length, upS=myShoots.filter(x=>x.status!=="declined");
     tiles=tile("a pink",IC.fix,"To fix",ch.length,{go:f?"item:"+f.id:"view:review",pill:inbox.length?inbox.length+" new file"+(inbox.length>1?"s":""):"",cap:f?f.title:"All clear"})+postedTile+tasksTile+
@@ -855,7 +889,7 @@ function renderHome(){
     ["Ideas",cnt(["idea","script"]).length,"var(--ink-3)","view:pipeline"],
     ["Making",cnt(["shoot","edit","changes"]).length,"var(--edit)","view:pipeline"],
     ["Review",cnt(["review"]).length,"var(--review)","view:review"],
-    ["Ready",cnt(["approved"]).length,"var(--ready)","view:pipeline"],
+    ["To post",cnt(["approved","scheduled"]).length,"var(--sched)","scroll:posting"],
     ["Posted",cnt(["posted"]).length,"var(--pink)","view:pipeline"]
   ].map(([w,n,k,go])=>'<button type="button" class="hs" data-go="'+go+'"><span class="dn">'+n+'</span><span class="pl" style="--k:'+k+'"><i></i>'+w+'</span></button>').join("")+'</div>';
   /* Updates: last 14 days as a dot timeline, plus the latest three */
@@ -884,7 +918,23 @@ function renderHome(){
   }
   const nxCard='<section class="hcard"><h2 class="ch"><span class="ti">'+IC.next+'</span>Next'+(more?'<button type="button" class="btn sm see" data-go="'+more+'">See all</button>':"")+'</h2><div class="ul">'+(nrows||'<div class="empty">All clear.</div>')+'</div></section>';
   const newCard=(readOnly||isHr())?"":'<button type="button" class="newc" data-go="new"><span class="plus" aria-hidden="true">+</span><span><b>'+(isMk()?"New request":"New")+'</b><small>Video or design</small></span><span class="stack" aria-hidden="true"><i></i><i></i><i></i></span></button>';
-  setHTML($("homeView"),strip+'<div class="hgrid">'+tiles+'</div><div class="hrow">'+upd+'<div class="hside">'+nxCard+newCard+'</div></div>');
+  /* Posting: what's waiting to go out, when, and what just went live */
+  let posting="";
+  if(!isHr()){
+    const recent=cnt(["posted"]).filter(i=>i.postedAt>nowMs-7*864e5).sort((a,b)=>b.postedAt-a.postedAt);
+    const q=[...sched,...toPost.filter(i=>!(i.status==="scheduled"&&i.postAt)).sort(byDue),...recent].slice(0,12);
+    const card=i=>{ const s=i.status==="scheduled"&&i.postAt>0, p=i.status==="posted", due=s&&i.postAt<=nowMs, at=s?i.postAt:p?i.postedAt:0, d=at?new Date(at):null, t=at?hmParts(at):["--:--",""];
+      return '<button type="button" class="pq'+(p?" done":due?" due":s?"":" none")+'" data-go="'+(isMk()&&!p?"publish:":"item:")+esc(i.id)+'" style="--c:'+sMap[i.series].c+'">'+
+        '<span class="pq-d">'+(d?esc(DOW[(d.getDay()+6)%7]+" "+d.getDate()+" "+MONTHS[d.getMonth()].slice(0,3)):"No time yet")+'</span>'+
+        '<span class="pq-t"><b class="dn">'+esc(t[0])+'</b><small>'+esc(t[1])+'</small></span>'+
+        '<span class="pq-n">'+esc(i.title)+'</span>'+
+        '<span class="pq-f"><span>'+esc(i.platforms.map(x=>pMap[x].s).join(" · ")||"–")+'</span><span class="pl" style="--k:'+(p?"var(--ready)":due?"var(--pink)":s?"var(--sched)":"var(--ink-3)")+'"><i></i>'+(p?"Posted":due?"Due":s?"Scheduled":"No time")+'</span></span></button>' };
+    posting='<section class="hcard posting" id="posting"><h2 class="ch"><span class="ti">'+IC.posted+'</span>Posting'+
+      '<span class="pl" style="--k:var(--sched)"><i></i>'+toPost.length+' to post</span>'+(dueN?'<span class="pl" style="--k:var(--pink)"><i></i>'+dueN+' due</span>':"")+(noTime?'<span class="pl"><i></i>'+noTime+' no time</span>':"")+
+      '<span class="pmonth" title="Posted this month">'+postedM+' / '+inMonth.length+' in '+MONTHS[t0.getMonth()].slice(0,3)+'<span class="pticks" style="--p:'+(inMonth.length?(postedM/inMonth.length).toFixed(3):0)+'"></span></span></h2>'+
+      '<div class="pqrow">'+(q.length?q.map(card).join(""):'<div class="empty">Nothing waiting to post.</div>')+'</div></section>';
+  }
+  setHTML($("homeView"),strip+'<div class="hgrid">'+tiles+'</div>'+posting+'<div class="hrow">'+upd+'<div class="hside">'+nxCard+newCard+'</div></div>');
 }
 $("homeView").addEventListener("click",e=>{
   const n=e.target.closest("[data-n]"); if(n){ openNotif(n); return }
@@ -895,6 +945,7 @@ $("homeView").addEventListener("click",e=>{
   else if(k==="publish"){ openItem(v); setTab("publish") }
   else if(k==="new") openItem(null,"");
   else if(k==="updates") openUpdates();
+  else if(k==="scroll"){ const el=document.getElementById(v); if(el) el.scrollIntoView({behavior:"smooth",block:"start"}) }
 });
 
 /* Tasks: its own page in the rail, one column per role */
@@ -1046,18 +1097,21 @@ function catSummary(){
     if(wip.length){ const f=first(wip); return catSays(wip.length+" in progress","Next up: “"+f.title+"”"+(f.due?", first cut due "+shortDate(f.due):f.date?", posting "+shortDate(f.date):"")+". "+cheer,{label:"Open it",fn:()=>goReview(f.id)}) }
     return catSays("All clear!","Nothing to make or fix right now. Nap time?");
   }
+  const dueP=all.filter(i=>i.status==="scheduled"&&i.postAt&&i.postAt<=Date.now());
+  if(dueP.length){ const f=dueP[0]; return catSays("Time to post","“"+f.title+"” was set for "+postWhen(f.postAt)+".",{label:"Open Publish",fn:()=>{ openItem(f.id); setTab("publish") }}) }
   const rv=all.filter(i=>i.status==="review"), ap=all.filter(i=>i.status==="approved");
   if(rv.length){ const f=first(rv); return catSays(rv.length+" to review","“"+f.title+"” is waiting for you"+(ap.length?". "+ap.length+" approved and ready to post.":"."),{label:"Watch it",fn:()=>goReview(f.id)}) }
-  if(ap.length){ const f=first(ap); return catSays(ap.length+" ready to post","“"+f.title+"” is approved"+(f.date?" for "+shortDate(f.date):"")+".",{label:"Open Publish",fn:()=>{ openItem(f.id); setTab("publish") }}) }
+  if(ap.length){ const f=first(ap); return catSays(ap.length+" to schedule","“"+f.title+"” is approved. Pick a posting time.",{label:"Open Publish",fn:()=>{ openItem(f.id); setTab("publish") }}) }
   return catSays("All clear!","Nothing to review. Maybe assign the next video?");
 }
 function catWatch(before,after){
   for(const [id,it] of after){
     const old=before.get(id); if(!old||old.status===it.status) continue;
-    const by=it.status==="approved"?it.approvedBy:it.status==="posted"?it.postedBy:it.status==="changes"?it.changesBy:it.status==="review"?it.submittedBy:"";
+    const by=it.status==="scheduled"?it.scheduledBy:it.status==="approved"?it.approvedBy:it.status==="posted"?it.postedBy:it.status==="changes"?it.changesBy:it.status==="review"?it.submittedBy:"";
     const name=by?who(by):"Someone";
     const ding=()=>{ if(by&&by!==myId) chime() };
     if(it.status==="approved"){ ding(); catMove("hop"); catSays("Approved!",name+" approved “"+it.title+"”. Nice work.",{label:"Open it",fn:()=>goReview(id)}); return }
+    if(it.status==="scheduled"&&isCr()){ ding(); catMove("hop"); catSays("Scheduled",name+" will post “"+it.title+"” "+postWhen(it.postAt)+".",{label:"Open it",fn:()=>goReview(id)}); return }
     if(it.status==="posted"){ ding(); catMove("hop"); catSays("It’s live!","“"+it.title+"” is posted. Meow!"); return }
     if(it.status==="changes"&&isCr()){ ding(); catMove("poke"); catSays("Changes asked",name+" left notes on “"+it.title+"”. You got this.",{label:"See notes",fn:()=>goReview(id)}); return }
     if(it.status==="review"&&isMk()){ ding(); catMove("poke"); catSays("New video to watch",name+" sent “"+it.title+"” for review.",{label:"Watch it",fn:()=>goReview(id)}); return }
@@ -1150,7 +1204,7 @@ $("dBack").onclick=()=>{ $("desk").classList.remove("phone-detail"); window.scro
 $("vPipe").onclick=()=>{location.hash="pipeline"};
 $("vTask").onclick=()=>{location.hash="tasks"};
 $("vShoot").onclick=()=>{location.hash="shoots"};
-window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);view=VIEWS.includes(h)?h:"home";render();window.scrollTo(0,0)});
+window.addEventListener("hashchange",()=>{ const h=hashView(); view=h.v; if(h.v==="review"&&h.a){ wantSel=h.a; selId=null; $("desk").classList.toggle("phone-detail",narrow.matches) } render(); window.scrollTo(0,0) });
 narrow.addEventListener("change",render);
 $("filters").addEventListener("click",e=>{const b=e.target.closest(".fchip"); if(!b) return; const s=b.dataset.series; filters.has(s)?filters.delete(s):filters.add(s); render()});
 $("main").addEventListener("click",e=>{
@@ -1293,8 +1347,10 @@ document.addEventListener("drop",e=>{
   const it=items.get(dragId); if(!it) return;
   const next={...it};
   if(t.classList.contains("col")){ if(it.status===t.dataset.status) return;
+    if(t.dataset.status==="scheduled"){ if(isMk()&&!readOnly){ openItem(it.id); setTab("publish"); toast("Pick a time to schedule it.") } else toast("Marketing sets the posting time."); return }
     if(isCr()&&["approved","posted"].includes(t.dataset.status)){ toast("Only the team that asked for it can approve or mark it posted."); return } Object.assign(next,{status:t.dataset.status},stamp(t.dataset.status,it.id)); }
-  else { const d=t.dataset.date; if(!d||it.date===d) return; next.date=d }
+  else { const d=t.dataset.date; if(!d||it.date===d) return; next.date=d;
+    if(it.status==="scheduled"&&it.postAt){ if(!isMk()){ toast("Marketing sets the posting time."); return } const o=new Date(it.postAt), nd=parse(d); nd.setHours(o.getHours(),o.getMinutes(),0,0); Object.assign(next,{postAt:nd.getTime(),remindedAt:0,scheduledBy:myId||"",scheduledAt:Date.now()}) } }
   persist(it.id,next);
 });
 
@@ -1303,6 +1359,20 @@ const DAY_FROM=8, DAY_TO=20;                       // board shows 8am–8pm
 const hrPeople=()=>Object.keys(team).filter(id=>team[id]==="hr");
 const ymdOf=ms=>ymd(new Date(ms));
 const hm=ms=>{ const d=new Date(ms); let h=d.getHours(); const ap=h>=12?"pm":"am"; h=h%12||12; return h+(d.getMinutes()?":"+pad(d.getMinutes()):"")+ap };
+const hmParts=ms=>{ const d=new Date(ms); let h=d.getHours(); const ap=h>=12?"pm":"am"; h=h%12||12; return [h+":"+pad(d.getMinutes()),ap] };
+const postWhen=ms=>{ const d=new Date(ms); return DOW[(d.getDay()+6)%7]+" "+d.getDate()+" "+MONTHS[d.getMonth()].slice(0,3)+", "+hm(ms) };
+/* Marketing gets a nudge in the open app when a scheduled post is due (the server also sends a push) */
+const remindedLocal=new Set();
+function postWatch(){
+  if(view==="home") renderHome();
+  if(!isMk()||readOnly) return;
+  const now=Date.now(), due=[...items.values()].filter(i=>i.status==="scheduled"&&i.postAt&&i.postAt<=now&&i.postAt>now-6*3600e3&&!remindedLocal.has(i.id+":"+i.postAt));
+  due.forEach(i=>remindedLocal.add(i.id+":"+i.postAt));
+  if(!due.length) return;
+  const f=due[0]; chime(); catMove("hop");
+  catSays("Time to post","“"+f.title+"”"+(f.platforms.length?" on "+f.platforms.map(p=>pMap[p].s).join(", "):"")+(due.length>1?" +"+(due.length-1)+" more":""),{label:"Open Publish",fn:()=>{ openItem(f.id); setTab("publish") }});
+}
+setInterval(postWatch,60000);
 function shootWhen(x){ const d=new Date(x.start); return DOW[(d.getDay()+6)%7]+" "+d.getDate()+" "+MONTHS[d.getMonth()].slice(0,3)+", "+hm(x.start)+"–"+hm(x.end) }
 const gcalUtc=ms=>new Date(ms).toISOString().replace(/[-:]/g,"").replace(/\.\d{3}/,"");
 function gcalLink(x){ return "https://calendar.google.com/calendar/render?action=TEMPLATE&text="+encodeURIComponent("Gearizo shoot"+(x.title?": "+x.title:""))+"&dates="+gcalUtc(x.start)+"/"+gcalUtc(x.end)+"&details="+encodeURIComponent(x.notes||"")+"&location="+encodeURIComponent(x.location||"") }
