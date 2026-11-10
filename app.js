@@ -918,26 +918,34 @@ function renderHome(){
   }
   const nxCard='<section class="hcard"><h2 class="ch"><span class="ti">'+IC.next+'</span>Next'+(more?'<button type="button" class="btn sm see" data-go="'+more+'">See all</button>':"")+'</h2><div class="ul">'+(nrows||'<div class="empty">All clear.</div>')+'</div></section>';
   const newCard=(readOnly||isHr())?"":'<button type="button" class="newc" data-go="new"><span class="plus" aria-hidden="true">+</span><span><b>'+(isMk()?"New request":"New")+'</b><small>Video or design</small></span><span class="stack" aria-hidden="true"><i></i><i></i><i></i></span></button>';
-  /* Posting: what's waiting to go out, when, and what just went live */
+  /* Posting: a 14-day ruler (3 days back, 10 ahead) with a dot per post; the pill shows the chosen one */
   let posting="";
   if(!isHr()){
-    const recent=cnt(["posted"]).filter(i=>i.postedAt>nowMs-7*864e5).sort((a,b)=>b.postedAt-a.postedAt);
-    const q=[...sched,...toPost.filter(i=>!(i.status==="scheduled"&&i.postAt)).sort(byDue),...recent].slice(0,12);
-    const card=i=>{ const s=i.status==="scheduled"&&i.postAt>0, p=i.status==="posted", due=s&&i.postAt<=nowMs, at=s?i.postAt:p?i.postedAt:0, d=at?new Date(at):null, t=at?hmParts(at):["--:--",""];
-      return '<button type="button" class="pq'+(p?" done":due?" due":s?"":" none")+'" data-go="'+(isMk()&&!p?"publish:":"item:")+esc(i.id)+'" style="--c:'+sMap[i.series].c+'">'+
-        '<span class="pq-d">'+(d?esc(DOW[(d.getDay()+6)%7]+" "+d.getDate()+" "+MONTHS[d.getMonth()].slice(0,3)):"No time yet")+'</span>'+
-        '<span class="pq-t"><b class="dn">'+esc(t[0])+'</b><small>'+esc(t[1])+'</small></span>'+
-        '<span class="pq-n">'+esc(i.title)+'</span>'+
-        '<span class="pq-f"><span>'+esc(i.platforms.map(x=>pMap[x].s).join(" · ")||"–")+'</span><span class="pl" style="--k:'+(p?"var(--ready)":due?"var(--pink)":s?"var(--sched)":"var(--ink-3)")+'"><i></i>'+(p?"Posted":due?"Due":s?"Scheduled":"No time")+'</span></span></button>' };
+    const DAYS=14, start=new Date(t0.getFullYear(),t0.getMonth(),t0.getDate()-3).getTime();
+    const dayIdx=ms=>{ const d=new Date(ms); d.setHours(0,0,0,0); return Math.round((d.getTime()-start)/864e5) };
+    const evs=[...sched.map(i=>({i,at:i.postAt,k:i.postAt<=nowMs?"due":"sch"})),...cnt(["posted"]).filter(i=>i.postedAt>=start).map(i=>({i,at:i.postedAt,k:"done"}))];
+    const cols=Array.from({length:DAYS},()=>[]); let later=0;
+    evs.forEach(e=>{ const d=dayIdx(e.at); if(d>=DAYS) later++; else if(d>=0) cols[d].push(e) });
+    const pick=evs.find(e=>e.i.id===postSel)||evs.filter(e=>e.k==="due").sort((a,b)=>a.at-b.at)[0]||evs.filter(e=>e.k==="sch").sort((a,b)=>a.at-b.at)[0]||evs.slice().sort((a,b)=>b.at-a.at)[0];
+    const ruler='<div class="pt-rail">'+cols.map((c,d)=>{ const day=new Date(start+d*864e5);
+      return '<div class="pt-col'+(d===3?" today":d<3?" past":"")+'"><div class="pt-dots">'+c.sort((a,b)=>a.at-b.at).slice(0,3).map(e=>'<button type="button" class="pt-dot '+e.k+(pick&&e.i.id===pick.i.id?" sel":"")+'" data-psel="'+esc(e.i.id)+'" title="'+esc(e.i.title+" · "+postWhen(e.at))+'" aria-label="'+esc(e.i.title+", "+postWhen(e.at))+'"></button>').join("")+'</div>'+
+        '<i class="pt-tick"></i><span class="pt-lab">'+(d===3?"Today":day.getDate())+'</span></div>' }).join("")+(later?'<span class="pt-later">+'+later+' later</span>':"")+'</div>';
+    const pill=pick?'<button type="button" class="pt-pill '+pick.k+'" data-go="'+(isMk()&&pick.k!=="done"?"publish:":"item:")+esc(pick.i.id)+'"><span class="pt-ic">'+IC.posted+'</span><span class="pt-tx"><b>'+esc(pick.i.title)+'</b><span>'+esc(postWhen(pick.at))+(pick.i.platforms.length?" · "+esc(pick.i.platforms.map(x=>pMap[x].s).join(", ")):"")+'</span></span><span class="pt-st">'+(pick.k==="done"?"Posted":pick.k==="due"?"Due now":"Scheduled")+'</span></button>'
+      :'<div class="pt-pill empty"><span class="pt-ic">'+IC.posted+'</span><span class="pt-tx"><b>Nothing scheduled</b><span>'+(toPost.length?toPost.length+" waiting for a time":"All posted")+'</span></span></div>';
+    const nt=toPost.filter(i=>!(i.status==="scheduled"&&i.postAt));
+    const ntRow=nt.length?'<div class="pt-nt"><span class="pt-ntl">No time</span>'+nt.slice(0,6).map(i=>'<button type="button" class="pt-chip" data-go="'+(isMk()?"publish:":"item:")+esc(i.id)+'" style="--c:'+sMap[i.series].c+'">'+esc(i.title)+'</button>').join("")+(nt.length>6?'<span class="pt-ntl">+'+(nt.length-6)+'</span>':"")+'</div>':"";
     posting='<section class="hcard posting" id="posting"><h2 class="ch"><span class="ti">'+IC.posted+'</span>Posting'+
-      '<span class="pl" style="--k:var(--sched)"><i></i>'+toPost.length+' to post</span>'+(dueN?'<span class="pl" style="--k:var(--pink)"><i></i>'+dueN+' due</span>':"")+(noTime?'<span class="pl"><i></i>'+noTime+' no time</span>':"")+
+      '<span class="pl" style="--k:var(--sched)"><i></i>'+toPost.length+' to post</span>'+(dueN?'<span class="pl" style="--k:var(--pink)"><i></i>'+dueN+' due</span>':"")+
       '<span class="pmonth" title="Posted this month">'+postedM+' / '+inMonth.length+' in '+MONTHS[t0.getMonth()].slice(0,3)+'<span class="pticks" style="--p:'+(inMonth.length?(postedM/inMonth.length).toFixed(3):0)+'"></span></span></h2>'+
-      '<div class="pqrow">'+(q.length?q.map(card).join(""):'<div class="empty">Nothing waiting to post.</div>')+'</div></section>';
+      '<div class="pt">'+ruler+pill+ntRow+'</div></section>';
   }
   setHTML($("homeView"),strip+'<div class="hgrid">'+tiles+'</div>'+posting+'<div class="hrow">'+upd+'<div class="hside">'+nxCard+newCard+'</div></div>');
 }
+let postSel=null;
 $("homeView").addEventListener("click",e=>{
   const n=e.target.closest("[data-n]"); if(n){ openNotif(n); return }
+  const ps=e.target.closest("[data-psel]");
+  if(ps){ const it=items.get(ps.dataset.psel); if(postSel===ps.dataset.psel&&it){ if(isMk()&&it.status!=="posted"){ openItem(it.id); setTab("publish") } else goReview(it.id); return } postSel=ps.dataset.psel; renderHome(); return }
   const b=e.target.closest("[data-go]"); if(!b||!b.dataset.go) return;
   const i=b.dataset.go.indexOf(":"), k=i<0?b.dataset.go:b.dataset.go.slice(0,i), v=i<0?"":b.dataset.go.slice(i+1);
   if(k==="view"){ window.scrollTo(0,0); location.hash=v }
