@@ -14,7 +14,7 @@ Commands (all print JSON):
                         -> moves a file from Checking into approve: {"from","to"}; if the path is gone
                            (file renamed), finds the file in Checking by its size and mtime
 """
-import json, os, re, subprocess, sys, time
+import json, os, re, shutil, subprocess, sys, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import settings as S  # noqa: E402
@@ -264,7 +264,21 @@ def do_move(path, size=None, mtime=None):
     dst, i = os.path.join(APPROVE, base + ext), 2
     while os.path.exists(dst):
         dst, i = os.path.join(APPROVE, "%s (%d)%s" % (base, i, ext)), i + 1
-    os.rename(src, dst)
+    try:
+        os.rename(src, dst)
+    except OSError:
+        # Some files carry a protected macOS tag (com.apple.macl) that this NAS refuses to rename.
+        # Copy the data instead, check it arrived whole, then remove the original from Checking.
+        tmp = dst + ".part"
+        shutil.copyfile(src, tmp)
+        if os.path.getsize(tmp) != os.path.getsize(src):
+            os.remove(tmp)
+            raise
+        os.rename(tmp, dst)
+        try:
+            os.remove(src)
+        except OSError:
+            return {"from": path, "to": dst, "original_left": True}
     return {"from": path, "to": dst}
 
 

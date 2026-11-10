@@ -83,12 +83,16 @@ def move_approved(items, versions):
         link = v.get("link") or ""
         if not link.startswith(CHECKING_PREFIX):
             continue
-        r = NP.do_move(link, v.get("size"), v.get("mtime"))
+        try:
+            r = NP.do_move(link, v.get("size"), v.get("mtime"))
+        except OSError as e:  # NAS hiccup (e.g. right after reconnecting): try again next run
+            log(f"move failed for {it.get('title')}, will retry: {e}")
+            continue
         if "error" in r:
             log(f"move skipped for {it.get('title')}: {r['error']} ({link})")
             continue
         merge("versions", vid, {"link": r["to"]})
-        log(f"moved approved file of {it.get('title')} -> {r['to']}")
+        log(f"moved approved file of {it.get('title')} -> {r['to']}" + (" (copied; the original could not be removed from Checking)" if r.get("original_left") else ""))
 
 
 def handle_new(items, versions):
