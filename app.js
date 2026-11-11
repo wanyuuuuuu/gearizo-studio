@@ -39,7 +39,7 @@ const shortDate=s=>{const d=parse(s);return d.getDate()+" "+MONTHS[d.getMonth()]
 const fmtTime=ms=>{const d=new Date(ms);let h=d.getHours();const ap=h>=12?"pm":"am";h=h%12||12;return d.getDate()+" "+MONTHS[d.getMonth()].slice(0,3)+", "+h+":"+pad(d.getMinutes())+" "+ap};
 const newId=()=>"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
-let items=new Map(), versions=[], feedback=[], focus=[];
+let items=new Map(), versions=[], feedback=[], focus=[], ideas=[], ideaFrom=null, liveIdeas=false;
 let db=null, assets=null, userNs=null, myId=null, amOwner=false, names={}, myName="";
 let mode="local", readOnly=false, live={items:false,focus:false,team:false};
 let team={}, promptedRole=false, inbox=[], tasks=[], shoots=[], avail=[], busy=[], jobs={}, metaState=null;
@@ -265,7 +265,7 @@ function render(){
   else if(sv) renderShoots();
   else if(tv) {}
   else renderColumns(STATUSES);
-  renderFocus(); renderNotifs(); renderTasks();
+  renderFocus(); renderIdeas(); renderNotifs(); renderTasks();
   if($("dlg").open&&editingId) renderPublish();
 }
 
@@ -362,6 +362,11 @@ async function connect(){
       if(view==="home") renderHome(); if($("dlg").open&&editingId) renderPublish();
     },()=>{});
     loadMeta();
+    db.collection("ideas").onSnapshot(snap=>{
+      liveIdeas=true;
+      ideas=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,title:String(v.title||"").slice(0,200),notes:String(v.notes||"").slice(0,20000),by:String(v.by||""),at:Number(v.at)||0}}).filter(x=>x.title).sort((a,b)=>b.at-a.at);
+      renderIdeas();
+    },()=>{ liveIdeas=false; renderIdeas() });
     db.collection("focus").onSnapshot(snap=>{
       live.focus=true;
       raw.focus=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,name:String(v.name||""),month:String(v.month||""),created:Number(v.created)||0}}).filter(f=>f.name).sort((a,b)=>a.created-b.created); applyPreview();
@@ -386,7 +391,7 @@ function setTab(t){
 }
 function openItem(id,presetDate,presetProduct){
   if(readOnly&&!id) return;
-  editingId=id||null; editingProduct=id?"":(presetProduct||"");
+  editingId=id||null; editingProduct=id?"":(presetProduct||""); ideaFrom=null;
   const it=id?items.get(id):{title:presetProduct||"",series:presetProduct||isEc()?"product":(filters.size===1?[...filters][0]:"garage"),status:"idea",platforms:isEc()?["shopee","lazada"]:["reel"],langs:[],kind:"",date:presetDate||"",notes:"",caption:"",
     type:myRole()==="ecomm"?"design":"video",sizes:[],sizeNote:"",refs:[],team:isMk()?myRole():(teamF||"marketing")};
   if(!it) return;
@@ -453,6 +458,7 @@ async function saveItem(close){
   }
   if(!prev||prev.status!==data.status) Object.assign(data,stamp(data.status,id));
   persist(id,data);
+  if(isNew&&ideaFrom&&db){ const from=ideaFrom; ideaFrom=null; db.collection("ideas").doc(from).delete().catch(()=>{}) }
   if(isNew){ editingId=id; $("fDelete").hidden=readOnly; toast("Added."); }
   else toast("Saved.");
   if(close!==false) $("dlg").close(); else renderPublish();
@@ -1281,6 +1287,7 @@ function renderFocus(){
   if(!live.focus){ $("fpForm").hidden=true; list.innerHTML='<div class="empty">'+(mode==="db"?"Loading…":"Sign in to claude.ai to see focus products.")+'</div>'; return }
   $("fpForm").hidden=focusRO;
   const mine=focus.filter(f=>f.month===mk);
+  if($("fpCount")){ $("fpCount").hidden=!mine.length; $("fpCount").textContent=mine.length }
   if(!mine.length){ list.innerHTML='<div class="empty">None yet.</div>'; return }
   list.innerHTML=mine.map(f=>{
     const n=[...items.values()].filter(i=>i.product===f.name&&i.date.startsWith(mk)).length;
@@ -1303,6 +1310,63 @@ $("fpList").addEventListener("click",async e=>{
   openItem(null,"",p.dataset.name);
 });
 $("fpList").addEventListener("keydown",e=>{ if(e.key==="Enter"&&e.target.classList.contains("pchip")) openItem(null,"",e.target.dataset.name) });
+/* Fold the side trays (remembered on this device) */
+const FOLD_KEY="gearizo-fold-v1";
+let folds={}; try{ folds=JSON.parse(localStorage.getItem(FOLD_KEY)||"{}")||{} }catch(e){}
+function applyFolds(){ document.querySelectorAll("[data-fold]").forEach(b=>{ const shut=!!folds[b.dataset.fold]; b.setAttribute("aria-expanded",String(!shut)); $(b.getAttribute("aria-controls")).hidden=shut }) }
+document.querySelectorAll("[data-fold]").forEach(b=>b.addEventListener("click",()=>{ folds[b.dataset.fold]=!folds[b.dataset.fold]; try{ localStorage.setItem(FOLD_KEY,JSON.stringify(folds)) }catch(e){} applyFolds() }));
+applyFolds();
+
+/* Ideas: written down before anyone plans them. No date and no GZ code until someone starts one. */
+function renderIdeas(){
+  const box=$("ideas"); if(!box) return;
+  const show=isCr()&&!previewRole&&mode==="db"&&liveIdeas;
+  box.hidden=!show; if(!show) return;
+  $("idCount").hidden=!ideas.length; $("idCount").textContent=ideas.length;
+  box.querySelector(".idsub").textContent=narrow.matches?"No date, no code. Tap one and press Start when you begin.":"No date, no code. Drag one onto a day when you start it.";
+  $("idList").innerHTML=ideas.length?ideas.map(x=>'<div class="ichip" draggable="'+(!readOnly)+'" data-idea="'+esc(x.id)+'" tabindex="0" role="button" title="Open idea"><span class="pn">'+esc(x.title)+'</span>'+(x.notes.trim()?'<span class="pc">notes</span>':"")+'</div>').join(""):'<div class="empty">None yet.</div>';
+}
+async function addIdea(){
+  if(!db||readOnly) return;
+  const title=$("idText").value.trim(); if(!title){ $("idText").focus(); return }
+  try{ await db.collection("ideas").add({title,notes:"",by:myId||"",at:Date.now()}); $("idText").value="" }
+  catch(e){ writeErr(e,"ideas") }
+}
+let ideaOpen=null;
+function openIdea(id){
+  const x=ideas.find(i=>i.id===id); if(!x) return;
+  ideaOpen=id; $("ideaTitle").value=x.title; $("ideaNotes").value=x.notes;
+  $("ideaDel").textContent="Delete"; $("ideaDel").dataset.armed=""; $("ideaDel").hidden=readOnly; $("ideaStart").hidden=readOnly;
+  $("ideaDlg").showModal();
+}
+async function keepIdea(){
+  const x=ideas.find(i=>i.id===ideaOpen); if(!x||readOnly||!db) return x;
+  const title=$("ideaTitle").value.trim()||x.title, notes=$("ideaNotes").value;
+  if(title!==x.title||notes!==x.notes){ try{ await db.collection("ideas").doc(x.id).update({title,notes}) }catch(e){ writeErr(e,"ideas") } }
+  return {...x,title,notes};
+}
+/* Start: the normal new-item form, filled in from the idea. The idea leaves the list once that item is saved. */
+function startIdea(x,date){
+  openItem(null,date||"");
+  $("fTitle").value=x.title; $("fNotes").value=x.notes; if(x.notes.trim()) $("fMore").open=true;
+  ideaFrom=x.id;
+  if(!date) setTimeout(()=>{ $("fDate").focus() },60);
+  toast(date?"Check the details, then Save. It gets its code then.":"Pick a date, then Save. It gets its code then.");
+}
+if($("ideas")&&$("ideaDlg")){
+$("idAdd").onclick=addIdea;
+$("idText").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addIdea() } });
+$("idList").addEventListener("click",e=>{ const c=e.target.closest("[data-idea]"); if(c) openIdea(c.dataset.idea) });
+$("idList").addEventListener("keydown",e=>{ if(e.key==="Enter"&&e.target.dataset.idea) openIdea(e.target.dataset.idea) });
+$("ideaClose").onclick=async()=>{ await keepIdea(); $("ideaDlg").close() };
+$("ideaForm").addEventListener("submit",async e=>{ e.preventDefault(); if(readOnly) return; const x=await keepIdea(); $("ideaDlg").close(); if(x) startIdea(x,"") });
+$("ideaDel").onclick=async()=>{
+  const b=$("ideaDel");
+  if(!b.dataset.armed){ b.dataset.armed="1"; b.textContent="Tap again to delete"; return }
+  try{ await db.collection("ideas").doc(ideaOpen).delete(); $("ideaDlg").close(); toast("Idea deleted.") }catch(e){ writeErr(e,"ideas") }
+};
+$("ideaDlg").addEventListener("cancel",()=>{ keepIdea() });
+}
 function addProductItem(name,date){
   if(!date) return;
   const id=newId();
@@ -1446,23 +1510,26 @@ $("copyCap").onclick=()=>{ const t=$("fCaption").value.trim(); if(!t){toast("No 
 $("fCaption").addEventListener("blur",()=>{ if(editingId&&!readOnly){ const prev=items.get(editingId); if(prev&&prev.caption!==$("fCaption").value) persist(editingId,{...prev,caption:$("fCaption").value}) } });
 
 /* Drag and drop */
-let dragId=null, dragProduct=null;
+let dragId=null, dragProduct=null, dragIdea=null;
 document.addEventListener("dragstart",e=>{
+  const ic=e.target.closest&&e.target.closest(".ichip");
+  if(ic){ if(readOnly) return; dragIdea=ic.dataset.idea; e.dataTransfer.effectAllowed="copy"; try{e.dataTransfer.setData("text/plain",dragIdea)}catch(_){} return }
   const pc=e.target.closest&&e.target.closest(".pchip");
   if(pc){ if(readOnly) return; dragProduct=pc.dataset.name; e.dataTransfer.effectAllowed="copy"; try{e.dataTransfer.setData("text/plain",dragProduct)}catch(_){} return }
   const c=e.target.closest&&e.target.closest(".chip"); if(!c||readOnly) return;
   dragId=c.dataset.id; c.classList.add("dragging");
   e.dataTransfer.effectAllowed="move"; try{e.dataTransfer.setData("text/plain",dragId)}catch(_){}
 });
-document.addEventListener("dragend",()=>{dragId=null;dragProduct=null;document.querySelectorAll(".dragging,.over").forEach(el=>el.classList.remove("dragging","over"))});
+document.addEventListener("dragend",()=>{dragId=null;dragProduct=null;dragIdea=null;document.querySelectorAll(".dragging,.over").forEach(el=>el.classList.remove("dragging","over"))});
 const target=e=>e.target.closest&&e.target.closest(".cell,.col");
 document.addEventListener("dragover",e=>{
-  const t=target(e); if(!t||!(dragId||(dragProduct&&t.classList.contains("cell")))) return; e.preventDefault();
+  const t=target(e); if(!t||!(dragId||((dragProduct||dragIdea)&&t.classList.contains("cell")))) return; e.preventDefault();
   document.querySelectorAll(".over").forEach(el=>{if(el!==t)el.classList.remove("over")}); t.classList.add("over");
 });
 document.addEventListener("drop",e=>{
   const t=target(e); if(!t) return;
   if(dragProduct){ if(!t.classList.contains("cell")) return; e.preventDefault(); addProductItem(dragProduct,t.dataset.date); return }
+  if(dragIdea){ if(!t.classList.contains("cell")) return; e.preventDefault(); const x=ideas.find(i=>i.id===dragIdea); dragIdea=null; if(x) startIdea(x,t.dataset.date); return }
   if(!dragId) return; e.preventDefault();
   const it=items.get(dragId); if(!it) return;
   const next={...it};

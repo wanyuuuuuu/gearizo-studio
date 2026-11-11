@@ -75,7 +75,7 @@ a{color:var(--blue)}
 .dim .fchip[aria-pressed="false"]{opacity:.55}
 .note{font-size:13px;color:var(--ink-3)}
 
-.layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px;align-items:start}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:20px;align-items:start}
 .side{display:flex;flex-direction:column;gap:16px;min-width:0}
 .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--ink-2);margin:0 0 10px}
 .legend span{display:inline-flex;align-items:center;gap:6px}
@@ -178,6 +178,24 @@ details.older summary{cursor:pointer;font-weight:600;color:var(--ink-2);font-siz
 .role-wrap{padding:20px 22px;display:flex;flex-direction:column;gap:12px}
 .role-wrap h2{font-family:var(--display);font-weight:700;font-size:28px;line-height:1.05;margin:0;text-wrap:balance}
 .role-wrap > p{margin:0}
+/* Side trays fold away; Ideas wait there without a date or code */
+.tray h2.tray-h2{margin:0;font-size:16px}
+.tray-fold{display:flex;align-items:center;gap:8px;width:100%;border:0;background:none;padding:0;margin:0;color:inherit;font:inherit;cursor:pointer;text-align:left;min-height:28px}
+.tray-fold .tcount{font-family:var(--body);font-size:12px;font-weight:600;letter-spacing:0;color:var(--ink-2);background:rgba(255,255,255,.7);border-radius:999px;padding:1px 8px}
+.tray-fold .chev{margin-left:auto;width:7px;height:7px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);transform:translateY(-2px) rotate(45deg);transition:transform .2s}
+.tray-fold[aria-expanded="false"] .chev{transform:rotate(-45deg)}
+.tbody{margin-top:10px}
+.tbody > p.tsub{display:none}
+.tbody > p.idsub{margin:0 0 8px;font-size:12px}
+.ichip{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px dashed var(--ink-3);border-left:3px solid var(--review);border-radius:6px;padding:7px 8px 7px 10px;cursor:grab;text-align:left}
+.ichip:hover{background:color-mix(in srgb,var(--review) 10%,var(--surface))}
+.ichip .pn{font-weight:600;font-size:14px;flex:1;min-width:0;word-break:break-word}
+.ichip .pc{font-size:11.5px;color:var(--ink-3);white-space:nowrap}
+dialog#ideaDlg{width:min(480px,calc(100vw - 24px))}
+#ideaDlg input,#ideaDlg textarea{border:0;background:var(--sunk);border-radius:12px;padding:9px 11px;min-height:40px;font-weight:400;color:var(--ink);font-size:15px}
+#ideaDlg textarea{min-height:150px;resize:vertical;line-height:1.5}
+.idea-acts{display:flex;gap:8px;align-items:center}
+.idea-acts .sp{flex:1}
 body.nocat #cat,body.nocat #catSay{display:none!important}
 .prefrow{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--sunk);border-radius:14px;padding:10px 12px;cursor:pointer}
 .prefrow .pt{display:flex;flex-direction:column;gap:2px;font-size:14px}
@@ -1355,10 +1373,20 @@ dialog::backdrop{background:rgba(60,48,70,.18);-webkit-backdrop-filter:blur(8px)
     </section>
     <div class="side">
       <aside class="tray" id="focus" aria-labelledby="fpTitle">
-        <h2 id="fpTitle">Focus products</h2>
-        <p id="fpSub">Drag a product onto a day to plan it.</p>
-        <div class="focus-form" id="fpForm" hidden><input id="fpText" placeholder="Product" aria-label="Product name" autocomplete="off"><button class="btn" id="fpAdd" type="button">Add</button></div>
-        <div class="list" id="fpList"></div>
+        <h2 class="tray-h2"><button class="tray-fold" type="button" data-fold="focus" aria-expanded="true" aria-controls="fpBody"><span id="fpTitle">Focus products</span><span class="tcount" id="fpCount" hidden></span><span class="chev" aria-hidden="true"></span></button></h2>
+        <div class="tbody" id="fpBody">
+          <p class="tsub" id="fpSub">Drag a product onto a day to plan it.</p>
+          <div class="focus-form" id="fpForm" hidden><input id="fpText" placeholder="Product" aria-label="Product name" autocomplete="off"><button class="btn" id="fpAdd" type="button">Add</button></div>
+          <div class="list" id="fpList"></div>
+        </div>
+      </aside>
+      <aside class="tray" id="ideas" aria-labelledby="idTitle" hidden>
+        <h2 class="tray-h2"><button class="tray-fold" type="button" data-fold="ideas" aria-expanded="true" aria-controls="idBody"><span id="idTitle">Ideas</span><span class="tcount" id="idCount" hidden></span><span class="chev" aria-hidden="true"></span></button></h2>
+        <div class="tbody" id="idBody">
+          <p class="hint idsub">No date, no code. Drag one onto a day when you start it.</p>
+          <div class="focus-form"><input id="idText" placeholder="New idea" aria-label="New idea" autocomplete="off" maxlength="200"><button class="btn" id="idAdd" type="button">Add</button></div>
+          <div class="list" id="idList"></div>
+        </div>
       </aside>
     </div>
   </div>
@@ -1441,6 +1469,15 @@ dialog::backdrop{background:rgba(60,48,70,.18);-webkit-backdrop-filter:blur(8px)
     </div>
     <div class="row" style="display:flex;justify-content:space-between;gap:8px"><button class="btn ghost" id="gzSignOutBtn" type="button" onclick="window.gzSignOut&&window.gzSignOut()">Sign out</button><button class="btn" id="roleClose" type="button">Close</button></div>
   </div>
+</dialog>
+<dialog id="ideaDlg" aria-labelledby="ideaH">
+  <form class="role-wrap" id="ideaForm" novalidate>
+    <h2 id="ideaH">Idea</h2>
+    <label class="fl">Title<input id="ideaTitle" autocomplete="off" maxlength="200"></label>
+    <label class="fl">Notes<textarea id="ideaNotes" placeholder="Hook, script, shot list…"></textarea></label>
+    <p class="hint">It gets a GZ code only when you start it and save it on the calendar.</p>
+    <div class="row idea-acts"><button class="btn ghost danger" type="button" id="ideaDel">Delete</button><span class="sp"></span><button class="btn" type="button" id="ideaClose">Close</button><button class="btn primary" type="submit" id="ideaStart">Start →</button></div>
+  </form>
 </dialog>
 <dialog id="shootDlg" aria-labelledby="shH">
   <form class="role-wrap" id="shootForm" novalidate>
