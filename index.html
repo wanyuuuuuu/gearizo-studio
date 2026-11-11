@@ -1250,6 +1250,42 @@ dialog::backdrop{background:rgba(60,48,70,.18);-webkit-backdrop-filter:blur(8px)
 @media (prefers-reduced-motion: reduce){ .qbtn,.qbtn svg{transition:none} .qlist{animation:none} .qbtn:hover:not(:disabled){transform:none} }
 
 /* Pipeline and Tasks use the same glass buttons */
+/* Pipeline list */
+.plbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}
+.plbar .seg{display:inline-flex;background:rgba(255,255,255,.55);border-radius:999px;padding:3px;box-shadow:var(--hair)}
+.plbar .seg button{border:0;background:none;border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer}
+.plbar .seg button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.plbar input,.plbar select{border:0;border-radius:999px;background:rgba(255,255,255,.7);box-shadow:var(--hair);padding:8px 14px;min-height:36px;font-size:14px;color:var(--ink)}
+.plbar input{flex:1 1 200px;min-width:0;max-width:340px}
+.pltable{display:flex;flex-direction:column;gap:6px}
+.plhead,.plrow{display:grid;grid-template-columns:96px minmax(0,1.5fr) minmax(0,1.3fr) 88px;gap:12px;align-items:center}
+.plhead{padding:0 14px}
+.plhead button{border:0;background:none;padding:2px 0;text-align:left;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);cursor:pointer}
+.plhead button.on{color:var(--ink)}
+.plrow{width:100%;text-align:left;border:0;cursor:pointer;color:var(--ink);background:var(--glass);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);box-shadow:var(--lift),inset 3px 0 0 var(--c);border-radius:16px;padding:10px 14px;font:inherit}
+.plrow:hover{background:rgba(255,255,255,.85)}
+.plcode{font-family:var(--display);font-weight:700;font-size:15px;display:flex;align-items:baseline;gap:6px;white-space:nowrap}
+.plcode small{font-family:var(--body);font-size:11.5px;font-weight:600;color:var(--ink-3)}
+.plcode em,.pldate em{font-style:normal;color:var(--ink-3);font-weight:400}
+.pltitle{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pltitle b{font-size:14.5px;font-weight:600;overflow-wrap:anywhere}
+.pltitle small{font-size:12px;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:0 8px}
+.plfile{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.plprog{display:flex;align-items:center;gap:10px;min-width:0}
+.prog{display:inline-flex;gap:3px;flex:none}
+.prog i{width:14px;height:6px;border-radius:3px;background:rgba(20,26,32,.10)}
+.prog i.done{background:color-mix(in srgb,var(--k) 55%,#fff)}
+.prog i.now{background:var(--k)}
+.plst{font-size:13px;font-weight:600;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plst.warn{color:var(--edit)}
+.pldate{font-size:13px;color:var(--ink-2);white-space:nowrap}
+.plcount{margin:10px 2px 0}
+@media (max-width:720px){
+  .plhead{display:none}
+  .plrow{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"code title date" "prog prog prog";row-gap:8px}
+  .plcode{grid-area:code} .pltitle{grid-area:title} .pldate{grid-area:date} .plprog{grid-area:prog}
+  .plbar input{max-width:none}
+}
 .gboard{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;align-items:start}
 .gboard .col{background:transparent;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;padding:0;min-height:0;border:0;border-radius:30px;display:flex;flex-direction:column;gap:8px}
 .gboard .col.over{outline:2px dashed var(--pink);outline-offset:4px}

@@ -240,10 +240,55 @@ const CHEV='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-wi
 function qbtn(id,name,n,open,attr,o){ o=o||{};
   return '<button type="button" class="qbtn" '+attr+'="'+esc(id)+'" aria-expanded="'+open+'"'+(o.can===false||(o.can==null&&!n)?" disabled":"")+'><i></i><span>'+esc(name)+'</span><b class="dn'+(o.hot?" hot":"")+'">'+n+'</b>'+CHEV+'</button>' }
 const pipeOpen=new Set();
+/* Pipeline as a list (default) or the old board; the choice, sort and stage filter stay on this device */
+const PIPE_KEY="gearizo-pipe-v1", STEPS=["idea","script","shoot","edit","review","approved","scheduled","posted"];
+let pipe={mode:"list",sort:"code",dir:1,stage:"",q:""};
+try{ const p=JSON.parse(localStorage.getItem(PIPE_KEY)||"{}")||{}; ["mode","sort","stage"].forEach(k=>{ if(typeof p[k]==="string") pipe[k]=p[k] }); if(p.dir===-1) pipe.dir=-1 }catch(e){}
+function savePipe(){ try{ localStorage.setItem(PIPE_KEY,JSON.stringify({mode:pipe.mode,sort:pipe.sort,dir:pipe.dir,stage:pipe.stage})) }catch(e){} }
+const fileOf=it=>{ const v=vFor(it.id).find(v=>v.link); return v?v.link.split(/[\\/]/).pop():"" };
+function progHtml(it){
+  const at=it.status==="changes"?STEPS.indexOf("review"):STEPS.indexOf(it.status), k=ST_K[it.status]||"var(--ink-3)";
+  return '<span class="prog" style="--k:'+k+'" aria-label="'+esc(stLabel(it))+', step '+(at+1)+' of '+STEPS.length+'">'+STEPS.map((s,i)=>'<i class="'+(i<at?"done":i===at?"now":"")+'"></i>').join("")+'</span><span class="plst'+(it.status==="changes"?" warn":"")+'">'+esc(it.status==="changes"?"Needs changes":stLabel(it))+'</span>';
+}
+function renderPipeline(){
+  const m=$("main");
+  if(!$("plBar")||!m.contains($("plBar"))){
+    m.innerHTML='<div class="plbar" id="plBar">'+
+      '<div class="seg" role="group" aria-label="Pipeline view"><button type="button" data-pm="list">List</button><button type="button" data-pm="board">Board</button></div>'+
+      '<input type="search" id="plQ" placeholder="Search GZ code or title" aria-label="Search GZ code or title" autocomplete="off">'+
+      '<select id="plStage" aria-label="Stage"><option value="">All stages</option><option value="open">Not posted yet</option>'+STATUSES.map(s=>'<option value="'+s.id+'">'+esc(s.name)+'</option>').join("")+'</select>'+
+      '</div><div id="plBody"></div>';
+  }
+  $("plQ").value=pipe.q; $("plStage").value=pipe.stage; $("plQ").hidden=$("plStage").hidden=pipe.mode!=="list";
+  m.querySelectorAll("[data-pm]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.pm===pipe.mode)));
+  if(pipe.mode==="board"){ renderColumns(STATUSES); return }
+  renderPipeList();
+}
+function renderPipeList(){
+  const body=$("plBody"); if(!body) return;
+  const q=pipe.q.trim().toLowerCase();
+  let list=[...items.values()].filter(visible).filter(it=>
+    (!pipe.stage||(pipe.stage==="open"?it.status!=="posted":it.status===pipe.stage))&&
+    (!q||(it.code+" "+it.title+" "+fileOf(it)).toLowerCase().includes(q)));
+  const rank=it=>it.status==="changes"?STEPS.indexOf("review")+.5:STEPS.indexOf(it.status);
+  const key={code:it=>it.code?Number(it.code.slice(2)):1e9,title:it=>it.title.toLowerCase(),prog:rank,date:it=>it.date||"9999"}[pipe.sort]||(it=>0);
+  list.sort((a,b)=>{ const x=key(a), y=key(b); return (x<y?-1:x>y?1:0)*pipe.dir||a.created-b.created });
+  const th=(k,label)=>'<button type="button" data-ps="'+k+'" class="'+(pipe.sort===k?"on":"")+'">'+label+(pipe.sort===k?(pipe.dir>0?" ↑":" ↓"):"")+'</button>';
+  body.innerHTML='<div class="pltable"><div class="plhead">'+th("code","File")+th("title","Title")+th("prog","Progress")+th("date","Post")+'</div>'+
+    (list.length?list.map(it=>{
+      const v=vFor(it.id)[0], f=fileOf(it), tm=TEAMS[it.team]||"";
+      return '<button type="button" class="plrow" data-open="'+esc(it.id)+'" style="--c:'+(sMap[it.series]||{c:"var(--ink-3)"}).c+'">'+
+        '<span class="plcode">'+(it.code?esc(it.code):'<em>—</em>')+(v?'<small>v'+v.n+'</small>':"")+'</span>'+
+        '<span class="pltitle"><b>'+esc(it.title)+'</b><small>'+esc([tm,it.type==="design"?"Design":""].filter(Boolean).join(" · "))+(f?'<span class="plfile" title="'+esc(f)+'">'+esc(f)+'</span>':"")+'</small></span>'+
+        '<span class="plprog">'+progHtml(it)+'</span>'+
+        '<span class="pldate">'+(it.date?esc(shortDate(it.date)):'<em>No date</em>')+'</span></button>';
+    }).join(""):'<p class="empty">Nothing matches.</p>')+
+    '</div><p class="hint plcount">'+list.length+' of '+[...items.values()].filter(visible).length+'</p>';
+}
 function renderColumns(cols){
   const all=sorted([...items.values()].filter(visible)), ec=isEc();
   const groups=ec?EC_PIPE:cols.map(c=>({id:c.id,name:c.name,sts:[c.id],k:ST_K[c.id]||"var(--ink-3)"}));
-  $("main").innerHTML='<div class="gboard">'+groups.map(g=>{
+  ($("plBody")||$("main")).innerHTML='<div class="gboard">'+groups.map(g=>{
     const list=all.filter(i=>g.sts.includes(i.status)), open=pipeOpen.has(g.id)&&list.length>0;
     return '<section class="'+(ec?"":"col ")+'qg'+(open?" open":"")+'"'+(ec?"":' data-status="'+g.id+'"')+' style="--k:'+g.k+'">'+qbtn(g.id,g.name,list.length,open,"data-pg")+
       (open?'<div class="qlist">'+list.map(i=>chip(i,true)).join("")+'</div>':"")+'</section>';
@@ -264,7 +309,7 @@ function render(){
   else if(rev) renderDesk();
   else if(sv) renderShoots();
   else if(tv) {}
-  else renderColumns(STATUSES);
+  else renderPipeline();
   renderFocus(); renderIdeas(); renderNotifs(); renderTasks();
   if($("dlg").open&&editingId) renderPublish();
 }
@@ -1388,9 +1433,14 @@ $("vTask").onclick=()=>{location.hash="tasks"};
 $("vShoot").onclick=()=>{location.hash="shoots"};
 window.addEventListener("hashchange",()=>{ const h=hashView(); view=h.v; if(h.v==="review"&&h.a){ wantSel=h.a; selId=null; $("desk").classList.toggle("phone-detail",narrow.matches) } render(); window.scrollTo(0,0) });
 narrow.addEventListener("change",render);
+$("main").addEventListener("input",e=>{ if(e.target.id==="plQ"){ pipe.q=e.target.value; renderPipeList() } });
+$("main").addEventListener("change",e=>{ if(e.target.id==="plStage"){ pipe.stage=e.target.value; savePipe(); renderPipeList() } });
 $("filters").addEventListener("click",e=>{const b=e.target.closest(".fchip"); if(!b) return; const s=b.dataset.series; filters.has(s)?filters.delete(s):filters.add(s); render()});
 $("main").addEventListener("click",e=>{
   const pg=e.target.closest("[data-pg]"); if(pg){ const k=pg.dataset.pg; pipeOpen.has(k)?pipeOpen.delete(k):pipeOpen.add(k); renderColumns(STATUSES); return }
+  const pm=e.target.closest("[data-pm]"); if(pm){ pipe.mode=pm.dataset.pm; savePipe(); $("plBar").remove(); renderPipeline(); return }
+  const ps=e.target.closest("[data-ps]"); if(ps){ const k=ps.dataset.ps; if(pipe.sort===k) pipe.dir=-pipe.dir; else { pipe.sort=k; pipe.dir=1 } savePipe(); renderPipeList(); return }
+  const pr=e.target.closest("[data-open]"); if(pr){ openItem(pr.dataset.open); return }
   if(e.target.closest(".shootchip")){ location.hash="shoots"; return }
   const c=e.target.closest(".chip"); if(c){openItem(c.dataset.id);return}
   const cell=e.target.closest(".cell"); if(cell&&!readOnly) openItem(null,cell.dataset.date);
