@@ -540,8 +540,10 @@ function attHtml(files){
   }).join("")+'</div>';
 }
 const pending={fb:[],v:[],refs:[]};
+const PEN_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg>';
+const canMark=f=>!!$("mkDlg")&&/^image\/(png|jpeg|webp)$/.test((f&&f.type)||"");
 function renderPending(k){
-  $(k+"Files").innerHTML=pending[k].map((f,i)=>'<span class="att-p">'+(f.type.startsWith("image/")?'<img src="'+(f._u||(f._u=URL.createObjectURL(f)))+'" alt="">':"")+esc(f.name)+'<button type="button" data-rm="'+k+':'+i+'" aria-label="Remove '+esc(f.name)+'">×</button></span>').join("");
+  $(k+"Files").innerHTML=pending[k].map((f,i)=>'<span class="att-p">'+(f.type.startsWith("image/")?'<img src="'+(f._u||(f._u=URL.createObjectURL(f)))+'" alt="">':"")+esc(f.name)+(k==="fb"&&canMark(f)?'<button type="button" class="att-mk" data-mk="'+i+'" aria-label="Mark up '+esc(f.name)+'" title="Mark up">'+PEN_SVG+'</button>':"")+'<button type="button" data-rm="'+k+':'+i+'" aria-label="Remove '+esc(f.name)+'">×</button></span>').join("");
 }
 function addPending(k,files){
   let bad=[];
@@ -584,14 +586,24 @@ async function dlFile(url,name){
     toast(c==="fetch"?"Couldn’t load that file. It may have been removed.":c==="rejected_extension"?"This file type can’t be saved here.":c==="rate_limited"?"A save is already waiting for you. Finish that one first.":"Couldn’t save the file. Try again.");
   }
 }
-function openLb(url,name){ lbFile={url,name}; $("lbImg").src=url; $("lbImg").alt=name||""; $("lbName").textContent=name||""; $("lb").showModal() }
+function openLb(url,name,el){ lbFile={url,name}; $("lbImg").src=url; $("lbImg").alt=name||""; $("lbName").textContent=name||"";
+  const mb=$("lbMark"); if(mb) mb.hidden=!(el&&el.closest&&el.closest("#detail")&&$("mkDlg")&&selId&&!$("fbAttach").hidden&&$("fbForm").offsetParent!==null);
+  $("lb").showModal() }
 document.addEventListener("click",e=>{
-  const v=e.target.closest("[data-lb]"); if(v){ e.preventDefault(); openLb(v.dataset.lb,v.dataset.name); return }
+  const v=e.target.closest("[data-lb]"); if(v){ e.preventDefault(); openLb(v.dataset.lb,v.dataset.name,v); return }
   const d=e.target.closest("[data-dl]"); if(d){ e.preventDefault(); dlFile(d.dataset.dl,d.dataset.name) }
 });
 $("lbClose").onclick=()=>$("lb").close();
 $("lb").addEventListener("click",e=>{ if(e.target===$("lb")) $("lb").close() });
 $("lbSave").onclick=()=>{ if(lbFile) dlFile(lbFile.url,lbFile.name) };
+if($("lbMark")) $("lbMark").onclick=async()=>{
+  if(!lbFile) return; const f={...lbFile}; $("lb").close();
+  if(!await markInto(f.url,f.name)) return;
+  const latest=selId&&vFor(selId)[0], imgs=latest?(latest.files||[]).filter(x=>x.type.startsWith("image/")):[], ix=imgs.findIndex(x=>"/_blob/"+x.id===f.url);
+  if(ix>=0&&!$("fbImgRow").hidden) $("fbImg").value=String(ix+1);
+  $("fbForm").scrollIntoView({block:"nearest"}); $("fbText").focus();
+  toast("Picture added. Write what to change, then post.");
+};
 
 /* Review desk: one content item's videos and feedback */
 /* NAS (UGREEN DXP2800, share "Marketing Content"). Each item has a folder the preview job watches. */
@@ -1488,6 +1500,7 @@ $("desk").addEventListener("click",e=>{
   const ib2=e.target.closest("[data-img]");
   if(ib2&&selId){ const v=vFor(selId).find(x=>x.n===Number(ib2.dataset.v))||vFor(selId)[0]; const f=v&&(v.files||[]).filter(x=>x.type.startsWith("image/"))[Number(ib2.dataset.img)-1]; if(f) openLb("/_blob/"+f.id,f.name); else toast("That image isn’t in this version any more."); return }
   const ts=e.target.closest(".ts"); if(ts){ seek(Number(ts.dataset.t),ts); return }
+  const mkb=e.target.closest("[data-mk]"); if(mkb){ const f=pending.fb[Number(mkb.dataset.mk)]; if(f) markInto(f,f.name,f); return }
   const rm=e.target.closest("[data-rm]"); if(rm){ const [k,i]=rm.dataset.rm.split(":"); pending[k].splice(Number(i),1); renderPending(k); return }
   const id=selId; if(!id) return;
   const a=e.target.closest("[data-act]");
@@ -1539,11 +1552,120 @@ async function captureFrame(btn){
   try{
     c.getContext("2d").drawImage(v,0,0,c.width,c.height);
     const blob=await new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error("empty")),"image/jpeg",0.88));
-    const file=new File([blob],"frame "+fmtSec(t).replace(":","m")+"s.jpg",{type:"image/jpeg"});
-    addPending("fb",[file]); setFbTime(t);
+    const name="frame "+fmtSec(t).replace(":","m")+"s.jpg";
+    if($("mkDlg")){ if(!await markInto(blob,name)) return }
+    else addPending("fb",[new File([blob],name,{type:"image/jpeg"})]);
+    setFbTime(t);
     $("fbForm").scrollIntoView({block:"nearest"}); $("fbText").focus();
     toast("Frame at "+fmtSec(t)+" added. Write what to change, then post.");
   }catch(e){ toast("Couldn’t capture this video. Take a screenshot and paste it into the feedback box instead.") }
+}
+/* Mark up a picture before it goes into feedback: box, circle, arrow, pen.
+   The clean picture and the shapes stay on the pending file, so tapping the pen again lets you change them. */
+const MK_KEY="gearizo-mk-v1", MK_HINT={rect:"Drag on the picture to draw a box",oval:"Drag on the picture to draw a circle",arrow:"Drag towards the spot to draw an arrow",pen:"Draw on the picture"};
+let mk=null, mkTool="rect", mkCol="#FF3B30";
+try{ const s=JSON.parse(localStorage.getItem(MK_KEY)||"{}"); if(MK_HINT[s.t]) mkTool=s.t; if(/^#[0-9A-F]{6}$/.test(s.c||"")) mkCol=s.c }catch(e){}
+function mkSync(){
+  if(!$("mkDlg")) return;
+  document.querySelectorAll("#mkDlg [data-mt]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.mt===mkTool)));
+  document.querySelectorAll("#mkDlg [data-mc]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.mc===mkCol)));
+  const n=mk?mk.shapes.length:0;
+  $("mkUndo").disabled=!n; $("mkHint").textContent=MK_HINT[mkTool]; $("mkHint").hidden=!(mk&&(mk.hint||!n));
+}
+function mkShape(ctx,s,W,H,lw){
+  ctx.save(); ctx.strokeStyle=ctx.fillStyle=s.c; ctx.lineWidth=lw; ctx.lineCap="round"; ctx.lineJoin="round";
+  ctx.shadowColor="rgba(0,0,0,.45)"; ctx.shadowBlur=lw; ctx.beginPath();
+  if(s.t==="pen"){
+    if(s.p.length===1){ ctx.arc(s.p[0][0]*W,s.p[0][1]*H,lw*.8,0,Math.PI*2); ctx.fill(); ctx.restore(); return }
+    s.p.forEach((q,i)=>i?ctx.lineTo(q[0]*W,q[1]*H):ctx.moveTo(q[0]*W,q[1]*H));
+  }else{
+    const x1=s.a[0]*W,y1=s.a[1]*H,x2=s.b[0]*W,y2=s.b[1]*H;
+    if(s.t==="rect") ctx.rect(Math.min(x1,x2),Math.min(y1,y2),Math.abs(x2-x1),Math.abs(y2-y1));
+    else if(s.t==="oval") ctx.ellipse((x1+x2)/2,(y1+y2)/2,Math.abs(x2-x1)/2,Math.abs(y2-y1)/2,0,0,Math.PI*2);
+    else{ const ang=Math.atan2(y2-y1,x2-x1), hd=Math.min(Math.hypot(x2-x1,y2-y1)*.5,lw*5);
+      ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+      ctx.moveTo(x2-hd*Math.cos(ang-.5),y2-hd*Math.sin(ang-.5)); ctx.lineTo(x2,y2); ctx.lineTo(x2-hd*Math.cos(ang+.5),y2-hd*Math.sin(ang+.5)) }
+  }
+  ctx.stroke(); ctx.restore();
+}
+function mkPaint(){
+  if(!mk) return; mk.raf=0;
+  const {ctx,cv,im}=mk, W=cv.width, H=cv.height;
+  ctx.fillStyle="#FFFFFF"; ctx.fillRect(0,0,W,H); ctx.drawImage(im,0,0,W,H);
+  mk.shapes.forEach(s=>mkShape(ctx,s,W,H,mk.lw)); if(mk.cur) mkShape(ctx,mk.cur,W,H,mk.lw);
+}
+const mkReq=()=>{ if(mk&&!mk.raf) mk.raf=requestAnimationFrame(mkPaint) };
+function mkFinish(out){
+  if(!mk) return; const m=mk; mk=null;
+  if(m.raf) cancelAnimationFrame(m.raf); URL.revokeObjectURL(m.url);
+  if($("mkDlg").open) $("mkDlg").close();
+  m.res(out);
+}
+// Opens the editor on a picture (File, Blob or link). Resolves to {blob, shapes, src} or null when cancelled.
+async function markUp(src,opts){
+  const dlg=$("mkDlg"); if(!dlg) return null; opts=opts||{};
+  if(mk) mkFinish(null);
+  let blob=src;
+  if(typeof src==="string"){ try{ const r=await fetch(src); if(!r.ok) throw new Error("fetch"); blob=await r.blob() }catch(e){ toast("Couldn’t open this picture. Check your connection and try again."); return null } }
+  const url=URL.createObjectURL(blob);
+  let im; try{ im=await new Promise((res,rej)=>{ const x=new Image(); x.onload=()=>res(x); x.onerror=rej; x.src=url }) }catch(e){ im=null }
+  const w=im&&(im.naturalWidth||im.width), h=im&&(im.naturalHeight||im.height);
+  if(!w||!h){ URL.revokeObjectURL(url); toast("Couldn’t open this picture."); return null }
+  const sc=Math.min(1,1600/Math.max(w,h)), cv=$("mkCv");
+  cv.width=Math.max(1,Math.round(w*sc)); cv.height=Math.max(1,Math.round(h*sc));
+  return new Promise(res=>{
+    const shapes=(opts.shapes||[]).map(x=>JSON.parse(JSON.stringify(x)));
+    mk={im,url,blob,cv,ctx:cv.getContext("2d"),shapes,cur:null,pid:null,raf:0,hint:!shapes.length,lw:Math.max(3,Math.round(Math.min(cv.width,cv.height)/120)),res};
+    $("mkDone").textContent=opts.done||"Add to feedback";
+    mkPaint(); mkSync(); if(!dlg.open) dlg.showModal();
+  });
+}
+// Marks up a picture and puts the result in the feedback attachments (replacing `prev` when re-editing).
+async function markInto(src,name,prev){
+  const o=prev&&prev._mk;
+  const r=await markUp(o?o.src:src,{shapes:o?o.shapes:[],done:prev?"Save":"Add to feedback"});
+  if(!r) return false;
+  const f=new File([r.blob],String(name||"picture").replace(/\.[A-Za-z0-9]{2,5}$/,"")+".jpg",{type:"image/jpeg"});
+  f._mk={src:r.src,shapes:r.shapes};
+  const i=prev?pending.fb.indexOf(prev):-1;
+  if(i>=0){ if(prev._u) URL.revokeObjectURL(prev._u); pending.fb[i]=f; renderPending("fb") } else addPending("fb",[f]);
+  return true;
+}
+if($("mkDlg")){
+  const cv=$("mkCv");
+  const pt=e=>{ const r=cv.getBoundingClientRect(); return [Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),Math.min(1,Math.max(0,(e.clientY-r.top)/r.height))] };
+  cv.addEventListener("pointerdown",e=>{
+    if(!mk||mk.cur||(e.pointerType==="mouse"&&e.button!==0)) return; e.preventDefault();
+    try{ cv.setPointerCapture(e.pointerId) }catch(_){}
+    const p=pt(e); mk.pid=e.pointerId; mk.cur=mkTool==="pen"?{t:"pen",c:mkCol,p:[p]}:{t:mkTool,c:mkCol,a:p,b:p}; mkReq();
+  });
+  cv.addEventListener("pointermove",e=>{
+    if(!mk||!mk.cur||e.pointerId!==mk.pid) return; const p=pt(e), s=mk.cur;
+    if(s.t==="pen"){ const q=s.p[s.p.length-1]; if(s.p.length<3000&&Math.hypot((p[0]-q[0])*cv.width,(p[1]-q[1])*cv.height)>=2) s.p.push(p) } else s.b=p;
+    mkReq();
+  });
+  const up=e=>{
+    if(!mk||!mk.cur||e.pointerId!==mk.pid) return; const s=mk.cur; mk.cur=null; mk.pid=null;
+    const big=s.t==="pen"||Math.hypot((s.b[0]-s.a[0])*cv.width,(s.b[1]-s.a[1])*cv.height)>=mk.lw*3;
+    if(e.type==="pointerup"&&big){ mk.shapes.push(s); mk.hint=false }
+    mkReq(); mkSync();
+  };
+  cv.addEventListener("pointerup",up); cv.addEventListener("pointercancel",up);
+  $("mkDlg").addEventListener("click",e=>{
+    const t=e.target.closest("[data-mt]"), c=e.target.closest("[data-mc]");
+    if(t){ mkTool=t.dataset.mt; if(mk) mk.hint=true } else if(c) mkCol=c.dataset.mc; else return;
+    try{ localStorage.setItem(MK_KEY,JSON.stringify({t:mkTool,c:mkCol})) }catch(_){}
+    mkSync();
+  });
+  $("mkDlg").addEventListener("keydown",e=>{ if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&e.key.toLowerCase()==="z"){ e.preventDefault(); $("mkUndo").click() } });
+  $("mkDlg").addEventListener("close",()=>{ if(mk) mkFinish(null) });
+  $("mkUndo").onclick=()=>{ if(mk&&mk.shapes.length){ mk.shapes.pop(); mkReq(); mkSync() } };
+  $("mkCancel").onclick=()=>mkFinish(null);
+  $("mkDone").onclick=async()=>{
+    if(!mk) return; const m=mk; m.cur=null; mkPaint();
+    try{ const b=await new Promise((res,rej)=>m.cv.toBlob(x=>x?res(x):rej(new Error("empty")),"image/jpeg",0.9)); if(mk===m) mkFinish({blob:b,shapes:m.shapes,src:m.blob}) }
+    catch(e){ toast("Couldn’t save the marked picture. Try again.") }
+  };
 }
 $("fbAtt").addEventListener("change",e=>{ addPending("fb",e.target.files); e.target.value="" });
 $("vAtt").addEventListener("change",e=>{ addPending("v",e.target.files); e.target.value="" });
