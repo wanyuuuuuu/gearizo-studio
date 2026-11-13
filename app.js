@@ -1949,5 +1949,109 @@ function setPreview(r){
 $("roleDlg").addEventListener("click",e=>{ const b=e.target.closest("[data-pv]"); if(b) setPreview(b.dataset.pv) });
 $("pvExit").onclick=()=>setPreview("");
 
+/* ===== 财神庙: a tiny temple. Walk in, bow three times to the God of Wealth, get a blessing. ===== */
+const TP_KEY="gearizo-temple-v1";
+const TP_BLESS=[["财源滚滚","Money keeps rolling in"],["生意兴隆","Business is booming"],["爆款连连","One viral video after another"],["订单多多","Orders, orders, orders"],["流量暴涨","Views through the roof"],["心想事成","May every wish come true"],["大吉大利","Great luck, great profit"],["招财进宝","Wealth and treasure, come in"],["步步高升","Higher with every step"],["万事如意","Everything goes your way"],["一帆风顺","Smooth sailing all the way"],["年年有余","More than enough, every year"]];
+const TP_SAYS=["Huat ah! 发啊！","Keep posting! 继续发片","Views are coming 流量来咯","Orders are coming 订单来咯","Smile, it brings luck 笑一笑","Bow three times 拜三拜"];
+let tp={snd:true,n:0};
+try{ const v=JSON.parse(localStorage.getItem(TP_KEY)||"{}"); if(typeof v.snd==="boolean") tp.snd=v.snd; if(Number(v.n)>0) tp.n=Math.floor(Number(v.n)) }catch(e){}
+const tpSave=()=>{ try{ localStorage.setItem(TP_KEY,JSON.stringify(tp)) }catch(e){} };
+let tpBows=0, tpBusy=false, tpLast=-1, tpTimers=[], tpAudio=null, tpSayT=0;
+const tpLater=(fn,ms)=>{ tpTimers.push(setTimeout(fn,ms)) };
+const tpRestart=(el,cls)=>{ el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls) };
+function tpSound(kind){
+  if(!tp.snd) return;
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+    tpAudio=tpAudio||new AC(); if(tpAudio.state==="suspended") tpAudio.resume();
+    const t0=tpAudio.currentTime, out=tpAudio.createGain(); out.gain.value=.18; out.connect(tpAudio.destination);
+    const note=(f,a,d,at)=>{ const o=tpAudio.createOscillator(), g=tpAudio.createGain(), st=t0+(at||0);
+      o.type="sine"; o.frequency.value=f; g.gain.setValueAtTime(.0001,st); g.gain.exponentialRampToValueAtTime(a,st+.012); g.gain.exponentialRampToValueAtTime(.0001,st+d);
+      o.connect(g); g.connect(out); o.start(st); o.stop(st+d+.05) };
+    if(kind==="bell"){ note(392,1,3); note(392*2.76,.35,1.6); note(392*5.4,.14,.8); note(196,.3,2.2) }
+    else if(kind==="door"){ note(110,.9,.45); note(150,.5,.35,.14) }
+    else if(kind==="coins"){ [0,.09,.18,.3,.42,.55,.7,.86].forEach((at,i)=>{ note(1760+(i*317)%900,.5,.35,at+.15); note(2637,.22,.25,at+.17) }) }
+    else note(988,.5,.4);
+  }catch(e){}
+}
+function tpPaintSnd(){ const b=$("tpSnd"); b.setAttribute("aria-pressed",String(tp.snd)); b.setAttribute("aria-label",tp.snd?"Sound on. Tap to mute.":"Sound off. Tap to turn on."); b.title=tp.snd?"Sound on":"Sound off" }
+function tpDots(){
+  document.querySelectorAll("#tpDots i").forEach((x,i)=>x.classList.toggle("on",i<tpBows));
+  $("tpDotsTxt").textContent=tpBows?tpBows+" of 3":"Bow three times · 拜三拜";
+}
+function tpClearBows(){
+  tpBows=0; tpDots(); document.querySelectorAll("#tpSticks i").forEach(i=>i.classList.remove("lit"));
+  $("tpGod").classList.remove("blessed","jump","nod","wiggle"); $("tpPray").disabled=false;
+}
+function tpReset(){
+  tpTimers.forEach(clearTimeout); tpTimers=[]; tpBusy=false;
+  $("temple").classList.remove("opening","zoom","inside");
+  $("tpOut").style.transformOrigin=""; $("tpOut").removeAttribute("inert"); $("tpIn").setAttribute("inert","");
+  $("tpBless").hidden=true; $("tpRain").innerHTML=""; $("tpSay").hidden=true; $("tpWorld").classList.remove("bow");
+  tpClearBows();
+}
+function openTemple(){
+  const d=$("temple"); if(d.open) return;
+  const g=$("tpGodImg"); if(!g.getAttribute("src")) g.src=g.dataset.src;
+  tpReset(); tpPaintSnd(); d.showModal(); $("tpGo").focus();
+}
+function enterTemple(){
+  const d=$("temple"); if(tpBusy||d.classList.contains("inside")) return; tpBusy=true;
+  const inside=()=>{ d.classList.add("inside"); $("tpOut").setAttribute("inert",""); $("tpIn").removeAttribute("inert"); $("tpLive").textContent="Inside the temple. 财神爷 is on the altar.";
+    tpLater(()=>{ tpBusy=false; $("tpPray").focus() },calmMotion.matches?0:900) };
+  if(calmMotion.matches){ inside(); return }
+  tpSound("door"); d.classList.add("opening");
+  tpLater(()=>{
+    const o=$("tpOut"), r=o.getBoundingClientRect(), dr=$("tpDoors").getBoundingClientRect();
+    o.style.transformOrigin=(dr.left+dr.width/2-r.left)+"px "+(dr.top+dr.height*.55-r.top)+"px";
+    d.classList.add("zoom"); tpLater(inside,420);
+  },760);
+}
+function tpBow(){
+  if(tpBusy||tpBows>=3||!$("temple").classList.contains("inside")) return;
+  tpBusy=true; tpBows++; tpSound("bell");
+  const calm=calmMotion.matches, w=$("tpWorld");
+  if(!calm) tpRestart(w,"bow");
+  const h=document.createElement("span"); h.className="tp-hands"; h.textContent="🙏"; h.setAttribute("aria-hidden","true"); $("tpIn").appendChild(h); tpLater(()=>h.remove(),1200);
+  const n=tpBows;
+  tpLater(()=>{ const st=$("tpSticks").children[n-1]; if(st) st.classList.add("lit"); tpDots(); if(!calm) tpRestart($("tpGod"),"nod") },calm?0:460);
+  tpLater(()=>{ w.classList.remove("bow"); tpBusy=false; if(tpBows>=3) tpBlessed() },calm?150:1150);
+  $("tpLive").textContent="Bow "+n+" of 3.";
+}
+function tpRain(){
+  const kinds=["coin","coin","pao","coin","gold"]; let h="";
+  for(let k=0;k<44;k++){ const t=kinds[k%kinds.length], sz=t==="pao"?18+Math.random()*8:t==="gold"?30+Math.random()*12:20+Math.random()*12;
+    h+='<span class="'+t+'" style="--x:'+(Math.random()*96).toFixed(1)+'%;--s:'+sz.toFixed(0)+'px;--d:'+(1.8+Math.random()*1.6).toFixed(2)+'s;--dl:'+(Math.random()*1.3).toFixed(2)+'s;--r:'+(Math.random()*720-360).toFixed(0)+'deg"></span>' }
+  $("tpRain").innerHTML=h; tpLater(()=>{ $("tpRain").innerHTML="" },4800);
+}
+function tpBlessed(){
+  tpBusy=true; $("tpPray").disabled=true; tp.n++; tpSave();
+  const calm=calmMotion.matches, g=$("tpGod"); g.classList.remove("nod"); g.classList.add("blessed"); if(!calm) tpRestart(g,"jump");
+  tpSound("coins"); if(!calm) tpRain();
+  let i=0; do{ i=Math.floor(Math.random()*TP_BLESS.length) }while(i===tpLast&&TP_BLESS.length>1); tpLast=i;
+  tpLater(()=>{
+    $("tpBlessZh").textContent=TP_BLESS[i][0]; $("tpBlessEn").textContent=TP_BLESS[i][1];
+    $("tpBlessN").textContent="Blessing #"+tp.n+" · 第"+tp.n+"次";
+    $("tpBless").hidden=false; $("tpAgain").focus(); tpBusy=false;
+    $("tpLive").textContent="Your blessing: "+TP_BLESS[i][0]+", "+TP_BLESS[i][1]+".";
+  },calm?250:1400);
+}
+function tpPoke(){
+  if(!$("temple").classList.contains("inside")) return;
+  if(!calmMotion.matches) tpRestart($("tpGod"),"wiggle");
+  const s=$("tpSay"); let t; do{ t=TP_SAYS[Math.floor(Math.random()*TP_SAYS.length)] }while(t===s.textContent&&TP_SAYS.length>1);
+  s.textContent=t; s.hidden=true; void s.offsetWidth; s.hidden=false; tpSound("ding");
+  clearTimeout(tpSayT); tpSayT=setTimeout(()=>{ s.hidden=true },2400);
+}
+if($("temple")&&$("templeBtn")){
+  $("templeBtn").onclick=openTemple;
+  $("tpGo").onclick=enterTemple; $("tpDoors").addEventListener("click",enterTemple);
+  $("tpPray").onclick=tpBow; $("tpGod").onclick=tpPoke;
+  $("tpAgain").onclick=()=>{ $("tpBless").hidden=true; tpClearBows(); $("tpPray").focus() };
+  $("tpBye").onclick=$("tpClose").onclick=()=>$("temple").close();
+  $("tpSnd").onclick=()=>{ tp.snd=!tp.snd; tpSave(); tpPaintSnd(); tpSound("ding") };
+  $("temple").addEventListener("close",()=>{ tpTimers.forEach(clearTimeout); tpTimers=[]; $("tpRain").innerHTML=""; clearTimeout(tpSayT) });
+}
+
 buildForm(); loadCache(); setNote(); render(); renderNotifs(); connect();
 })();
