@@ -190,8 +190,19 @@ async function metaCallback(url: URL) {
     const long = await graph("/oauth/access_token", { grant_type: "fb_exchange_token", client_id: m.app_id, client_secret: m.app_secret, fb_exchange_token: short.access_token }, "");
     const pages = await graph("/me/accounts", { fields: "id,name,access_token,instagram_business_account{id,username}", limit: "50" }, long.access_token);
     const list: any[] = pages.data || [];
-    const page = list.find((p) => p.instagram_business_account) || list[0];
+    // Pick the Page deliberately. Whoever connects may admin several Pages — Gearizo, Tayarlo,
+    // Hofmann, tayarDiskaun — and taking "the first one with an Instagram account" quietly
+    // connects the studio to whichever Page happens to come back first. That is how Gearizo's
+    // videos end up on Hofmann's account. Set META_PAGE_ID to the Page this studio posts as.
+    const want = (Deno.env.get("META_PAGE_ID") || "").trim();
+    const page = (want && list.find((p) => String(p.id) === want)) ||
+                 list.find((p) => p.instagram_business_account) || list[0];
     if (!page) return back(false, "No Facebook Page came back. Tick the Gearizo Page when Facebook asks.");
+    if (want && String(page.id) !== want) {
+      return back(false, "Facebook didn't return the Page this studio posts as (" + want + "). " +
+        "Press Connect again and tick that Page. Pages that did come back: " +
+        (list.map((p) => p.name).join(", ") || "none") + ".");
+    }
     await metaSet({ page_id: page.id, page_name: page.name, page_token: page.access_token, ig_id: page.instagram_business_account?.id || null,
       ig_username: page.instagram_business_account?.username || null, user_token: long.access_token,
       user_token_expires: long.expires_in ? new Date(Date.now() + Number(long.expires_in) * 1000).toISOString() : null,
