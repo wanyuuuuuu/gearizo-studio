@@ -174,8 +174,16 @@ async function metaStart(body: any, me: string) {
   await metaSet({ ...patch, oauth_state: state, oauth_user: me, oauth_return: ret, oauth_at: new Date().toISOString() });
   const m = await metaRow();
   if (!m?.app_id || !m?.app_secret) return { error: "Add the App ID and App Secret first." };
-  const q = new URLSearchParams({ client_id: m.app_id, redirect_uri: CALLBACK, state, response_type: "code", scope: SCOPES,
-    extras: JSON.stringify({ setup: { channel: "IG_API_ONBOARDING" } }) });
+  // Plain consent by default. The IG_API_ONBOARDING wizard walks you through linking an
+  // Instagram account to a Page, but it hands the session between instagram.com and
+  // facebook.com, so a browser that blocks cross-site cookies drops you back on its first
+  // screen after every Instagram login — an unbreakable loop with nothing to click.
+  // Link the account once in Meta Business Suite instead; this flow only has to read it.
+  // Set META_IG_ONBOARDING=1 to bring the wizard back.
+  const q = new URLSearchParams({ client_id: m.app_id, redirect_uri: CALLBACK, state, response_type: "code", scope: SCOPES });
+  if (Deno.env.get("META_IG_ONBOARDING") === "1") {
+    q.set("extras", JSON.stringify({ setup: { channel: "IG_API_ONBOARDING" } }));
+  }
   return { url: "https://www.facebook.com/v27.0/dialog/oauth?" + q };
 }
 async function metaCallback(url: URL) {
