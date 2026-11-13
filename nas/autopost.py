@@ -2,7 +2,8 @@
 
 For each scheduled video posting on Instagram Reels and/or a Facebook Page within the next 23 hours,
 it re-encodes the final file from the NAS to what Meta accepts (see SPEC) and uploads that copy:
-  - Instagram: a Reels container (Instagram only publishes on request; the server publishes it at the time)
+  - Instagram: a Reels container, fetched by Meta from a short-lived link (see ig_upload); Instagram only
+    publishes on request, so the server publishes it at the time
   - Facebook: a Page Reel scheduled by Meta for the exact time
 and records what happened in the "postjobs" collection so the app can show it.
 If a post is unscheduled or its caption/time/platforms change, the Facebook schedule is removed and redone.
@@ -105,28 +106,96 @@ def final_file(item_id, it, versions):
     return link if link.startswith("/Volumes/") and os.path.isfile(link) else None
 
 
-def ig_upload(m, path, caption):
+# Instagram's direct (resumable) upload processes the video inside the upload request and gives up
+# after about 30 s, answering "ProcessingFailedError / Request processing failed". At 1080x1920 that
+# is roughly 30 s of footage: a 54 s Reel failed at 9.3 MB and even at 4.2 MB, while 720p at 7.1 MB
+# and 1080p 30 s clips went through. Handing Meta a link instead (video_url) has it fetch and
+# process in the background with no such limit, so Reels go out that way: the re-encode is put in
+# the studio's private storage bucket for the few minutes Meta needs, behind a one-hour signed link,
+# and deleted once the container is ready. Direct upload is kept only as the fallback for when the
+# bucket cannot be reached.
+BUCKET = "media"
+READY_WAIT_S = 600
+
+
+def _storage(method, path, data=None, headers=None, timeout=300):
+    h = {"apikey": S.KEY, "Authorization": "Bearer " + S.KEY}
+    h.update(headers or {})
+    req = urllib.request.Request(S.URL + "/storage/v1/" + path, data=data, method=method, headers=h)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.read()
+    except urllib.error.HTTPError as e:
+        raise GraphError(("storage %s: HTTP %s %s" % (method, e.code, e.read().decode("utf-8", "replace")))[:300])
+
+
+def stash(path):
+    """Put path in the storage bucket; returns (object name, one-hour signed link)."""
+    obj = "autopost/%s-%d.mp4" % (hashlib.sha1(path.encode("utf-8")).hexdigest()[:12], int(time.time()))
+    with open(path, "rb") as f:
+        _storage("POST", "object/%s/%s" % (BUCKET, obj), f, {
+            "Content-Type": "video/mp4", "Content-Length": str(os.path.getsize(path)), "x-upsert": "true"})
+    try:
+        out = json.loads(_storage("POST", "object/sign/%s/%s" % (BUCKET, obj),
+                                  json.dumps({"expiresIn": 3600}).encode(), {"Content-Type": "application/json"}))
+        if not out.get("signedURL"):
+            raise GraphError("storage sign: no link in %s" % json.dumps(out)[:200])
+    except Exception:
+        unstash(obj)
+        raise
+    return obj, S.URL + "/storage/v1" + out["signedURL"]
+
+
+def unstash(obj):
+    try:
+        _storage("DELETE", "object/%s/%s" % (BUCKET, obj), timeout=60)
+    except Exception:
+        pass   # a leftover file costs a little space, never a post
+
+
+def ready(cid, tok):
+    """Waits until Meta has fetched and processed the container; raises if it refuses."""
+    waited = 0
+    while waited < READY_WAIT_S:
+        time.sleep(10)
+        waited += 10
+        st = g("GET", "/" + cid, {"fields": "status_code,status"}, tok)
+        code = st.get("status_code")
+        if code == "FINISHED":
+            return
+        if code in ("ERROR", "EXPIRED"):
+            raise GraphError(("Instagram refused the video: %s" % (st.get("status") or code))[:300])
+    raise GraphError("Instagram was still processing the video after %d minutes" % (READY_WAIT_S // 60))
+
+
+def ig_upload(m, path, caption, log=lambda s: None):
     tokens = [t for t in (m.get("page_token"), m.get("user_token")) if t]
-    last = None
-    for tok in tokens:
-        cid = None
-        try:
-            r = g("POST", "/%s/media" % m["ig_id"], {"media_type": "REELS", "upload_type": "resumable", "caption": caption}, tok)
-            cid = r["id"]
-            rupload(r.get("uri") or "https://rupload.facebook.com/ig-api-upload/v27.0/%s" % cid, tok, path)
-            return cid
-        except GraphError as e:
-            # the upload endpoint only ever says "Request processing failed"; the container it
-            # belongs to knows the real reason, so ask it before moving on to the next token
-            last = e
-            if cid:
-                try:
-                    st = g("GET", "/" + cid, {"fields": "status_code,status"}, tok)
-                    if st.get("status"):
-                        last = GraphError(("%s | container %s: %s" % (e, st.get("status_code"), st["status"]))[:300])
-                except GraphError:
-                    pass
-    raise last or GraphError("No Instagram token")
+    if not tokens:
+        raise GraphError("No Instagram token")
+    obj = link = None
+    try:
+        obj, link = stash(path)
+    except Exception as e:
+        log("autopost: couldn't put the video in storage (%s); trying a direct upload instead" % e)
+    try:
+        last = None
+        for tok in tokens:
+            try:
+                if link:
+                    r = g("POST", "/%s/media" % m["ig_id"],
+                          {"media_type": "REELS", "video_url": link, "caption": caption}, tok)
+                    ready(r["id"], tok)
+                else:
+                    r = g("POST", "/%s/media" % m["ig_id"],
+                          {"media_type": "REELS", "upload_type": "resumable", "caption": caption}, tok)
+                    rupload(r.get("uri") or "https://rupload.facebook.com/ig-api-upload/v27.0/%s" % r["id"], tok, path)
+                return r["id"]
+            except GraphError as e:
+                last = e
+        raise last
+    finally:
+        if obj:
+            unstash(obj)
 
 
 def fb_upload(m, path, caption, post_at):
@@ -202,7 +271,7 @@ def run(api, docs, put, log, items, versions):
             if need_ig:
                 tries = (igj.get("tries", 0) + 1) if igj.get("sig") == s and igj.get("state") == "failed" else 1
                 try:
-                    job["ig"] = {"state": "uploaded", "container": ig_upload(m, src, cap), "sig": s, "at": now}
+                    job["ig"] = {"state": "uploaded", "container": ig_upload(m, src, cap, log), "sig": s, "at": now}
                     log("autopost: Instagram upload ready for %s" % it.get("title"))
                 except Exception as e:
                     job["ig"] = {"state": "failed", "error": str(e)[:300], "sig": s, "tries": tries, "at": now}
