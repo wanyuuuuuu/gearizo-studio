@@ -7,7 +7,9 @@ Runs every 3 minutes next to the "Marketing Content" NAS share and talks to Supa
   review. When an item is approved / scheduled / posted, its file moves from Checking to `approve`.
   14 days after a video is posted, its previews are deleted from Supabase storage (free plan: 1 GB);
   the final version's preview only when its full file is found on the NAS. NAS files are never touched.
-- **autopost** (`autopost.py`): up to 23 h before a scheduled post, uploads the final file to Instagram Reels
+- **autopost** (`autopost.py`): up to 23 h before a scheduled post, re-encodes the final file to what Meta
+  accepts (H.264 High, 1920 px on the long edge, AAC 48 kHz, faststart -- phone and Final Cut exports are
+  usually 4K HEVC in a QuickTime container, which Meta rejects without saying why) and uploads it to Instagram Reels
   (a container the server publishes at the exact minute) and to the Facebook Page (a Reel Meta schedules).
   Status goes to the `postjobs` collection. Needs the Meta connection made in the app (Team > Social).
 

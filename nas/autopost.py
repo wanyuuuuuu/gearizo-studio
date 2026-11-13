@@ -1,14 +1,16 @@
 """Gearizo auto-post uploader (runs inside nas_sync.py every few minutes).
 
 For each scheduled video posting on Instagram Reels and/or a Facebook Page within the next 23 hours,
-it uploads the final file from the NAS:
+it re-encodes the final file from the NAS to what Meta accepts (see SPEC) and uploads that copy:
   - Instagram: a Reels container (Instagram only publishes on request; the server publishes it at the time)
   - Facebook: a Page Reel scheduled by Meta for the exact time
 and records what happened in the "postjobs" collection so the app can show it.
 If a post is unscheduled or its caption/time/platforms change, the Facebook schedule is removed and redone.
 It never deletes or changes files on the NAS.
 """
-import hashlib, json, os, time, urllib.error, urllib.parse, urllib.request
+import hashlib, json, os, shutil, subprocess, time, urllib.error, urllib.parse, urllib.request
+
+import settings as S
 
 GRAPH = "https://graph.facebook.com/v27.0"
 AUTO = ("reel", "fb")
@@ -52,6 +54,36 @@ def rupload(url, token, path):
             raise GraphError(("Upload failed: " + e.read().decode("utf-8", "replace"))[:300])
     if out.get("success") is False:
         raise GraphError(("Upload failed: " + json.dumps(out))[:300])
+    return out
+
+
+# Meta rejects most phone and Final Cut exports outright, without saying why: they are commonly
+# 4K (wider than the 1920 px Reels limit), HEVC, in a QuickTime container, with the moov atom at
+# the end of the file. The NAS holds the master and is never touched, so every upload goes out as
+# a throwaway re-encode instead -- H.264 High, 1920 on the long edge, AAC 48 kHz, faststart.
+SPEC = ("scale='min(1920,iw)':'min(1920,ih)'"
+        ":force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuv420p")
+
+
+def encode(path, log):
+    """A Reels-ready copy of path in the job's own data folder (or path itself if ffmpeg is gone)."""
+    ff = S.FFMPEG if S.FFMPEG and os.path.exists(S.FFMPEG) else shutil.which("ffmpeg")
+    if not ff:
+        log("autopost: no ffmpeg, sending %s to Meta as it is" % os.path.basename(path))
+        return path
+    out = os.path.join(S.DATA, "upload-%s.mp4" % hashlib.sha1(path.encode("utf-8")).hexdigest()[:12])
+    r = subprocess.run([
+        ff, "-y", "-loglevel", "error", "-i", path, "-vf", SPEC, "-r", "30",
+        "-c:v", "libx264", "-profile:v", "high", "-level", "4.1", "-preset", "medium",
+        "-crf", "23", "-maxrate", "8M", "-bufsize", "16M",
+        "-g", "60", "-keyint_min", "60", "-sc_threshold", "0", "-flags", "+cgop",
+        "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
+        "-movflags", "+faststart", "-f", "mp4", out,
+    ], capture_output=True, timeout=3600)
+    if r.returncode or not os.path.isfile(out):
+        if os.path.exists(out):
+            os.remove(out)
+        raise GraphError(("ffmpeg: " + (r.stderr or b"").decode("utf-8", "replace").strip())[:300])
     return out
 
 
@@ -143,23 +175,39 @@ def run(api, docs, put, log, items, versions):
                 put("postjobs", iid, job)
                 log("autopost: final video of %s not found on the NAS" % it.get("title"))
             continue
-        job.pop("error", None)
         cap = it.get("caption", "")
-        if need_ig:
-            tries = (igj.get("tries", 0) + 1) if igj.get("sig") == s and igj.get("state") == "failed" else 1
-            try:
-                job["ig"] = {"state": "uploaded", "container": ig_upload(m, path, cap), "sig": s, "at": now}
-                log("autopost: Instagram upload ready for %s" % it.get("title"))
-            except Exception as e:
-                job["ig"] = {"state": "failed", "error": str(e)[:300], "sig": s, "tries": tries, "at": now}
-                log("autopost: Instagram upload failed for %s: %s" % (it.get("title"), e))
-            put("postjobs", iid, job)
-        if need_fb:
-            tries = (fbj.get("tries", 0) + 1) if fbj.get("sig") == s and fbj.get("state") == "failed" else 1
-            try:
-                job["fb"] = {"state": "scheduled", "video": fb_upload(m, path, cap, post_at), "sig": s, "at": now}
-                log("autopost: Facebook reel scheduled for %s" % it.get("title"))
-            except Exception as e:
-                job["fb"] = {"state": "failed", "error": str(e)[:300], "sig": s, "tries": tries, "at": now}
-                log("autopost: Facebook upload failed for %s: %s" % (it.get("title"), e))
-            put("postjobs", iid, job)
+        try:
+            src = encode(path, log)   # one re-encode feeds both uploads
+        except Exception as e:
+            err = ("encode: " + str(e))[:300]
+            if job.get("error") != err:
+                job["error"] = err
+                put("postjobs", iid, job)
+                log("autopost: couldn't re-encode %s: %s" % (it.get("title"), e))
+            continue
+        job.pop("error", None)
+        try:
+            if need_ig:
+                tries = (igj.get("tries", 0) + 1) if igj.get("sig") == s and igj.get("state") == "failed" else 1
+                try:
+                    job["ig"] = {"state": "uploaded", "container": ig_upload(m, src, cap), "sig": s, "at": now}
+                    log("autopost: Instagram upload ready for %s" % it.get("title"))
+                except Exception as e:
+                    job["ig"] = {"state": "failed", "error": str(e)[:300], "sig": s, "tries": tries, "at": now}
+                    log("autopost: Instagram upload failed for %s: %s" % (it.get("title"), e))
+                put("postjobs", iid, job)
+            if need_fb:
+                tries = (fbj.get("tries", 0) + 1) if fbj.get("sig") == s and fbj.get("state") == "failed" else 1
+                try:
+                    job["fb"] = {"state": "scheduled", "video": fb_upload(m, src, cap, post_at), "sig": s, "at": now}
+                    log("autopost: Facebook reel scheduled for %s" % it.get("title"))
+                except Exception as e:
+                    job["fb"] = {"state": "failed", "error": str(e)[:300], "sig": s, "tries": tries, "at": now}
+                    log("autopost: Facebook upload failed for %s: %s" % (it.get("title"), e))
+                put("postjobs", iid, job)
+        finally:
+            if src != path:
+                try:
+                    os.remove(src)
+                except OSError:
+                    pass
