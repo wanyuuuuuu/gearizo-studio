@@ -1,4 +1,5 @@
-// Gearizo server function. Five jobs:
+// Gearizo server function. Six jobs:
+//  6. Writing a caption for an item (action "caption"), so the Anthropic key stays off the public app.
 //  1. Push notifications when something happens in the studio (called by the docs_push database trigger),
 //     plus scheduled posts (pg_cron calls action "postdue" every minute): publish what was uploaded to
 //     Instagram, mark auto-posted videos as posted, and remind marketing about anything left to post by hand.
@@ -214,6 +215,107 @@ async function metaDisconnect() {
   return { ok: true };
 }
 
+/* ---------- 6. Writing the caption (action "caption") ---------- */
+// The caption field feeds straight into Instagram and Facebook: nas/autopost.py sends it as the
+// Reel caption and the Page video description. So this only writes text back to the person's
+// screen — it saves nothing and posts nothing. They read it, edit it, and the Publish tab saves
+// it the way it always has.
+
+const CAP_LIMIT: Record<string, number> = { reel: 2200, carousel: 2200, story: 1000, fb: 2000, tiktok: 2200, shop: 500 };
+const CAP_LANG: Record<string, string> = { en: "English", manglish: "Manglish", bm: "Bahasa Malaysia", zh: "中文" };
+
+// Fallbacks. To change the voice without redeploying, put a row in docs with
+// collection 'settings', id 'caption' and keys { voice, hashtags } — see supabase/caption.sql.
+const CAP_VOICE = [
+  "Open on a problem a Malaysian driver actually has. First line, no wind-up.",
+  "Short sentences. No hype words. One emoji at most, usually none.",
+  "Say the product name once, plainly. Gearizo is an officially authorised distributor of",
+  "Michelin Lifestyle accessories — never imply Michelin made the vehicle or its parts, and",
+  "make no tyre-performance claims.",
+  "English: everyday Malaysian English. No slang that reads as try-hard.",
+  "Manglish: lah, kan, ya only where a real person would say them.",
+  "Bahasa Malaysia: plain spoken BM, not Dewan register.",
+  "中文：用大马华语的语法和语气（「有」+动词、多过、罢了、句末咯、转不到／救不到、人家），",
+  "不夹马来文词汇；battery、alternator、dashcam、jump、check 这类英文词照日常习惯保留。",
+  "End with one clear next step: what to check, or where to buy.",
+  "Never state a price, a discount or promo terms.",
+].join("\n");
+
+const CAP_TAGS: Record<string, string> = {
+  en: "#Gearizo #MichelinLifestyle #CarAccessories #CarCareMY #Malaysia",
+  manglish: "#Gearizo #MichelinLifestyle #KeretaMalaysia #CarAccessoriesMY #TipsKereta",
+  bm: "#Gearizo #MichelinLifestyle #AksesoriKereta #TipsKereta #KeselamatanJalanRaya",
+  zh: "#Gearizo #MichelinLifestyle #汽车配件 #马来西亚车主 #用车知识",
+};
+
+async function writeCaption(body: any) {
+  const key = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!key) return { error: "Caption writing isn't set up yet: ANTHROPIC_API_KEY is missing." };
+
+  const title = String(body.title || "").trim();
+  if (!title) return { error: "Give the item a title first — that's what the caption is about." };
+
+  const lang = CAP_LANG[String(body.lang || "")] ? String(body.lang) : "en";
+  const pl: string[] = (Array.isArray(body.platforms) ? body.platforms : []).filter((p: string) => CAP_LIMIT[p]);
+  // Write to the tightest limit among the chosen platforms, so one caption fits everywhere it goes.
+  const limit = pl.length ? Math.min(...pl.map((p) => CAP_LIMIT[p])) : CAP_LIMIT.reel;
+
+  let voice = CAP_VOICE, tags = CAP_TAGS[lang] || CAP_TAGS.en;
+  const { data: st } = await sb.from("docs").select("data").eq("collection", "settings").eq("id", "caption").maybeSingle();
+  const s: any = st?.data || {};
+  if (typeof s.voice === "string" && s.voice.trim()) voice = s.voice.trim();
+  if (s.hashtags && typeof s.hashtags[lang] === "string") tags = s.hashtags[lang];
+
+  const budget = Math.max(120, limit - tags.length - 2);
+  const current = String(body.current || "").trim();
+  const steer = String(body.steer || "").trim();
+
+  const prompt = [
+    "You write short-form social captions for Gearizo, the officially authorised Michelin Lifestyle",
+    "accessories distributor for Malaysia and Singapore.",
+    "",
+    "VIDEO: " + title,
+    body.notes ? "NOTES FROM THE PLANNER: " + String(body.notes).slice(0, 2000) : "",
+    pl.length ? "GOING TO: " + pl.map((p) => PLAT[p] || p).join(", ") : "",
+    "LANGUAGE: " + CAP_LANG[lang],
+    "LENGTH: at most " + budget + " characters. Hashtags are added separately — write none.",
+    "",
+    "HOUSE VOICE:",
+    voice,
+    "",
+    current ? "REWRITE THIS, keeping what works:\n" + current.slice(0, 4000) + "\n" : "",
+    steer ? "THE PERSON ASKS: " + steer.slice(0, 500) + "\n" : "",
+    "Return only the caption text. No preamble, no quotation marks, no hashtags, no explanation.",
+  ].filter(Boolean).join("\n");
+
+  let text = "";
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({
+        model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-5",
+        max_tokens: 1024,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) {
+      const detail = (await res.text()).slice(0, 200);
+      if (res.status === 401) return { error: "The Anthropic API key was rejected." };
+      if (res.status === 429) return { error: "Too many requests right now. Try again in a moment." };
+      return { error: "Claude returned " + res.status + ". " + detail };
+    }
+    const out = await res.json();
+    text = (out.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
+  } catch (e) {
+    return { error: "Couldn't reach Claude: " + errText(e) };
+  }
+  if (!text) return { error: "Claude came back empty. Try again." };
+  if (text.length > budget) text = text.slice(0, budget).trimEnd();
+
+  return { caption: text, hashtags: tags, combined: text + "\n\n" + tags, limit, used: text.length + tags.length + 2, lang };
+}
+
 /* Scheduled posts that are due: publish what was uploaded, then remind about anything left, once */
 async function postDue() {
   const now = Date.now();
@@ -396,6 +498,11 @@ Deno.serve(async (req) => {
     if (body.action === "meta_start") return json(await metaStart(body, me.id));
     if (body.action === "meta_disconnect") return json(await metaDisconnect());
     return json({ error: "unknown action" }, 400);
+  }
+  if (body.action === "caption") {
+    const me = await caller(req);                         // any signed-in team member may write a caption
+    if (!me) return json({ error: "sign in first" }, 401);
+    return json(await writeCaption(body));
   }
   if (!fromDb) return json({ error: "forbidden" }, 401);
   if (body.action === "postdue") return json(await postDue());

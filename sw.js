@@ -1,6 +1,6 @@
 /* Gearizo service worker: works offline for the app shell, shows push notifications. */
 const CACHE = "gearizo-v1";
-const SHELL = ["./", "index.html", "app.js", "runtime.js", "push.js", "config.js", "vendor/supabase.js",
+const SHELL = ["./", "index.html", "app.js", "caption-ai.js", "runtime.js", "push.js", "config.js", "vendor/supabase.js",
   "cat.png", "cat-mk.png", "icons/icon-192.png", "icons/icon-512.png", "icons/badge-96.png", "manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {

@@ -163,6 +163,15 @@
       location.href = r.url;
     },
   };
+  /* Caption writing. The Anthropic key lives on the server; this only asks. */
+  window.gzAI = {
+    async caption(input) {
+      const { data, error } = await sb.functions.invoke("notify", { body: Object.assign({ action: "caption" }, input || {}) });
+      if (error) { let msg = error.message; try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch (e) {} throw new Error(msg); }
+      if (data && data.error) throw new Error(data.error);
+      return data;
+    },
+  };
   window.gzCal = {
     async get() {
       const { data } = await sb.from("calendar_links").select("ics_url,feed_token,last_sync,last_error").eq("user_id", session.user.id).maybeSingle();
@@ -359,6 +368,12 @@
     resolveReady();
     const app = document.createElement("script");
     app.src = "app.js?v=" + (cfg.version || "1");
+    // Caption writing rides in after app.js, since it works on the dialog app.js builds.
+    app.onload = () => {
+      const ai = document.createElement("script");
+      ai.src = "caption-ai.js?v=" + (cfg.version || "1");
+      document.body.appendChild(ai);
+    };
     document.body.appendChild(app);
     if (window.gzPush) window.gzPush.init(sb, s);
   }
