@@ -84,6 +84,8 @@ def encode(path, log):
         if os.path.exists(out):
             os.remove(out)
         raise GraphError(("ffmpeg: " + (r.stderr or b"").decode("utf-8", "replace").strip())[:300])
+    log("autopost: re-encoded %s for Meta, %.1f MB from %.1f MB"
+        % (os.path.basename(path), os.path.getsize(out) / 1e6, os.path.getsize(path) / 1e6))
     return out
 
 
@@ -107,13 +109,23 @@ def ig_upload(m, path, caption):
     tokens = [t for t in (m.get("page_token"), m.get("user_token")) if t]
     last = None
     for tok in tokens:
+        cid = None
         try:
             r = g("POST", "/%s/media" % m["ig_id"], {"media_type": "REELS", "upload_type": "resumable", "caption": caption}, tok)
             cid = r["id"]
             rupload(r.get("uri") or "https://rupload.facebook.com/ig-api-upload/v27.0/%s" % cid, tok, path)
             return cid
         except GraphError as e:
+            # the upload endpoint only ever says "Request processing failed"; the container it
+            # belongs to knows the real reason, so ask it before moving on to the next token
             last = e
+            if cid:
+                try:
+                    st = g("GET", "/" + cid, {"fields": "status_code,status"}, tok)
+                    if st.get("status"):
+                        last = GraphError(("%s | container %s: %s" % (e, st.get("status_code"), st["status"]))[:300])
+                except GraphError:
+                    pass
     raise last or GraphError("No Instagram token")
 
 
