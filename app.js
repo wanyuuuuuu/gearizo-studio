@@ -1949,74 +1949,117 @@ function setPreview(r){
 $("roleDlg").addEventListener("click",e=>{ const b=e.target.closest("[data-pv]"); if(b) setPreview(b.dataset.pv) });
 $("pvExit").onclick=()=>setPreview("");
 
-/* ===== 财神庙: a tiny temple. Walk in, bow three times to the God of Wealth, get a blessing. ===== */
+/* ===== 财神庙: walk in, take incense, bow at the altar, then draw a fortune stick or throw the moon blocks. ===== */
 const TP_KEY="gearizo-temple-v1";
 const TP_BLESS=[["财源滚滚","Money keeps rolling in"],["生意兴隆","Business is booming"],["爆款连连","One viral video after another"],["订单多多","Orders, orders, orders"],["流量暴涨","Views through the roof"],["心想事成","May every wish come true"],["大吉大利","Great luck, great profit"],["招财进宝","Wealth and treasure, come in"],["步步高升","Higher with every step"],["万事如意","Everything goes your way"],["一帆风顺","Smooth sailing all the way"],["年年有余","More than enough, every year"]];
-const TP_SAYS=["Huat ah! 发啊！","Keep posting! 继续发片","Views are coming 流量来咯","Orders are coming 订单来咯","Smile, it brings luck 笑一笑","Bow three times 拜三拜"];
+const TP_SAYS=["Huat ah! 发啊！","Keep posting! 继续发片","Views are coming 流量来咯","Orders are coming 订单来咯","Smile, it brings luck 笑一笑","Bring me incense 先去拿香"];
+// Fortune sticks: [level, poem lines, meaning, English]
+const TP_FORTUNES=[
+  ["上上签",["旭日东升照海门","一帆顺水到财源","今朝拍下真心话","万户千家点赞喧"],"新片有爆的机会，照自己的想法去拍。","The sun is up and the tide is with you. Film what you truly believe in, and people will love it."],
+  ["上签",["春雨润田苗自青","耐心浇灌莫心惊","三旬过后看收成","满仓金谷笑盈盈"],"慢慢来，坚持一个月就会看到成果。","Spring rain works quietly. Keep at it, and in about a month you’ll see the harvest."],
+  ["中签",["云遮明月暂无光","风过云开月更亮","手中事务分轻重","先做一件再思量"],"事情有点多，先把最重要的一件做好。","Clouds hide the moon for now. Finish the one most important thing first, then plan the rest."],
+  ["上上签",["金龙出水跃天门","四海宾朋送宝珍","贵人就在身边坐","一句提点胜千金"],"贵人就在身边，多听听同事的意见。","A golden dragon leaps. Your helper sits right beside you: one tip from a teammate is worth a fortune."],
+  ["上签",["良驹千里不须鞭","大路朝天自向前","莫看别家争快慢","自家节奏最安然"],"不用跟别人比快，按自己的节奏走。","A good horse needs no whip. Don’t race the others; your own pace works best."],
+  ["中签",["池中小鱼欲化龙","还需风雨几番浓","今时且把根基固","他日腾云万里空"],"现在先打好基础，之后自然会起飞。","The little fish wants to become a dragon, after a few more storms. Build the basics now."],
+  ["上签",["花开富贵满庭香","客似云来货满仓","只怕仓中货不够","早些备料莫慌忙"],"生意会好起来，记得提早备货。","Flowers bloom and customers pour in. Make sure the stock is ready before the rush."],
+  ["小吉签",["小舟过浪有波涛","稳握船舵莫心焦","风停浪静前程好","回头一笑过江桥"],"会有一点小风浪，稳住就没事。","A few waves ahead. Hold the rudder steady; once it calms, you’ll laugh about it."],
+  ["上上签",["九天彩凤落梧桐","喜事连连到门中","所求之事皆如意","财源滚滚似江东"],"好消息接连来，想做的事都会顺。","A phoenix lands on your tree. Good news keeps coming and what you ask for goes your way."],
+  ["中签",["十步之内有芳草","何须远处苦寻找","旧片重新剪一回","换个角度更美好"],"好点子就在手边，旧素材换个剪法也能红。","Treasure is within ten steps. Re-cut an old video from a new angle and it can shine again."],
+  ["上签",["明灯一盏照前程","众人同心事易成","今日合力搬山去","明朝平地好筑城"],"团队一起出力，大事也会变简单。","A bright lamp lights the way. Work together today and the big jobs get easy."],
+  ["小吉签",["天有阴晴月有圆","一时低落莫心烦","歇口热茶重出发","好运就在下一番"],"今天不顺也没关系，休息一下再出发。","Not every day is sunny. Take a tea break and go again; luck is in the next round."]
+];
+const tpNum=n=>{ const d="一二三四五六七八九"; return n<10?d[n-1]:n===10?"十":"十"+d[n-11] };
+const TP_ST={incense:.16,altar:.5,fortune:.84};
+const TP_TUBE='<svg viewBox="0 0 110 150" aria-hidden="true"><g stroke="#7A5A22" stroke-width="1.2" fill="#E8C98A"><rect x="34" y="14" width="5" height="60" transform="rotate(-12 36 74)"/><rect x="44" y="6" width="5" height="68" transform="rotate(-4 46 74)"/><rect x="53" y="2" width="5" height="72"/><rect x="62" y="6" width="5" height="68" transform="rotate(5 64 74)"/><rect x="71" y="12" width="5" height="62" transform="rotate(13 73 74)"/></g><g fill="#C8282E"><rect x="33" y="14" width="5" height="6" transform="rotate(-12 36 74)"/><rect x="53" y="2" width="5" height="6"/><rect x="71" y="12" width="5" height="6" transform="rotate(13 73 74)"/></g><defs><linearGradient id="tpBam" x1="0" x2="1"><stop offset="0" stop-color="#A9822F"/><stop offset=".45" stop-color="#E9C77E"/><stop offset="1" stop-color="#9C7428"/></linearGradient></defs><rect x="24" y="52" width="62" height="94" rx="9" fill="url(#tpBam)" stroke="#5E4212" stroke-width="2"/><path d="M24 72h62M24 128h62" stroke="#7A5A22" stroke-width="2"/><rect x="24" y="86" width="62" height="28" fill="#C8282E"/><text x="55" y="107" font-size="20" text-anchor="middle" fill="#FFD66B" font-weight="900" font-family="\'Songti SC\',\'STSong\',serif">签</text></svg>';
+const TP_JIAO='<svg viewBox="0 0 80 44" aria-hidden="true"><g class="f-round"><path d="M4 36Q40-16 76 36Q40 32 4 36Z" fill="#A3141A" stroke="#4A070A" stroke-width="1.5"/><path d="M16 25Q36 8 56 15" stroke="rgba(255,255,255,.35)" stroke-width="4" fill="none" stroke-linecap="round"/></g><g class="f-flat"><path d="M4 36Q40-16 76 36Q40 32 4 36Z" fill="#E4533F" stroke="#4A070A" stroke-width="1.5"/><path d="M9 32Q40 23 71 32" stroke="#8E1A1C" stroke-width="2" fill="none"/><path d="M18 26Q40 13 62 26M27 20Q40 12 53 20" stroke="rgba(110,15,15,.4)" stroke-width="1.5" fill="none"/></g></svg>';
 let tp={snd:true,n:0};
 try{ const v=JSON.parse(localStorage.getItem(TP_KEY)||"{}"); if(typeof v.snd==="boolean") tp.snd=v.snd; if(Number(v.n)>0) tp.n=Math.floor(Number(v.n)) }catch(e){}
 const tpSave=()=>{ try{ localStorage.setItem(TP_KEY,JSON.stringify(tp)) }catch(e){} };
-let tpBows=0, tpBusy=false, tpLast=-1, tpTimers=[], tpAudio=null, tpSayT=0;
+let tpLast=-1, tpTimers=[], tpAudio=null, tpSayT=0, tpDraw={n:0,tries:0};
+const pl={f:.5,dir:0,target:null,then:null,raf:0,last:0,hold:false,bows:0,offered:false,busy:false,moved:false,uiKey:""};
 const tpLater=(fn,ms)=>{ tpTimers.push(setTimeout(fn,ms)) };
 const tpRestart=(el,cls)=>{ el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls) };
+const tpLive=t=>{ $("tpLive").textContent=t };
 function tpSound(kind){
   if(!tp.snd) return;
   try{
     const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
     tpAudio=tpAudio||new AC(); if(tpAudio.state==="suspended") tpAudio.resume();
     const t0=tpAudio.currentTime, out=tpAudio.createGain(); out.gain.value=.18; out.connect(tpAudio.destination);
-    const note=(f,a,d,at)=>{ const o=tpAudio.createOscillator(), g=tpAudio.createGain(), st=t0+(at||0);
-      o.type="sine"; o.frequency.value=f; g.gain.setValueAtTime(.0001,st); g.gain.exponentialRampToValueAtTime(a,st+.012); g.gain.exponentialRampToValueAtTime(.0001,st+d);
+    const note=(f,a,d,at,type)=>{ const o=tpAudio.createOscillator(), g=tpAudio.createGain(), st=t0+(at||0);
+      o.type=type||"sine"; o.frequency.value=f; g.gain.setValueAtTime(.0001,st); g.gain.exponentialRampToValueAtTime(a,st+.008); g.gain.exponentialRampToValueAtTime(.0001,st+d);
       o.connect(g); g.connect(out); o.start(st); o.stop(st+d+.05) };
     if(kind==="bell"){ note(392,1,3); note(392*2.76,.35,1.6); note(392*5.4,.14,.8); note(196,.3,2.2) }
     else if(kind==="door"){ note(110,.9,.45); note(150,.5,.35,.14) }
     else if(kind==="coins"){ [0,.09,.18,.3,.42,.55,.7,.86].forEach((at,i)=>{ note(1760+(i*317)%900,.5,.35,at+.15); note(2637,.22,.25,at+.17) }) }
+    else if(kind==="clack"){ note(330,.8,.09,0,"triangle"); note(250,.7,.12,.11,"triangle") }
+    else if(kind==="rattle"){ for(let i=0;i<12;i++) note(900+(i*173)%700,.35,.05,i*.11,"triangle") }
     else note(988,.5,.4);
   }catch(e){}
 }
 function tpPaintSnd(){ const b=$("tpSnd"); b.setAttribute("aria-pressed",String(tp.snd)); b.setAttribute("aria-label",tp.snd?"Sound on. Tap to mute.":"Sound off. Tap to turn on."); b.title=tp.snd?"Sound on":"Sound off" }
-function tpDots(){
-  document.querySelectorAll("#tpDots i").forEach((x,i)=>x.classList.toggle("on",i<tpBows));
-  $("tpDotsTxt").textContent=tpBows?tpBows+" of 3":"Bow three times · 拜三拜";
+
+/* walking */
+const tpW=()=>$("tpIn").clientWidth||1;
+function plPaint(){ $("tpMe").style.setProperty("--x",(pl.f*tpW())+"px") }
+function plNear(){ const W=tpW(), r=Math.max(36,W*.07)/W; for(const k in TP_ST) if(Math.abs(pl.f-TP_ST[k])<=r) return k; return null }
+function plStep(t){
+  pl.raf=0;
+  const dt=pl.last?Math.min(.05,(t-pl.last)/1000):0; pl.last=t;
+  const sp=Math.max(170,tpW()*.3)/tpW();
+  let d=pl.dir, arrived=false;
+  if(!d&&pl.target!=null){ d=Math.sign(pl.target-pl.f); if(!d){ pl.target=null; arrived=true } }
+  if(d){
+    let nf=pl.f+d*sp*dt;
+    if(!pl.dir&&pl.target!=null&&(d>0?nf>=pl.target:nf<=pl.target)){ nf=pl.target; pl.target=null; arrived=true }
+    pl.f=Math.min(.94,Math.max(.06,nf));
+  }
+  const el=$("tpMe"), moving=!!d&&!arrived&&(pl.dir||pl.target!=null);
+  el.classList.toggle("walk",moving); if(d) el.classList.toggle("left",d<0);
+  plPaint(); tpUi();
+  if(arrived&&pl.then){ const fn=pl.then; pl.then=null; fn() }
+  if(pl.dir||pl.target!=null) pl.raf=requestAnimationFrame(plStep); else pl.last=0;
 }
-function tpClearBows(){
-  tpBows=0; tpDots(); document.querySelectorAll("#tpSticks i").forEach(i=>i.classList.remove("lit"));
-  $("tpGod").classList.remove("blessed","jump","nod","wiggle"); $("tpPray").disabled=false;
+function plGo(){ pl.moved=true; if(!pl.raf){ pl.last=0; pl.raf=requestAnimationFrame(plStep) } }
+function walkTo(f,then){ if(!tpFree()) return; pl.dir=0; pl.target=Math.min(.94,Math.max(.06,f)); pl.then=then||null; plGo() }
+const tpFree=()=>$("temple").classList.contains("inside")&&$("tpEv").hidden&&$("tpBless").hidden&&!pl.busy;
+
+/* what you can do where you stand */
+function tpUi(){
+  const st=plNear(); let hint="", acts=[];
+  if(st==="incense") acts=pl.hold?[]:[["take","🔥 拿香 · Take incense"]], hint=pl.hold?"香拿好了，去中间供桌拜拜 · Take it to the altar →":"";
+  else if(st==="altar"){ if(pl.hold) acts=[["bow","🙏 拜拜 · Bow "+(pl.bows+1)+"/3"]]; else hint=pl.offered?"香上好了，去右边求签 · Draw a fortune on the right →":"← 先去左边拿香 · Get incense from the left table" }
+  else if(st==="fortune"){ acts=pl.offered?[["draw","🎋 求签 · Fortune"],["ask","🌙 掷筊 · Yes/No"]]:[["ask","🌙 掷筊 · Yes/No"]]; if(!pl.offered) hint="上了香才能求签 · Offer incense before drawing a fortune" }
+  else hint=pl.hold?"去中间供桌拜拜 · Walk to the altar":pl.offered?"去右边求签 → · Walk right to draw a fortune":"← 去左边拿香 · Walk left to take incense";
+  if(!pl.moved) hint+="<small>点地面或按 ◀ ▶ 走路 · Tap the floor or use ◀ ▶ to walk</small>";
+  const key=st+"|"+hint+"|"+pl.busy+"|"+acts.map(a=>a.join()).join(";");
+  if(key===pl.uiKey) return; pl.uiKey=key;
+  $("tpHint").innerHTML=hint;
+  $("tpActs").innerHTML=acts.map(a=>'<button type="button" class="tp-act" data-act="'+a[0]+'"'+(pl.busy?" disabled":"")+'>'+a[1]+'</button>').join("");
+  document.querySelectorAll(".tp-table").forEach(b=>b.classList.toggle("near",b.dataset.go===st));
 }
-function tpReset(){
-  tpTimers.forEach(clearTimeout); tpTimers=[]; tpBusy=false;
-  $("temple").classList.remove("opening","zoom","inside");
-  $("tpOut").style.transformOrigin=""; $("tpOut").removeAttribute("inert"); $("tpIn").setAttribute("inert","");
-  $("tpBless").hidden=true; $("tpRain").innerHTML=""; $("tpSay").hidden=true; $("tpWorld").classList.remove("bow");
-  tpClearBows();
+function tpAct(k){
+  if(!tpFree()) return;
+  if(k==="take") takeIncense(); else if(k==="bow") bowOnce(); else if(k==="draw") drawStick(); else if(k==="ask") askBlocks();
 }
-function openTemple(){
-  const d=$("temple"); if(d.open) return;
-  const g=$("tpGodImg"); if(!g.getAttribute("src")) g.src=g.dataset.src;
-  tpReset(); tpPaintSnd(); d.showModal(); $("tpGo").focus();
+function takeIncense(){
+  if(pl.hold) return;
+  pl.hold=true; pl.bows=0; $("tpMe").classList.add("holding"); $("tpGod").classList.remove("blessed");
+  tpSound("ding"); tpLive("You picked up three incense sticks. Walk to the altar."); tpUi();
 }
-function enterTemple(){
-  const d=$("temple"); if(tpBusy||d.classList.contains("inside")) return; tpBusy=true;
-  const inside=()=>{ d.classList.add("inside"); $("tpOut").setAttribute("inert",""); $("tpIn").removeAttribute("inert"); $("tpLive").textContent="Inside the temple. 财神爷 is on the altar.";
-    tpLater(()=>{ tpBusy=false; $("tpPray").focus() },calmMotion.matches?0:900) };
-  if(calmMotion.matches){ inside(); return }
-  tpSound("door"); d.classList.add("opening");
-  tpLater(()=>{
-    const o=$("tpOut"), r=o.getBoundingClientRect(), dr=$("tpDoors").getBoundingClientRect();
-    o.style.transformOrigin=(dr.left+dr.width/2-r.left)+"px "+(dr.top+dr.height*.55-r.top)+"px";
-    d.classList.add("zoom"); tpLater(inside,420);
-  },760);
+function bowOnce(){
+  if(!pl.hold) return;
+  pl.busy=true; pl.bows++; tpSound("bell"); tpLive("Bow "+pl.bows+" of 3.");
+  if(!calmMotion.matches) tpRestart($("tpMe"),"bowing");
+  if(!calmMotion.matches) tpLater(()=>tpRestart($("tpGod"),"nod"),400);
+  tpUi();
+  tpLater(()=>{ $("tpMe").classList.remove("bowing"); pl.busy=false; if(pl.bows>=3) placeIncense(); else tpUi() },calmMotion.matches?250:1000);
 }
-function tpBow(){
-  if(tpBusy||tpBows>=3||!$("temple").classList.contains("inside")) return;
-  tpBusy=true; tpBows++; tpSound("bell");
-  const calm=calmMotion.matches, w=$("tpWorld");
-  if(!calm) tpRestart(w,"bow");
-  const h=document.createElement("span"); h.className="tp-hands"; h.textContent="🙏"; h.setAttribute("aria-hidden","true"); $("tpIn").appendChild(h); tpLater(()=>h.remove(),1200);
-  const n=tpBows;
-  tpLater(()=>{ const st=$("tpSticks").children[n-1]; if(st) st.classList.add("lit"); tpDots(); if(!calm) tpRestart($("tpGod"),"nod") },calm?0:460);
-  tpLater(()=>{ w.classList.remove("bow"); tpBusy=false; if(tpBows>=3) tpBlessed() },calm?150:1150);
-  $("tpLive").textContent="Bow "+n+" of 3.";
+function placeIncense(){
+  pl.busy=true; pl.hold=false; pl.bows=0; $("tpMe").classList.remove("holding"); tpUi();
+  const sticks=[...$("tpSticks").children]; sticks.forEach(x=>x.classList.remove("lit"));
+  sticks.forEach((x,i)=>tpLater(()=>x.classList.add("lit"),120+i*220));
+  tpLater(()=>{ pl.offered=true; tpBlessed() },900);
 }
 function tpRain(){
   const kinds=["coin","coin","pao","coin","gold"]; let h="";
@@ -2025,16 +2068,97 @@ function tpRain(){
   $("tpRain").innerHTML=h; tpLater(()=>{ $("tpRain").innerHTML="" },4800);
 }
 function tpBlessed(){
-  tpBusy=true; $("tpPray").disabled=true; tp.n++; tpSave();
+  tp.n++; tpSave();
   const calm=calmMotion.matches, g=$("tpGod"); g.classList.remove("nod"); g.classList.add("blessed"); if(!calm) tpRestart(g,"jump");
   tpSound("coins"); if(!calm) tpRain();
   let i=0; do{ i=Math.floor(Math.random()*TP_BLESS.length) }while(i===tpLast&&TP_BLESS.length>1); tpLast=i;
   tpLater(()=>{
     $("tpBlessZh").textContent=TP_BLESS[i][0]; $("tpBlessEn").textContent=TP_BLESS[i][1];
-    $("tpBlessN").textContent="Blessing #"+tp.n+" · 第"+tp.n+"次";
-    $("tpBless").hidden=false; $("tpAgain").focus(); tpBusy=false;
-    $("tpLive").textContent="Your blessing: "+TP_BLESS[i][0]+", "+TP_BLESS[i][1]+".";
+    $("tpBlessN").textContent="Incense offered #"+tp.n+" · 第"+tp.n+"次上香";
+    $("tpBless").hidden=false; $("tpAgain").focus(); pl.busy=false; pl.uiKey=""; tpUi();
+    tpLive("Your blessing: "+TP_BLESS[i][0]+", "+TP_BLESS[i][1]+".");
   },calm?250:1400);
+}
+
+/* fortune sticks and moon blocks */
+function evShow(html){ $("tpEvCard").innerHTML=html; $("tpEv").hidden=false; const b=$("tpEvCard").querySelector("button"); if(b) b.focus() }
+function evClose(){ $("tpEv").hidden=true; $("tpMe").classList.remove("shaking"); pl.uiKey=""; tpUi(); const a=$("tpActs").querySelector("button"); if(a) a.focus() }
+const evBtns=list=>'<div class="tp-evacts">'+list.map((b,i)=>'<button type="button" data-ev="'+b[0]+'"'+(i===0?' class="pri"':"")+'>'+b[1]+'</button>').join("")+'</div>';
+function drawStick(){
+  tpDraw={n:1+Math.floor(Math.random()*TP_FORTUNES.length),tries:0};
+  if(!calmMotion.matches) tpRestart($("tpMe"),"shaking");
+  tpSound("rattle");
+  evShow('<h3>求签 · DRAW A FORTUNE</h3><div class="tp-tube shaking">'+TP_TUBE+'</div><p class="tp-evt">心里想着你的问题，摇呀摇…<small>Think of your question while you shake…</small></p>');
+  tpLater(()=>{
+    tpSound("clack"); const n=tpDraw.n;
+    evShow('<h3>求签 · DRAW A FORTUNE</h3><div class="tp-tube">'+TP_TUBE+'<span class="tp-stickout tp-zh">第'+tpNum(n)+'签</span></div><p class="tp-evt">掉出了第'+tpNum(n)+'签！先掷筊问财神爷是不是这支。<small>Stick no. '+n+' fell out. Throw the moon blocks to ask if it’s the right one.</small></p>'+evBtns([["confirm","🌙 掷筊确认 · Throw to confirm"]]));
+    tpLive("Stick number "+n+" fell out.");
+  },calmMotion.matches?300:1500);
+}
+function askBlocks(){
+  evShow('<h3>掷筊 · MOON BLOCKS</h3><div class="tp-blocks landed"><span class="tp-jiao a flat">'+TP_JIAO+'</span><span class="tp-jiao b">'+TP_JIAO+'</span></div><p class="tp-evt">心里默念一个「是或否」的问题，然后掷筊。<small>Think of a yes-or-no question, then throw.</small></p>'+evBtns([["ask-throw","🌙 掷 · Throw"],["close","算了 · Not now"]]));
+}
+function throwBlocks(mode){
+  const r=Math.random(); let res=r<.5?"sheng":r<.75?"xiao":"yin";
+  if(mode==="confirm"){ tpDraw.tries++; if(tpDraw.tries>=3) res="sheng" }
+  const faces=res==="sheng"?(Math.random()<.5?["flat",""]:["","flat"]):res==="xiao"?["flat","flat"]:["",""];
+  const blocks=cls=>'<div class="tp-blocks '+cls+'"><span class="tp-jiao a '+faces[0]+'">'+TP_JIAO+'</span><span class="tp-jiao b '+faces[1]+'">'+TP_JIAO+'</span></div>';
+  const head=mode==="confirm"?"<h3>第"+tpNum(tpDraw.n)+"签 · 掷筊确认</h3>":"<h3>掷筊 · MOON BLOCKS</h3>";
+  evShow(head+blocks("throwing")+'<p class="tp-evt">掷出去了…<small>Throwing…</small></p>');
+  tpLater(()=>tpSound("clack"),calmMotion.matches?0:950);
+  tpLater(()=>{
+    const name={sheng:"圣杯",xiao:"笑杯",yin:"阴杯"}[res], how={sheng:"一平一凸 · one flat, one round",xiao:"两面都平 · both flat",yin:"两面都凸 · both round"}[res];
+    let txt, btns;
+    if(mode==="confirm"){
+      if(res==="sheng"){ txt="财神爷说：就是这支！<small>Yes, this is your stick.</small>"; btns=[["read","📜 看签诗 · Read your fortune"]] }
+      else if(res==="xiao"){ txt="财神爷笑了，还没决定，再掷一次。<small>He’s laughing. Not decided yet, so throw again.</small>"; btns=[["confirm","🌙 再掷一次 · Throw again"]] }
+      else { txt="不是这一支，重新求签吧。<small>Not this stick. Shake again for a new one.</small>"; btns=[["draw","🎋 重新求签 · Draw again"]] }
+    }else{
+      if(res==="sheng"){ txt="是，可以！<small>Yes. Go for it.</small>" }
+      else if(res==="xiao"){ txt="财神爷笑而不答，换个问法再问。<small>He just laughs. Ask it a different way.</small>" }
+      else { txt="不行，或者时机未到。<small>No, or not yet.</small>" }
+      btns=[["ask","🌙 再问一个 · Ask another"],["close","好 · OK"]];
+    }
+    evShow(head+blocks("landed")+'<b class="tp-evres tp-zh">'+name+'</b><p class="tp-evt" style="margin-top:0;font-size:13px;opacity:.85">'+how+'</p><p class="tp-evt">'+txt+'</p>'+evBtns(btns));
+    tpLive(name+". "+txt.replace(/<[^>]+>/g," "));
+  },calmMotion.matches?200:1250);
+}
+function showFortune(){
+  const n=tpDraw.n, f=TP_FORTUNES[n-1];
+  evShow('<div class="tp-fortune"><small>第'+tpNum(n)+'签 · FORTUNE NO. '+n+'</small><b class="tp-lvl tp-zh">'+f[0]+'</b><div class="tp-poem tp-zh">'+f[1].map(l=>'<span>'+l+'</span>').join("")+'</div><p class="tp-jie"><b class="tp-zh">解曰</b>'+f[2]+'</p><p class="tp-en">'+f[3]+'</p></div>'+evBtns([["close","好 · OK"],["draw","🎋 再求一支 · Draw another"]]));
+  if(f[0]==="上上签"){ tpSound("coins"); if(!calmMotion.matches) tpRain() }
+  tpLive("Fortune number "+n+", "+f[0]+". "+f[3]);
+}
+
+/* opening, walking in, leaving */
+function tpReset(){
+  tpTimers.forEach(clearTimeout); tpTimers=[];
+  if(pl.raf) cancelAnimationFrame(pl.raf);
+  Object.assign(pl,{f:.5,dir:0,target:null,then:null,raf:0,last:0,hold:false,bows:0,offered:false,busy:false,moved:false,uiKey:""});
+  $("temple").classList.remove("opening","zoom","inside");
+  $("tpOut").style.transformOrigin=""; $("tpOut").removeAttribute("inert"); $("tpIn").setAttribute("inert","");
+  $("tpBless").hidden=true; $("tpEv").hidden=true; $("tpRain").innerHTML=""; $("tpSay").hidden=true;
+  $("tpMe").className="tp-me"; $("tpGod").classList.remove("blessed","jump","nod","wiggle");
+  [...$("tpSticks").children].forEach(x=>x.classList.remove("lit"));
+}
+function openTemple(){
+  const d=$("temple"); if(d.open) return;
+  const g=$("tpGodImg"); if(!g.getAttribute("src")) g.src=g.dataset.src;
+  tpReset(); tpPaintSnd(); $("tpMeName").textContent=(myName||"You").split(/\s+/)[0];
+  d.showModal(); $("tpGo").focus();
+}
+function enterTemple(){
+  const d=$("temple"); if(pl.busy||d.classList.contains("inside")) return; pl.busy=true;
+  const inside=()=>{ d.classList.add("inside"); $("tpOut").setAttribute("inert",""); $("tpIn").removeAttribute("inert"); plPaint();
+    tpLive("Inside the temple. The incense table is on the left, the altar in the middle, the fortune table on the right.");
+    tpLater(()=>{ pl.busy=false; pl.uiKey=""; tpUi(); $("tpL").focus() },calmMotion.matches?0:900) };
+  if(calmMotion.matches){ inside(); return }
+  tpSound("door"); d.classList.add("opening");
+  tpLater(()=>{
+    const o=$("tpOut"), r=o.getBoundingClientRect(), dr=$("tpDoors").getBoundingClientRect();
+    o.style.transformOrigin=(dr.left+dr.width/2-r.left)+"px "+(dr.top+dr.height*.55-r.top)+"px";
+    d.classList.add("zoom"); tpLater(inside,420);
+  },760);
 }
 function tpPoke(){
   if(!$("temple").classList.contains("inside")) return;
@@ -2043,14 +2167,43 @@ function tpPoke(){
   s.textContent=t; s.hidden=true; void s.offsetWidth; s.hidden=false; tpSound("ding");
   clearTimeout(tpSayT); tpSayT=setTimeout(()=>{ s.hidden=true },2400);
 }
-if($("temple")&&$("templeBtn")){
+if($("temple")&&$("templeBtn")&&$("tpMe")){
   $("templeBtn").onclick=openTemple;
   $("tpGo").onclick=enterTemple; $("tpDoors").addEventListener("click",enterTemple);
-  $("tpPray").onclick=tpBow; $("tpGod").onclick=tpPoke;
-  $("tpAgain").onclick=()=>{ $("tpBless").hidden=true; tpClearBows(); $("tpPray").focus() };
-  $("tpBye").onclick=$("tpClose").onclick=()=>$("temple").close();
+  $("tpGod").onclick=e=>{ e.stopPropagation(); tpPoke() };
+  $("tpActs").addEventListener("click",e=>{ const b=e.target.closest("[data-act]"); if(b) tpAct(b.dataset.act) });
+  $("tpIn").addEventListener("click",e=>{
+    if(!tpFree()) return;
+    const go=e.target.closest("[data-go]");
+    if(go){ const k=go.dataset.go; walkTo(TP_ST[k],k==="incense"&&!pl.hold?takeIncense:null); return }
+    if(e.target.closest(".tp-ui,.tp-bless,.tp-ev,button")) return;
+    if(e.target.closest(".tp-altar")){ walkTo(TP_ST.altar); return }
+    const r=$("tpIn").getBoundingClientRect(); walkTo((e.clientX-r.left)/r.width);
+  });
+  [["tpL",-1],["tpR",1]].forEach(([id,d])=>{
+    const b=$(id), stop=()=>{ if(pl.dir===d) pl.dir=0 };
+    b.addEventListener("pointerdown",e=>{ if(!tpFree()) return; e.preventDefault(); try{ b.setPointerCapture(e.pointerId) }catch(_){} pl.target=null; pl.then=null; pl.dir=d; plGo() });
+    b.addEventListener("pointerup",stop); b.addEventListener("pointercancel",stop); b.addEventListener("lostpointercapture",stop);
+    b.addEventListener("click",e=>{ if(e.detail===0) walkTo(pl.f+d*.12) });
+  });
+  $("temple").addEventListener("keydown",e=>{
+    if(!tpFree()) return; const k=e.key;
+    if(k==="ArrowLeft"||k==="a"||k==="A"||k==="ArrowRight"||k==="d"||k==="D"){ e.preventDefault(); if(e.repeat) return; pl.target=null; pl.then=null; pl.dir=(k==="ArrowLeft"||k==="a"||k==="A")?-1:1; plGo() }
+    else if(k==="e"||k==="E"||(k===" "&&!e.target.closest("button"))){ const b=$("tpActs").querySelector("button:not([disabled])"); if(b){ e.preventDefault(); b.click() } }
+  });
+  $("temple").addEventListener("keyup",e=>{ if(/^(ArrowLeft|ArrowRight|a|A|d|D)$/.test(e.key)) pl.dir=0 });
+  $("tpEvCard").addEventListener("click",e=>{
+    const b=e.target.closest("[data-ev]"); if(!b) return; const k=b.dataset.ev;
+    if(k==="confirm") throwBlocks("confirm"); else if(k==="ask-throw") throwBlocks("ask"); else if(k==="ask") askBlocks();
+    else if(k==="read") showFortune(); else if(k==="draw") drawStick(); else evClose();
+  });
+  $("tpAgain").onclick=()=>{ $("tpBless").hidden=true; walkTo(TP_ST.fortune) };
+  $("tpBye").onclick=()=>{ $("tpBless").hidden=true; pl.uiKey=""; tpUi() };
+  $("tpClose").onclick=()=>$("temple").close();
   $("tpSnd").onclick=()=>{ tp.snd=!tp.snd; tpSave(); tpPaintSnd(); tpSound("ding") };
-  $("temple").addEventListener("close",()=>{ tpTimers.forEach(clearTimeout); tpTimers=[]; $("tpRain").innerHTML=""; clearTimeout(tpSayT) });
+  $("temple").addEventListener("close",()=>{ tpTimers.forEach(clearTimeout); tpTimers=[]; $("tpRain").innerHTML=""; clearTimeout(tpSayT); pl.dir=0; pl.target=null; if(pl.raf){ cancelAnimationFrame(pl.raf); pl.raf=0 } });
+  window.addEventListener("resize",()=>{ if($("temple").open) plPaint() });
+  const tpStage=$("temple").querySelector(".tp-stage"); if(tpStage) tpStage.addEventListener("scroll",()=>{ tpStage.scrollTop=0; tpStage.scrollLeft=0 });
 }
 
 buildForm(); loadCache(); setNote(); render(); renderNotifs(); connect();

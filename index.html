@@ -1346,7 +1346,7 @@ dialog#mkDlg{width:min(980px,calc(100vw - 24px))}
 }
 dialog#temple{position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;padding:0;border:0;border-radius:0;background:#2A0A0B;color:#FFF6E0;overflow:hidden;box-shadow:none}
 dialog#temple::backdrop{background:#2A0A0B}
-.tp-stage{position:absolute;inset:0;overflow:hidden;-webkit-user-select:none;user-select:none}
+.tp-stage{position:absolute;inset:0;overflow:hidden;overflow:clip;-webkit-user-select:none;user-select:none}
 .tp-zh{font-family:"Songti SC","STSong","Noto Serif SC","Noto Serif CJK SC","Source Han Serif SC",serif;font-weight:900}
 .tp-bar{position:absolute;z-index:8;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 12px) 14px 0;pointer-events:none}
 .tp-bar button{pointer-events:auto;border:0;border-radius:999px;background:rgba(30,8,8,.5);color:#FFF6E0;font:600 14px/1 var(--body);padding:0 15px;min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
@@ -1386,11 +1386,11 @@ dialog#temple::backdrop{background:#2A0A0B}
 .tp-in{position:absolute;inset:0;opacity:0;visibility:hidden;transform:scale(1.1);transition:opacity .8s ease,transform 1.1s cubic-bezier(.2,.7,.3,1),visibility 0s linear .8s;background:radial-gradient(ellipse 75% 60% at 50% 42%,#C2342F 0%,#8E1A1C 55%,#4B0B0D 100%)}
 .tp-in::before{content:"";position:absolute;inset:0;background-image:radial-gradient(circle,rgba(255,206,110,.16) 0 2px,transparent 3px),radial-gradient(circle,rgba(255,206,110,.07) 0 1px,transparent 2px);background-size:36px 36px,18px 18px;pointer-events:none}
 #temple.inside .tp-in{opacity:1;visibility:visible;transform:none;transition:opacity .8s ease,transform 1.1s cubic-bezier(.2,.7,.3,1),visibility 0s}
-#temple.inside .tp-out{visibility:hidden}
+#temple.inside .tp-out{display:none}
 .tp-world{position:absolute;inset:0;transform-origin:50% 62%}
 .tp-world.bow{animation:tpBowAnim 1.1s cubic-bezier(.4,0,.3,1)}
 @keyframes tpBowAnim{0%{transform:none;filter:none}36%,58%{transform:translateY(-8%) scale(1.07);filter:brightness(.8)}100%{transform:none;filter:none}}
-.tp-floor{position:absolute;left:0;right:0;bottom:0;height:calc(env(safe-area-inset-bottom,0px) + 158px);background:linear-gradient(180deg,#3E140A,#1E0708);overflow:hidden}
+.tp-floor{position:absolute;left:0;right:0;bottom:0;height:calc(env(safe-area-inset-bottom,0px) + 238px);background:linear-gradient(180deg,#3E140A,#1E0708);overflow:hidden}
 .tp-floor::before{content:"";position:absolute;left:-60%;right:-60%;top:0;bottom:-40%;background:repeating-linear-gradient(90deg,rgba(255,190,120,.10) 0 2px,transparent 2px 80px),repeating-linear-gradient(180deg,rgba(255,190,120,.08) 0 2px,transparent 2px 40px);transform:perspective(300px) rotateX(58deg);transform-origin:50% 0}
 .tp-beam{position:absolute;top:0;left:0;right:0;height:calc(env(safe-area-inset-top,0px) + 60px);background:linear-gradient(180deg,#2E1309,#5C2C16 72%,#2A1209);box-shadow:0 5px 0 #C9922B,0 12px 26px rgba(0,0,0,.45)}
 .tp-plaque{position:absolute;z-index:1;left:50%;top:calc(env(safe-area-inset-top,0px) + 64px);transform:translateX(-50%);padding:7px 14px 7px 22px;background:linear-gradient(180deg,#1E0D07,#331709);border:3px solid #E2AC3F;border-radius:6px;color:#FFD66B;font-size:clamp(22px,4vh,36px);letter-spacing:.3em;white-space:nowrap;box-shadow:0 0 0 2px #1E0D07,0 12px 24px rgba(0,0,0,.45)}
@@ -1402,14 +1402,14 @@ dialog#temple::backdrop{background:#2A0A0B}
 .tp-pillar.l{left:clamp(4px,4vw,60px)}
 .tp-pillar.r{right:clamp(4px,4vw,60px)}
 .tp-couplet{position:absolute;top:clamp(40px,10vh,110px);left:50%;transform:translateX(-50%);writing-mode:vertical-rl;text-orientation:upright;background:linear-gradient(180deg,#D42A2E,#A81A1E);border:2px solid #E2AC3F;color:#FFD66B;font-size:clamp(15px,2.6vh,26px);line-height:1;letter-spacing:.2em;padding:10px 5px 6px;border-radius:3px;box-shadow:0 6px 14px rgba(0,0,0,.35);white-space:nowrap}
-.tp-shrine{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 128px);transform:translateX(-50%);width:min(78vw,560px);display:flex;flex-direction:column;align-items:center}
+.tp-shrine{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 178px);transform:translateX(-50%);width:min(64vw,540px);display:flex;flex-direction:column;align-items:center}
 .tp-godwrap{position:relative;display:flex;justify-content:center;margin-bottom:-5%}
 .tp-halo{position:absolute;left:50%;top:42%;width:150%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,rgba(255,226,140,.7) 0,rgba(255,190,80,.3) 34%,rgba(255,160,60,0) 66%);pointer-events:none;transition:filter .6s}
 .tp-halo::before{content:"";position:absolute;inset:0;border-radius:50%;background:repeating-conic-gradient(from 0deg,rgba(255,224,150,.26) 0 7deg,rgba(255,224,150,0) 7deg 18deg);-webkit-mask:radial-gradient(circle,#000 18%,transparent 66%);mask:radial-gradient(circle,#000 18%,transparent 66%);animation:tpSpin 50s linear infinite}
 @keyframes tpSpin{to{transform:rotate(360deg)}}
 .tp-god{position:relative;z-index:1;border:0;background:none;padding:0;margin:0;cursor:pointer;line-height:0;border-radius:24px}
 .tp-god:focus-visible{outline:3px solid #FFD66B;outline-offset:4px}
-.tp-god img{display:block;height:min(44vh,92vw,760px);width:auto;max-width:none;transform-origin:50% 100%;filter:drop-shadow(0 12px 18px rgba(0,0,0,.35));transition:filter .6s}
+.tp-god img{display:block;height:min(38vh,76vw,760px);width:auto;max-width:none;transform-origin:50% 100%;filter:drop-shadow(0 12px 18px rgba(0,0,0,.35));transition:filter .6s}
 .tp-god.nod img{animation:tpNod .6s ease}
 @keyframes tpNod{0%,100%{transform:none}40%{transform:translateY(2%) scale(1.02,.97)}70%{transform:translateY(-1.5%)}}
 .tp-god.wiggle img{animation:tpWig .55s ease}
@@ -1422,7 +1422,7 @@ dialog#temple::backdrop{background:#2A0A0B}
 .tp-say{position:absolute;z-index:3;left:50%;top:0;transform:translate(-50%,-70%);background:#FFF8E6;color:#8A2414;font:700 15px/1.3 var(--body);padding:9px 14px;border-radius:14px;white-space:nowrap;box-shadow:0 8px 20px rgba(0,0,0,.3);animation:tpPop .35s cubic-bezier(.3,1.6,.5,1)}
 .tp-say::after{content:"";position:absolute;left:50%;bottom:-6px;width:12px;height:12px;background:inherit;transform:translateX(-50%) rotate(45deg);border-radius:2px}
 @keyframes tpPop{from{opacity:0;scale:.6}to{opacity:1;scale:1}}
-.tp-altar{position:relative;z-index:2;width:100%;height:clamp(78px,12vh,118px)}
+.tp-altar{position:relative;z-index:2;width:100%;height:clamp(70px,11vh,112px);cursor:pointer}
 .tp-top{position:absolute;left:-3%;right:-3%;top:0;height:16px;border-radius:4px;background:linear-gradient(180deg,#9A5428,#5C2C12);box-shadow:0 3px 0 #2A1209}
 .tp-cloth{position:absolute;left:4%;right:4%;top:16px;bottom:0;display:grid;place-items:center;background:linear-gradient(180deg,#C8282E,#97181C);border-top:5px solid #E2AC3F;clip-path:polygon(0 0,100% 0,96% 100%,4% 100%)}
 .tp-fu{display:grid;place-items:center;width:clamp(36px,5.6vh,54px);aspect-ratio:1;background:#E2AC3F;transform:rotate(45deg);box-shadow:0 0 0 3px #97181C,0 0 0 5px #E2AC3F}
@@ -1450,7 +1450,7 @@ dialog#temple::backdrop{background:#2A0A0B}
 @keyframes tpSmoke{0%{transform:translate(0,0) scale(.5);opacity:0}15%{opacity:.75}100%{transform:translate(var(--sx,12px),-140px) scale(3.4);opacity:0}}
 .tp-hands{position:absolute;z-index:6;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 140px);font-size:64px;line-height:1;pointer-events:none;translate:-50% 0;animation:tpHands 1.1s ease-out forwards}
 @keyframes tpHands{0%{opacity:0;transform:translateY(30px) scale(.6)}30%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-70px) scale(1.05)}}
-.tp-ui{position:absolute;z-index:5;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 18px);background:linear-gradient(180deg,rgba(26,6,6,0),rgba(26,6,6,.72) 46%)}
+.tp-ui{position:absolute;z-index:5;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 14px);background:linear-gradient(180deg,rgba(26,6,6,0),rgba(26,6,6,.72) 46%)}
 .tp-dots{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600;color:#FFE7B0}
 .tp-dots i{width:10px;height:10px;border-radius:50%;background:rgba(255,231,176,.2);box-shadow:inset 0 0 0 1.5px rgba(255,231,176,.6);transition:background .3s,box-shadow .3s}
 .tp-dots i.on{background:#FFC94A;box-shadow:0 0 10px #FFB020}
@@ -1487,6 +1487,91 @@ dialog#temple::backdrop{background:#2A0A0B}
   .rail button.temple-btn.temple-btn,.tp-out,.tp-in,.tp-door{transition:none}
   .tp-cloud,.tp-lan,.tp-lantern,.tp-go,.tp-halo::before,.tp-candle::after,.tp-sticks b::before,.tp-sticks b::after,.tp-god img{animation:none!important}
 }
+
+/* temple v2: walk, take incense, fortune sticks, moon blocks */
+.tp-me{position:absolute;z-index:4;left:var(--x,50%);bottom:calc(env(safe-area-inset-bottom,0px) + 128px);width:clamp(52px,8.4vh,74px);translate:-50% 0;pointer-events:none}
+.tp-me svg{display:block;width:100%;height:auto;overflow:visible;transition:rotate .2s}
+.tp-me::after{content:"";position:absolute;left:14%;right:14%;bottom:-3px;height:8px;border-radius:50%;background:rgba(0,0,0,.4);filter:blur(2px);z-index:-1}
+.tp-mename{position:absolute;left:50%;bottom:calc(100% + 30px);translate:-50% 0;font:700 11px/1 var(--body);background:rgba(255,248,230,.92);color:#8A2414;padding:4px 8px;border-radius:999px;white-space:nowrap;box-shadow:0 3px 8px rgba(0,0,0,.3)}
+.me-held{display:none}
+.tp-me.holding .me-held{display:inline}
+.me-arm{transform-box:fill-box;transform-origin:50% 0;transition:transform .25s}
+.tp-me.holding .me-arm.l{transform:rotate(-34deg)}
+.tp-me.holding .me-arm.r{transform:rotate(34deg)}
+.me-smk circle{transform-box:fill-box;transform-origin:50% 50%;animation:tpMeSmoke 2.4s ease-out infinite;opacity:0}
+.me-smk circle:nth-child(2){animation-delay:.8s}.me-smk circle:nth-child(3){animation-delay:1.6s}
+@keyframes tpMeSmoke{0%{transform:translate(0,0) scale(.5);opacity:0}20%{opacity:.8}100%{transform:translate(6px,-34px) scale(2.6);opacity:0}}
+.me-up{transform-box:view-box;transform-origin:30px 64px}
+.tp-me.bowing .me-up{animation:tpMeBow .95s ease-in-out}
+@keyframes tpMeBow{0%,100%{transform:none}40%,62%{transform:translateY(9px) scaleY(.8)}}
+.tp-me.shaking .me-up{animation:tpMeShake .13s 8 alternate}
+@keyframes tpMeShake{from{transform:rotate(-5deg)}to{transform:rotate(5deg)}}
+.me-leg{transform-box:fill-box;transform-origin:50% 0}
+.tp-me.walk .me-leg.l{animation:tpLeg .3s ease-in-out infinite alternate}
+.tp-me.walk .me-leg.r{animation:tpLeg .3s ease-in-out infinite alternate-reverse}
+@keyframes tpLeg{from{transform:translateY(0)}to{transform:translateY(-5px) scaleY(.9)}}
+.tp-me.walk:not(.holding) .me-arm.l{animation:tpArm .3s ease-in-out infinite alternate}
+.tp-me.walk:not(.holding) .me-arm.r{animation:tpArm .3s ease-in-out infinite alternate-reverse}
+@keyframes tpArm{from{transform:rotate(-12deg)}to{transform:rotate(12deg)}}
+.tp-me.walk svg{rotate:3deg;animation:tpMeBob .15s ease-in-out infinite alternate}
+.tp-me.walk.left svg{rotate:-3deg}
+@keyframes tpMeBob{from{translate:0 0}to{translate:0 -2px}}
+.tp-table{position:absolute;z-index:3;bottom:calc(env(safe-area-inset-bottom,0px) + 136px);width:clamp(70px,11vh,108px);translate:-50% 0;border:0;background:none;padding:0;margin:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;color:#FFE7B0;font:700 12px/1.1 var(--body)}
+.tp-table.l{left:16%}
+.tp-table.r{left:84%}
+.tp-table svg{display:block;width:100%;height:auto;filter:drop-shadow(0 6px 8px rgba(0,0,0,.45));transition:translate .2s}
+.tp-table:hover svg{translate:0 -3px}
+.tp-table span{background:rgba(30,8,8,.62);padding:4px 9px;border-radius:999px;white-space:nowrap;transition:background .2s,color .2s}
+.tp-table.near span{background:#F5C342;color:#5A1206}
+.tp-table:focus-visible{outline:3px solid #FFD66B;outline-offset:4px;border-radius:10px}
+.tp-hint{margin:0;min-height:18px;font-size:13.5px;font-weight:600;line-height:1.35;color:#FFE7B0;text-align:center;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.tp-hint small{display:block;font-size:12px;font-weight:500;opacity:.75}
+.tp-ctrl{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;max-width:560px}
+.tp-mv{flex:none;width:48px;height:48px;border:0;border-radius:50%;background:rgba(255,231,176,.16);color:#FFE7B0;font-size:18px;box-shadow:inset 0 0 0 1.5px rgba(255,231,176,.45);cursor:pointer;touch-action:none;-webkit-touch-callout:none}
+.tp-mv:active{background:rgba(255,231,176,.32)}
+.tp-acts2{flex:1;min-width:0;min-height:50px;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px}
+.tp-act{border:0;border-radius:999px;min-height:48px;padding:0 18px;font:700 15px/1.1 var(--body);cursor:pointer;color:#5A1206;background:linear-gradient(180deg,#FFE79A,#F5B731 55%,#D9901A);box-shadow:inset 0 2px 0 rgba(255,255,255,.6),0 10px 22px -8px rgba(255,170,40,.75);animation:tpPop .3s cubic-bezier(.3,1.6,.5,1)}
+.tp-act + .tp-act{background:rgba(255,231,176,.14);color:#FFE7B0;box-shadow:inset 0 0 0 1.5px rgba(255,231,176,.55)}
+.tp-act:disabled{opacity:.5;cursor:default}
+.tp-ev{position:absolute;inset:0;z-index:7;display:grid;place-items:center;padding:20px;background:rgba(30,6,6,.55)}
+.tp-ev[hidden]{display:none}
+.tp-evcard{width:min(380px,100%);max-height:calc(100% - 16px);overflow:auto;text-align:center;padding:22px 20px 20px;border-radius:22px;background:radial-gradient(circle at 50% 0,#E23A34,#B01C20 60%,#8A1215);border:3px solid #F5C342;box-shadow:0 0 0 6px rgba(245,195,66,.22),0 30px 60px rgba(0,0,0,.5);color:#FFE7A6;animation:tpCard .4s cubic-bezier(.3,1.5,.5,1)}
+.tp-evcard h3{margin:0;font-size:13px;letter-spacing:.06em;font-weight:700;color:#FFD66B}
+.tp-evres{display:block;margin:6px 0 2px;font-size:36px;color:#FFE08A;letter-spacing:.06em;text-shadow:0 2px 0 #7A0E10}
+.tp-evt{margin:10px 0 0;font-size:15px;font-weight:600;line-height:1.4;color:#FFF3D6}
+.tp-evt small{display:block;margin-top:3px;font-size:13px;font-weight:500;color:#FFE7C4;opacity:.9}
+.tp-evacts{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:16px}
+.tp-evacts button{border:0;border-radius:999px;min-height:44px;padding:0 18px;font:700 15px/1 var(--body);cursor:pointer;background:rgba(255,255,255,.14);color:#FFF3D6;box-shadow:inset 0 0 0 1.5px rgba(255,231,176,.5)}
+.tp-evacts button.pri{background:linear-gradient(180deg,#FFE79A,#F5B731);color:#5A1206;box-shadow:none}
+.tp-tube{position:relative;width:110px;height:150px;margin:8px auto 0}
+.tp-tube svg{display:block;width:100%;height:100%;transform-origin:50% 92%}
+.tp-tube.shaking svg{animation:tpTubeShake .11s ease-in-out infinite alternate}
+@keyframes tpTubeShake{from{rotate:-10deg}to{rotate:10deg}}
+.tp-stickout{position:absolute;left:50%;top:6px;writing-mode:vertical-rl;text-orientation:upright;background:linear-gradient(90deg,#D9B56E,#F1D79C,#D9B56E);color:#7A0E10;padding:10px 4px 18px;border-radius:3px 3px 1px 1px;font-size:15px;letter-spacing:.1em;box-shadow:0 6px 14px rgba(0,0,0,.35);animation:tpStickOut .8s cubic-bezier(.3,1.5,.5,1) forwards}
+@keyframes tpStickOut{from{transform:translate(-50%,70px);opacity:0}to{transform:translate(10%,-34px) rotate(16deg);opacity:1}}
+.tp-blocks{position:relative;height:120px;margin-top:6px}
+.tp-jiao{position:absolute;left:50%;bottom:12px;width:92px;margin-left:-46px}
+.tp-jiao svg{display:block;width:100%;height:auto;overflow:visible;filter:drop-shadow(0 6px 6px rgba(0,0,0,.35))}
+.tp-jiao .f-flat,.tp-blocks.throwing .tp-jiao .f-flat{display:none}
+.tp-jiao.flat .f-flat{display:inline}
+.tp-jiao.flat .f-round{display:none}
+.tp-blocks.throwing .tp-jiao .f-round{display:inline}
+.tp-blocks.throwing .a{animation:tpThrowA 1.1s cubic-bezier(.3,.6,.4,1) forwards}
+.tp-blocks.throwing .b{animation:tpThrowB 1.1s cubic-bezier(.3,.6,.4,1) forwards}
+@keyframes tpThrowA{0%{transform:translate(0,30px) rotate(0)}45%{transform:translate(-28px,-80px) rotate(-380deg)}100%{transform:translate(-56px,0) rotate(-740deg)}}
+@keyframes tpThrowB{0%{transform:translate(0,30px) rotate(0)}45%{transform:translate(28px,-92px) rotate(400deg)}100%{transform:translate(56px,0) rotate(730deg)}}
+.tp-blocks.landed .a{transform:translate(-56px,0) rotate(-20deg);animation:tpLand .3s ease-out}
+.tp-blocks.landed .b{transform:translate(56px,0) rotate(10deg);animation:tpLand .3s ease-out}
+@keyframes tpLand{from{translate:0 -6px}to{translate:0 0}}
+.tp-fortune small{display:block;font-size:12.5px;letter-spacing:.06em;font-weight:700;color:#FFD66B}
+.tp-lvl{display:inline-block;margin:8px 0 12px;padding:5px 16px;border-radius:999px;background:#F5C342;color:#7A0E10;font-size:17px}
+.tp-poem{display:flex;flex-direction:row-reverse;justify-content:center;gap:14px;margin:2px auto 14px}
+.tp-poem span{writing-mode:vertical-rl;text-orientation:upright;font-size:clamp(18px,5vw,22px);line-height:1;letter-spacing:.14em;color:#FFE08A}
+.tp-jie{margin:0 0 8px;font-size:15px;line-height:1.5;color:#FFF3D6}
+.tp-jie b{color:#FFD66B;margin-right:6px}
+.tp-en{margin:0;font-size:14px;line-height:1.45;color:#FFE7C4;opacity:.92}
+@media (max-width:640px){ .tp-act{padding:0 14px;font-size:14px} .tp-mv{width:44px;height:44px} }
+@media (prefers-reduced-motion: reduce){ .tp-me *,.tp-me svg,.tp-tube svg,.tp-blocks .tp-jiao,.tp-stickout{animation:none!important} .tp-stickout{transform:translate(10%,-34px) rotate(16deg);opacity:1} }
 </style>
 </head>
 <body>
@@ -1814,10 +1899,36 @@ dialog#temple::backdrop{background:#2A0A0B}
           </div>
         </div>
       </div>
+      <button type="button" class="tp-table l" data-go="incense" aria-label="Incense table: take incense"><svg viewBox="0 0 100 78" aria-hidden="true">
+          <g stroke-linecap="round"><path d="M44 30 34 4M47 30 42 2M50 30V1M53 30 58 2M56 30 66 4" stroke="#B5651D" stroke-width="2.4"/><path d="M44 30 42 22M47 30 46 22M50 30V22M53 30 54 22M56 30 58 22" stroke="#C8282E" stroke-width="2.8"/></g>
+          <path d="M38 28h24l-3 16H41z" fill="#C8282E" stroke="#5A0A0D" stroke-width="1.5"/><text x="50" y="40" font-size="9" text-anchor="middle" fill="#FFD66B" font-weight="900" font-family="'Songti SC','STSong',serif">香</text>
+          <rect x="8" y="44" width="84" height="9" rx="2" fill="#9A5428" stroke="#3A1A0B" stroke-width="1.5"/><path d="M16 53v24M84 53v24" stroke="#5C2C12" stroke-width="6"/><path d="M14 62h72" stroke="#5C2C12" stroke-width="3"/>
+        </svg><span>香 · Incense</span></button>
+      <button type="button" class="tp-table r" data-go="fortune" aria-label="Fortune table: draw a fortune stick or throw the moon blocks"><svg viewBox="0 0 100 78" aria-hidden="true">
+          <g stroke="#7A5A22" stroke-width="1"><rect x="20" y="2" width="3" height="22" fill="#E8C98A" transform="rotate(-10 21 24)"/><rect x="25" y="0" width="3" height="24" fill="#E8C98A"/><rect x="30" y="1" width="3" height="23" fill="#E8C98A" transform="rotate(8 31 24)"/><rect x="34" y="3" width="3" height="21" fill="#E8C98A" transform="rotate(16 35 24)"/></g>
+          <rect x="16" y="14" width="26" height="31" rx="4" fill="#D2AE62" stroke="#6E4E16" stroke-width="1.5"/><rect x="16" y="24" width="26" height="10" fill="#C8282E"/><text x="29" y="32.5" font-size="8" text-anchor="middle" fill="#FFD66B" font-weight="900" font-family="'Songti SC','STSong',serif">签</text>
+          <path d="M52 43Q62 30 72 43Q62 40 52 43Z" fill="#B3171D" stroke="#5A0A0D" stroke-width="1.2"/><path d="M70 43Q80 31 90 43Q80 40 70 43Z" fill="#E4533F" stroke="#5A0A0D" stroke-width="1.2"/>
+          <rect x="8" y="44" width="84" height="9" rx="2" fill="#9A5428" stroke="#3A1A0B" stroke-width="1.5"/><path d="M16 53v24M84 53v24" stroke="#5C2C12" stroke-width="6"/><path d="M14 62h72" stroke="#5C2C12" stroke-width="3"/>
+        </svg><span>求签 · Fortune</span></button>
+      <div class="tp-me" id="tpMe" aria-hidden="true"><span class="tp-mename" id="tpMeName">You</span><svg viewBox="0 0 60 100">
+          <g class="me-leg l"><rect x="20" y="62" width="9" height="27" rx="4" fill="#2F3A4A"/><ellipse cx="24" cy="91" rx="6.5" ry="4" fill="#F4F4F4" stroke="#B9BEC4"/></g>
+          <g class="me-leg r"><rect x="31" y="62" width="9" height="27" rx="4" fill="#2F3A4A"/><ellipse cx="36" cy="91" rx="6.5" ry="4" fill="#F4F4F4" stroke="#B9BEC4"/></g>
+          <g class="me-up">
+            <g class="me-held"><path d="M27 44 20 -20M30 44V-24M33 44 40 -20" stroke="#B5651D" stroke-width="2.4" stroke-linecap="round"/><path d="M27 44 25 26M30 44V26M33 44 35 26" stroke="#C8282E" stroke-width="2.6" stroke-linecap="round"/><g fill="#FF6A2B"><circle cx="20" cy="-20" r="2.4"/><circle cx="30" cy="-24" r="2.4"/><circle cx="40" cy="-20" r="2.4"/></g><g class="me-smk" fill="rgba(240,230,220,.6)"><circle cx="20" cy="-24" r="4"/><circle cx="30" cy="-28" r="4"/><circle cx="40" cy="-24" r="4"/></g></g>
+            <g class="me-arm l"><rect x="9" y="37" width="9" height="24" rx="4.5" fill="#F2C7A5"/><rect x="8" y="35" width="11" height="11" rx="4" fill="#1C1C1E"/></g>
+            <g class="me-arm r"><rect x="42" y="37" width="9" height="24" rx="4.5" fill="#F2C7A5"/><rect x="41" y="35" width="11" height="11" rx="4" fill="#1C1C1E"/></g>
+            <path d="M15 40Q15 34 22 33H38Q45 34 45 40L44 66H16Z" fill="#1C1C1E"/>
+            <text x="30" y="56" text-anchor="middle" font-size="12" font-weight="800" fill="#EC4E8E" font-family="Arial,sans-serif">G</text>
+            <rect x="26" y="27" width="8" height="8" fill="#E8B892"/>
+            <circle cx="13.5" cy="21" r="3.6" fill="#F2C7A5"/><circle cx="46.5" cy="21" r="3.6" fill="#F2C7A5"/>
+            <circle cx="30" cy="18" r="16" fill="#2B1F1A"/>
+            <path d="M19 9Q30 2 41 9" stroke="#56402F" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+          </g>
+        </svg></div>
       <div class="tp-rain" id="tpRain" aria-hidden="true"></div>
       <div class="tp-ui">
-        <div class="tp-dots" id="tpDots"><i></i><i></i><i></i><span id="tpDotsTxt">Bow three times · 拜三拜</span></div>
-        <button type="button" class="tp-pray" id="tpPray"><span aria-hidden="true">🙏</span><span class="tp-zh">拜拜</span><span>Pray</span></button>
+        <p class="tp-hint" id="tpHint"></p>
+        <div class="tp-ctrl"><button type="button" class="tp-mv" id="tpL" aria-label="Walk left">◀</button><div class="tp-acts2" id="tpActs"></div><button type="button" class="tp-mv" id="tpR" aria-label="Walk right">▶</button></div>
       </div>
       <div class="tp-bless" id="tpBless" hidden>
         <div class="tp-card" role="group" aria-labelledby="tpBlessZh">
@@ -1825,10 +1936,11 @@ dialog#temple::backdrop{background:#2A0A0B}
           <b class="tp-zh" id="tpBlessZh">财源滚滚</b>
           <p id="tpBlessEn">Money keeps rolling in</p>
           <span class="tp-huat">Huat ah! 发啊！</span>
-          <div class="tp-acts"><button type="button" class="tp-again" id="tpAgain">Pray again · 再拜</button><button type="button" class="tp-bye" id="tpBye">Leave · 离开</button></div>
+          <div class="tp-acts"><button type="button" class="tp-again" id="tpAgain">🎋 去求签 · Draw a fortune</button><button type="button" class="tp-bye" id="tpBye">好 · OK</button></div>
         </div>
       </div>
     </div>
+    <div class="tp-ev" id="tpEv" hidden><div class="tp-evcard" id="tpEvCard" role="group" aria-label="Fortune"></div></div>
     <span class="tp-live" id="tpLive" role="status" aria-live="polite"></span>
   </div>
 </dialog>
