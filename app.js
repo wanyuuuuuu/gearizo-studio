@@ -2061,8 +2061,8 @@ const TP_COLORS=[["红色","#E0262B"],["金色","#E2AC3F"],["粉色","#EC4E8E"],
 const TP_TALK={5:["今天财星高照，想做的事放胆去做！","贵人运旺，多跟同事聊聊，有惊喜。"],4:["运势不错，按计划走就会顺。","今天适合推进新点子，别犹豫。"],3:["平平稳稳，好运慢慢来。","先把手上的事做好，下午更顺。"],2:["今天低调一点，多休息，明天更好。","小心细节，发帖前多看一眼。"]};
 const TP_TUBE='<svg viewBox="0 0 110 150" aria-hidden="true"><g stroke="#7A5A22" stroke-width="1.2" fill="#E8C98A"><rect x="34" y="14" width="5" height="60" transform="rotate(-12 36 74)"/><rect x="44" y="6" width="5" height="68" transform="rotate(-4 46 74)"/><rect x="53" y="2" width="5" height="72"/><rect x="62" y="6" width="5" height="68" transform="rotate(5 64 74)"/><rect x="71" y="12" width="5" height="62" transform="rotate(13 73 74)"/></g><g fill="#C8282E"><rect x="33" y="14" width="5" height="6" transform="rotate(-12 36 74)"/><rect x="53" y="2" width="5" height="6"/><rect x="71" y="12" width="5" height="6" transform="rotate(13 73 74)"/></g><defs><linearGradient id="tpBam" x1="0" x2="1"><stop offset="0" stop-color="#A9822F"/><stop offset=".45" stop-color="#E9C77E"/><stop offset="1" stop-color="#9C7428"/></linearGradient></defs><rect x="24" y="52" width="62" height="94" rx="9" fill="url(#tpBam)" stroke="#5E4212" stroke-width="2"/><path d="M24 72h62M24 128h62" stroke="#7A5A22" stroke-width="2"/><rect x="24" y="86" width="62" height="28" fill="#C8282E"/><text x="55" y="107" font-size="20" text-anchor="middle" fill="#FFD66B" font-weight="900" font-family="\'Songti SC\',\'STSong\',serif">签</text></svg>';
 const TP_JIAO='<svg viewBox="0 0 80 44" aria-hidden="true"><g class="f-round"><path d="M4 36Q40-16 76 36Q40 32 4 36Z" fill="#A3141A" stroke="#4A070A" stroke-width="1.5"/><path d="M16 25Q36 8 56 15" stroke="rgba(255,255,255,.35)" stroke-width="4" fill="none" stroke-linecap="round"/></g><g class="f-flat"><path d="M4 36Q40-16 76 36Q40 32 4 36Z" fill="#E4533F" stroke="#4A070A" stroke-width="1.5"/><path d="M9 32Q40 23 71 32" stroke="#8E1A1C" stroke-width="2" fill="none"/><path d="M18 26Q40 13 62 26M27 20Q40 12 53 20" stroke="rgba(110,15,15,.4)" stroke-width="1.5" fill="none"/></g></svg>';
-let tp={snd:true,n:0,zod:-1};
-try{ const v=JSON.parse(localStorage.getItem(TP_KEY)||"{}"); if(typeof v.snd==="boolean") tp.snd=v.snd; if(Number(v.n)>0) tp.n=Math.floor(Number(v.n)); if(Number.isInteger(v.zod)&&v.zod>=0&&v.zod<12) tp.zod=v.zod }catch(e){}
+let tp={snd:true,n:0,zod:-1,bday:""};
+try{ const v=JSON.parse(localStorage.getItem(TP_KEY)||"{}"); if(typeof v.snd==="boolean") tp.snd=v.snd; if(Number(v.n)>0) tp.n=Math.floor(Number(v.n)); if(Number.isInteger(v.zod)&&v.zod>=0&&v.zod<12) tp.zod=v.zod; if(/^\d{4}-\d{2}-\d{2}$/.test(v.bday||"")) tp.bday=v.bday }catch(e){}
 const tpSave=()=>{ try{ localStorage.setItem(TP_KEY,JSON.stringify(tp)) }catch(e){} };
 let tpLast=-1, tpTimers=[], tpAudio=null, tpSayT=0, tpDraw={n:0,tries:0};
 const pl={x:.64,z:.98,keys:new Set(),target:null,then:null,raf:0,last:0,face:false,hold:false,left:0,offered:false,busy:false,moved:false,uiKey:""};
@@ -2253,9 +2253,8 @@ function showFortune(){
 /* the fortune teller: today's luck for your zodiac sign, the same all day */
 function tpRng(seed){ let h=2166136261; for(const c of seed){ h^=c.charCodeAt(0); h=Math.imul(h,16777619) } return ()=>{ h+=0x6D2B79F5; let t=h; t=Math.imul(t^t>>>15,t|1); t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296 } }
 const tpStars=n=>'<span class="tp-stars">'+"★".repeat(n)+'<i>'+"★".repeat(5-n)+'</i></span>';
-const TP_MENU=[["luck","🐲","今日运势","按生肖看今天"],["palm","✋","看手相","四条掌纹"],["word","🀄","抽字测运","翻一张字卡"],["noble","🤝","今日贵人","今天找谁帮忙"],["time","⏰","发帖吉时","今天几点发"],["hit","🔥","爆款预测","下一支谁会爆"]];
+const TP_MENU=[["luck","🐲","今日运势","按生肖看今天"],["ask","💬","问先生","问心里的问题"],["birth","🎂","生日运势","星座和生命灵数"],["word","🀄","抽字测运","翻一张字卡"],["noble","🤝","今日贵人","今天找谁帮忙"],["time","⏰","发帖吉时","今天几点发"],["hit","🔥","爆款预测","下一支谁会爆"]];
 const TP_WORDS=[["财","财源广进，今天谈价钱、谈合作都会顺。"],["福","福气满满，做事有人帮，记得说声谢谢。"],["顺","一路顺利，照计划走就好，不用改来改去。"],["新","宜尝试新东西：新剪法、新角度、新开头。"],["稳","稳中求进，先把基本功做好，再求快。"],["爆","有爆款的气场，大胆发，别犹豫！"],["静","静下心来，先把一件事做完再开下一件。"],["合","合作运好，多跟同事一起想点子。"],["勤","多动手多拍，勤快的一天会有收获。"],["喜","有好消息，留意留言和私讯。"],["进","进步的一天，今天学到的东西很快用得上。"],["光","灵感会闪光，想到什么马上记下来。"],["慢","慢一点没关系，细节做好比赶快更重要。"],["笑","多笑一笑，镜头前的笑容最吸人。"]];
-const TP_PALM=[["事业线",["又长又清楚，今天做事很有方向。","中间有分叉，会有新的机会找上门。","有点淡，先把手上的事做好再说。","一路往上走，适合推进大计划。"]],["财运线",["很深，近期会有进账的好消息。","有个小岔口，花钱前多想一下。","稳稳的一条，细水长流。","尾端发亮，坚持下去会有回报。"]],["感情线",["很温柔，今天跟同事相处特别好。","线条清楚，有话直说反而更顺。","有小星纹，会收到别人的关心。","平平稳稳，适合约朋友吃饭。"]],["智慧线",["又长又弯，点子特别多，记得写下来。","清楚笔直，今天适合做决定。","跟事业线相连，想法很快能变成作品。","有点细，多问问别人的意见。"]]];
 const TP_TIMES=[["辰时","早上 8:00–9:00","早起的观众在通勤，适合轻松短片。"],["午时","中午 12:00–13:00","午饭时间大家在滑手机，适合实用小技巧。"],["酉时","傍晚 18:00–19:00","下班路上，适合有趣开场的片。"],["戌时","晚上 20:00–21:00","黄金时段，流量最旺，适合主打片。"],["亥时","晚上 21:00–22:00","睡前放松，适合开箱和 ASMR。"]];
 const TP_DIRS=["东","南","西","北","东南","西南","东北","西北"];
 const tpDayKey=()=>{ const d=new Date(); return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate() };
@@ -2266,14 +2265,14 @@ function tellerOpen(){
 function tellerDo(k){
   if(k==="luck") return tellerZodiac();
   const r=tpRng("gz-"+k+"|"+tpDayKey()+"|"+(myId||"me")), pick=a=>a[Math.floor(r()*a.length)];
-  if(k==="palm"){
-    evShow('<h3>看手相</h3><div class="tp-palm"><span>🖐️</span><i></i></div><p class="tp-evt">把手伸出来，先生仔细看看…</p>');
-    tpSound("rattle");
-    tpLater(()=>{
-      const rows=TP_PALM.map(p=>[p[0],2+Math.floor(r()*4),pick(p[1])]);
-      evShow('<div class="tp-luck"><small>看手相 · 今天</small><div class="tp-palmres">'+rows.map(x=>'<div><b>'+x[0]+'</b>'+tpStars(x[1])+'<p>'+x[2]+'</p></div>').join("")+'</div></div>'+evBtns([["close","好"],["teller","算别的"]]));
-      tpSound("ding"); tpLive("手相："+rows.map(x=>x[0]+x[2]).join(" "));
-    },calmMotion.matches?200:1800);
+  if(k==="ask"){
+    evShow('<h3>问先生</h3><p class="tp-evt">算命先生：心里有什么问题，说来听听。</p><textarea id="tpQ" class="tp-q" maxlength="80" rows="2" placeholder="例如：这支片会爆吗？"></textarea>'+evBtns([["q-go","🔮 请先生回答"],["teller","算别的"]]));
+    setTimeout(()=>{ const q=$("tpQ"); if(q) q.focus() },50);
+    return;
+  }
+  if(k==="birth"){
+    const today=ymd(new Date());
+    evShow('<h3>生日运势</h3><p class="tp-evt">报上你的出生日期，先生帮你看看。</p><input type="date" id="tpB" class="tp-q" max="'+today+'" min="1930-01-01" value="'+esc(tp.bday||"")+'" aria-label="出生日期">'+evBtns([["b-go","🔮 看运势"],["teller","算别的"]]));
     return;
   }
   if(k==="word"){
@@ -2300,6 +2299,47 @@ function tellerDo(k){
     evShow('<div class="tp-luck"><small>爆款预测 · 今天</small><b class="tp-big tp-zh">'+pct+'%</b><p class="tp-evt">'+esc((it.code?it.code+" ":"")+it.title)+'</p><p class="tp-jie"><b class="tp-zh">先生说</b>这支'+why+'，爆的机会很大！</p></div>'+evBtns([["close","好"],["teller","算别的"]]));
     tpSound("coins"); tpLive("爆款预测："+(it.code||"")+" "+it.title+" "+pct+"%");
   }
+}
+// 问先生: the answer depends on what the question is about, and stays the same for that question all day
+const TP_Q=[
+  [/钱|财|赚|收入|生意|卖|订单|价|业绩|money|sale|order|income/i,[["大吉","财运很旺，近期会有进账的好消息。今天适合谈价钱。"],["吉","有机会，但要主动去争取，先把报价和资料准备好。"],["中吉","小有收获，细水长流，别冲动消费。"],["小吉","会有进账，只是比预期慢一点，耐心等。"],["再等等","时机还没到，先存着，下个月会更好。"]]],
+  [/爆|流量|观看|播放|点赞|粉丝|追踪|红|热门|viral|view|follow|like|reel/i,[["大吉","这次很有爆的机会，开头三秒做好，放心发！"],["吉","会有不错的流量，记得在黄金时段发。"],["中吉","表现稳稳的，多回复留言会更旺。"],["小吉","流量普通，换个标题或封面会更好。"],["再等等","这支先当练习，下一支会更好。"]]],
+  [/工作|老板|客户|项目|开会|拍|剪|发|公司|同事|升职|job|boss|client|work|project/i,[["大吉","贵人在身边，事情会很顺，大胆推进。"],["吉","照计划走就会顺，记得把重点先讲清楚。"],["中吉","会有一点小卡关，多跟同事商量就能解决。"],["小吉","先把手上的事收尾，再开新的。"],["再等等","不急着做决定，多收集一点资讯。"]]],
+  [/爱|喜欢|感情|恋|约会|对象|结婚|love|date|crush/i,[["大吉","缘分很好，主动一点会有好消息。"],["吉","真心最重要，有话就直说。"],["中吉","慢慢来，相处久了感情更稳。"],["小吉","先把自己照顾好，好的人自然会出现。"],["再等等","时机还没到，别急，顺其自然。"]]],
+  [/健康|身体|累|睡|病|减肥|运动|health|tired|sleep/i,[["吉","身体底子不错，保持规律作息就好。"],["中吉","有点累了，今晚早点睡。"],["小吉","多喝水、多走动，别一直坐着剪片。"],["再等等","先休息，身体比工作重要。"]]],
+  [/./,[["大吉","这件事会很顺，放心去做。"],["吉","大方向是对的，按步骤来就好。"],["中吉","会有小波折，但最后结果不错。"],["小吉","先做准备，机会快来了。"],["再等等","现在还不是时候，过几天再看看。"]]]
+];
+function tellerAnswer(){
+  const q=($("tpQ")||{}).value||"", t=q.trim();
+  if(!t){ const el=$("tpQ"); if(el){ el.focus(); el.placeholder="先写下你的问题…" } return }
+  const cat=TP_Q.find(c=>c[0].test(t)), r=tpRng("gz-ask|"+tpDayKey()+"|"+(myId||"me")+"|"+t), a=cat[1][Math.floor(r()*cat[1].length)];
+  evShow('<h3>问先生</h3><div class="tp-palm"><span>🔮</span><i></i></div><p class="tp-evt">先生闭上眼睛想了想…</p>');
+  tpSound("rattle");
+  tpLater(()=>{
+    evShow('<div class="tp-luck"><small>你问：「'+esc(t)+'」</small><b class="tp-big tp-zh">'+a[0]+'</b><p class="tp-jie"><b class="tp-zh">先生说</b>'+a[1]+'</p></div>'+evBtns([["q-new","💬 再问一个"],["teller","算别的"],["close","好"]]));
+    tpSound(a[0]==="大吉"?"coins":"ding"); tpLive(a[0]+"。"+a[1]);
+  },calmMotion.matches?200:1500);
+}
+// 生日运势: star sign, zodiac animal, life path number, and today's luck from the birthday
+const TP_SIGNS=[["摩羯座",1,19,"踏实有目标，交给你的事一定做完。"],["水瓶座",2,18,"点子新奇，适合想新的内容题材。"],["双鱼座",3,20,"感受力强，拍出来的画面特别有温度。"],["白羊座",4,19,"行动派，想到就做，冲劲十足。"],["金牛座",5,20,"稳重可靠，对质感和细节很讲究。"],["双子座",6,21,"反应快、会聊天，镜头前很自然。"],["巨蟹座",7,22,"会照顾人，是团队里的暖心担当。"],["狮子座",8,22,"有存在感，天生适合站在镜头前。"],["处女座",9,22,"细心完美，剪片和检查交给你最放心。"],["天秤座",10,23,"审美好，排版和配色是你的强项。"],["天蝎座",11,22,"专注有洞察力，看得出观众想要什么。"],["射手座",12,21,"乐观爱冒险，适合拍户外和新玩法。"],["摩羯座",12,31,"踏实有目标，交给你的事一定做完。"]];
+const TP_LIFE=["","领导者：有主见，适合带头开新项目。","协调者：善解人意，团队合作是你的强项。","表达者：创意和表达力强，镜头前很吸人。","实干家：踏实可靠，细节交给你最放心。","冒险家：爱新鲜，适合尝试新题材。","照顾者：有责任感，大家都喜欢找你帮忙。","思考者：观察力强，做研究和规划很拿手。","成就者：目标感强，商业和数字是你的舞台。","理想家：有感染力，作品容易打动人。"];
+function tellerBirth(){
+  const v=($("tpB")||{}).value||"";
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(v)){ const el=$("tpB"); if(el) el.focus(); return }
+  const [y,m,d]=v.split("-").map(Number), now=new Date();
+  if(new Date(y,m-1,d)>now){ return }
+  tp.bday=v;
+  const sign=TP_SIGNS.find(s=>m<s[1]||(m===s[1]&&d<=s[2])) || TP_SIGNS[0];
+  const zy=(m<2||(m===2&&d<4))?y-1:y, zi=((zy-4)%12+12)%12; tp.zod=zi; tpSave();
+  let n=String(y)+String(m).padStart(2,"0")+String(d).padStart(2,"0"); n=[...n].reduce((a,c)=>a+Number(c),0); while(n>9) n=[...String(n)].reduce((a,c)=>a+Number(c),0);
+  const r=tpRng("gz-birth|"+tpDayKey()+"|"+v), stars=2+Math.floor(r()*4), col=TP_COLORS[Math.floor(r()*TP_COLORS.length)], talk=TP_TALK[stars][Math.floor(r()*TP_TALK[stars].length)];
+  const t0=new Date(now.getFullYear(),now.getMonth(),now.getDate()); let nb=new Date(now.getFullYear(),m-1,d); if(nb<t0) nb=new Date(now.getFullYear()+1,m-1,d);
+  const left=Math.round((nb-t0)/86400000);
+  evShow('<div class="tp-luck"><small>'+y+'年'+m+'月'+d+'日</small><b class="tp-big tp-zh" style="font-size:clamp(28px,8vw,38px)">'+sign[0]+' · 属'+TP_ZOD[zi][0]+' '+TP_ZOD[zi][1]+'</b>'+
+    '<div class="tp-palmres"><div><b>星座</b><p>'+sign[0]+'：'+sign[3]+'</p></div><div><b>生命灵数 '+n+'</b><p>'+TP_LIFE[n]+'</p></div><div><b>今日运势</b>'+tpStars(stars)+'<p>'+talk+'</p></div></div>'+
+    '<div class="tp-lmeta" style="margin-top:12px"><span>幸运色<i style="background:'+col[1]+'"></i>'+col[0]+'</span><span>'+(left===0?"🎂 今天生日快乐！":"离生日还有 <b>"+left+"</b> 天")+'</span></div></div>'+evBtns([["close","好"],["birth","换个生日"],["teller","算别的"]]));
+  tpSound(left===0||stars>=5?"coins":"ding"); if(left===0&&!calmMotion.matches) tpRain();
+  tpLive(sign[0]+"，属"+TP_ZOD[zi][0]+"，生命灵数"+n+"。今日运势"+stars+"颗星。"+(left===0?"生日快乐！":"离生日还有"+left+"天。"));
 }
 let tpWordSet=[];
 function tellerCard(i){
@@ -2460,8 +2500,9 @@ if($("temple")&&$("templeBtn")&&$("tpMe")&&document.querySelector(".tp-pad")){
     const cd=e.target.closest("[data-card]"); if(cd){ tellerCard(Number(cd.dataset.card)); return }
     const b=e.target.closest("[data-ev]"); if(!b) return; const k=b.dataset.ev;
     if(k==="confirm") throwBlocks("confirm"); else if(k==="ask-throw") throwBlocks("ask"); else if(k==="ask") askBlocks();
-    else if(k==="read") showFortune(); else if(k==="draw") drawStick(); else if(k==="teller") tellerOpen(); else if(k==="tarot") tarotOpen(); else if(k==="tt-again") tarotDeal(tt.n); else if(k==="luck") tellerZodiac(); else if(k==="word") tellerDo("word"); else evClose();
+    else if(k==="read") showFortune(); else if(k==="draw") drawStick(); else if(k==="teller") tellerOpen(); else if(k==="q-go") tellerAnswer(); else if(k==="q-new") tellerDo("ask"); else if(k==="b-go") tellerBirth(); else if(k==="birth") tellerDo("birth"); else if(k==="tarot") tarotOpen(); else if(k==="tt-again") tarotDeal(tt.n); else if(k==="luck") tellerZodiac(); else if(k==="word") tellerDo("word"); else evClose();
   });
+  $("tpEvCard").addEventListener("keydown",e=>{ if(e.key!=="Enter"||e.shiftKey||e.isComposing) return; if(e.target.id==="tpQ"){ e.preventDefault(); tellerAnswer() } else if(e.target.id==="tpB"){ e.preventDefault(); tellerBirth() } });
   $("tpAgain").onclick=()=>{ $("tpBless").hidden=true; goStation("fortune") };
   $("tpBye").onclick=()=>{ $("tpBless").hidden=true; pl.uiKey=""; tpUi() };
   $("tpClose").onclick=()=>$("temple").close();
