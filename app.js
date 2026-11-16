@@ -14,8 +14,10 @@ const STATUSES=[
   {id:"approved",name:"Approved"},{id:"scheduled",name:"Scheduled"},{id:"posted",name:"Posted"}
 ];
 const PLATFORMS=[
-  {id:"reel",name:"IG Reel",s:"Reel"},{id:"carousel",name:"IG Carousel",s:"Carousel"},{id:"story",name:"IG Story",s:"Story"},
-  {id:"tiktok",name:"TikTok",s:"TikTok",legacy:1},{id:"tt_gz",name:"TikTok @gearizo",s:"TT @gearizo"},{id:"tt_my",name:"TikTok @gearizomy",s:"TT MY"},{id:"tt_sg",name:"TikTok @gearizo.sg",s:"TT SG"},{id:"fb",name:"Facebook",s:"FB"},{id:"shop",name:"Shopee / Lazada",s:"Shop"},
+  {id:"reel",name:"Instagram Reels",s:"IG Reels",g:"ig"},{id:"story",name:"Instagram Story",s:"IG Story",g:"ig"},{id:"carousel",name:"Instagram Carousel (post)",s:"IG Carousel (Post)",g:"ig"},
+  {id:"tt_gz",name:"TikTok Main · @gearizo",s:"TT Main",g:"tt"},{id:"tt_my",name:"TikTok CN · @gearizomy",s:"TT CN",g:"tt"},{id:"tt_sg",name:"TikTok SG · @gearizo.sg",s:"TT SG",g:"tt"},
+  {id:"fb",name:"Facebook Page",s:"FB Page",g:"fb"},{id:"fbstory",name:"Facebook Story",s:"FB Story",g:"fb"},
+  {id:"tiktok",name:"TikTok",s:"TikTok",legacy:1},{id:"shop",name:"Shopee / Lazada",s:"Shop"},
   {id:"shopee",name:"Shopee",s:"Shopee"},{id:"lazada",name:"Lazada",s:"Lazada"},{id:"web",name:"Website",s:"Website"}
 ];
 const LANGS=[{id:"en",name:"English"},{id:"manglish",name:"Manglish"},{id:"bm",name:"BM"},{id:"zh",name:"中文"}];
@@ -44,6 +46,7 @@ let db=null, assets=null, userNs=null, myId=null, amOwner=false, names={}, myNam
 let mode="local", readOnly=false, live={items:false,focus:false,team:false};
 let team={}, promptedRole=false, inbox=[], tasks=[], shoots=[], avail=[], busy=[], jobs={}, metaState=null;
 const AUTO_P=["reel","fb"];
+const PLAT_G=[{id:"ig",name:"Instagram"},{id:"tt",name:"TikTok"},{id:"fb",name:"Facebook Page"}];
 const TT_P=["tiktok","tt_gz","tt_my","tt_sg"];                // the old single "tiktok" plus one per account
 const ROLES={content:{name:"Content & video",k:"var(--blue)"},marketing:{name:"Marketing",k:"var(--mk)"},ecomm:{name:"E-commerce",k:"#E8772E"},hr:{name:"HR",k:"#8C6BD1"}};
 const TEAMS={marketing:"Marketing",ecomm:"E-commerce"};
@@ -911,13 +914,15 @@ function renderPublish(){
   if(it.status==="posted"){ setHTML(box,banner("var(--blue)","Posted",it.postedAt?fmtTime(it.postedAt):"",it.postUrl?'<a class="btn sm" href="'+esc(it.postUrl)+'" target="_blank" rel="noopener">Open post ↗</a>':"")); return }
   if(!["approved","scheduled"].includes(it.status)){ setHTML(box,banner("var(--ink-3)","Not approved yet","You can pick a time once it’s approved.")); return }
   const can=!readOnly&&mode==="db"&&isMk(), sch=it.status==="scheduled"&&it.postAt>0, due=sch&&it.postAt<=now;
-  const ig=it.platforms.some(p=>["reel","carousel","story","fb"].includes(p)), tt=it.platforms.some(p=>TT_P.includes(p));
+  const ig=it.platforms.some(p=>["ig","fb"].includes(pMap[p].g)), tt=it.platforms.some(p=>TT_P.includes(p));
   const d0=sch?new Date(it.postAt):null, today=ymd(new Date());
   const dv=sch?ymd(d0):(it.date&&it.date>=today?it.date:today), tv=sch?pad(d0.getHours())+":"+pad(d0.getMinutes()):"20:00";
   let html=sch?banner(due?"var(--pink)":"var(--sched)",due?"Time to post":"Scheduled",[postWhen(it.postAt),plats].filter(Boolean).join(" · ")):banner("var(--ready)","Ready to post",plats||(can?"Pick where it goes below":"Pick platforms in Plan"));
   if(can){
-    html+='<div class="toggles pubplat" role="group" aria-label="Post to">'+PLATFORMS.filter(p=>!SHOP_P.includes(p.id)&&(!p.legacy||it.platforms.includes(p.id)))
-      .map(p=>'<label title="'+esc(p.name)+'"><input type="checkbox" data-plat="'+p.id+'"'+(it.platforms.includes(p.id)?" checked":"")+' aria-label="'+esc(p.name)+'"><span>'+esc(p.s)+'</span></label>').join("")+'</div>';
+    const chk=p=>'<label title="'+esc(p.name)+'"><input type="checkbox" data-plat="'+p.id+'"'+(it.platforms.includes(p.id)?" checked":"")+' aria-label="'+esc(p.name)+'"><span>'+esc(p.s)+'</span></label>';
+    const other=PLATFORMS.filter(p=>!p.g&&!SHOP_P.includes(p.id)&&it.platforms.includes(p.id));   // old "TikTok" or Shop, only if already ticked
+    html+='<div class="pubplat" role="group" aria-label="Post to">'+PLAT_G.map(g=>'<div class="pg"><span class="pg-l">'+esc(g.name)+'</span><div class="toggles">'+PLATFORMS.filter(p=>p.g===g.id).map(chk).join("")+'</div></div>').join("")+
+      (other.length?'<div class="pg"><span class="pg-l">Other</span><div class="toggles">'+other.map(chk).join("")+'</div></div>':"")+'</div>';
     html+='<div class="pubwhen"><input type="date" id="pubDate" value="'+dv+'" aria-label="Post date"><input type="time" id="pubTime" value="'+tv+'" step="300" aria-label="Post time">'+
       '<button class="btn primary sm" type="button" data-pub="schedule">'+(sch?"Update time":"Schedule")+'</button>'+(sch?'<button class="btn ghost sm" type="button" data-pub="unschedule">Unschedule</button>':"")+'</div>'+
       '<div class="pubdone"><input type="url" id="pubLink" placeholder="Post link (optional)" aria-label="Link to the live post"><button class="btn go sm" type="button" data-pub="posted">Mark posted</button></div>';
