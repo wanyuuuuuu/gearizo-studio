@@ -2045,14 +2045,28 @@ const TP_FORTUNES=[
   ["小吉签",["天有阴晴月有圆","一时低落莫心烦","歇口热茶重出发","好运就在下一番"],"今天不顺也没关系，休息一下再出发。"]
 ];
 const tpNum=n=>{ const d="一二三四五六七八九"; return n<10?d[n-1]:n===10?"十":"十"+d[n-11] };
-const TP_ST={incense:.16,altar:.5,fortune:.84};
+// Places on the floor. x: 0 left → 1 right across the floor; z: 0 at the altar (back) → 1 at the front.
+// "at" is where the thing stands, "stand" is where you stand to use it.
+const TP_ST={
+  altar:{at:{x:.5,z:0},stand:{x:.5,z:.07}},
+  incense:{at:{x:.12,z:.3},stand:{x:.2,z:.44}},
+  fortune:{at:{x:.9,z:.22},stand:{x:.8,z:.36}},
+  teller:{at:{x:.76,z:.8},stand:{x:.62,z:.9}}
+};
+const TP_EL={incense:'[data-go="incense"]',fortune:'[data-go="fortune"]',teller:'[data-go="teller"]'};
+const TP_ZOD=[["鼠","🐭"],["牛","🐮"],["虎","🐯"],["兔","🐰"],["龙","🐲"],["蛇","🐍"],["马","🐴"],["羊","🐑"],["猴","🐵"],["鸡","🐔"],["狗","🐶"],["猪","🐷"]];
+const TP_YI=["拍新片","剪片","发帖","写脚本","整理素材","回复留言","拍产品照","约拍摄","开会讨论","试新剪法","早点下班","喝杯咖啡"];
+const TP_JI=["熬夜剪片","临时改脚本","拖延","乱花钱","跟人吵架","忘记备份","发错文案","空腹开会","删素材","迟到"];
+const TP_COLORS=[["红色","#E0262B"],["金色","#E2AC3F"],["粉色","#EC4E8E"],["绿色","#2E8C7A"],["蓝色","#3A6FD8"],["白色","#FFFFFF"],["黑色","#1C1C1E"],["紫色","#8A4FD8"],["橙色","#F08A24"]];
+const TP_TALK={5:["今天财星高照，想做的事放胆去做！","贵人运旺，多跟同事聊聊，有惊喜。"],4:["运势不错，按计划走就会顺。","今天适合推进新点子，别犹豫。"],3:["平平稳稳，好运慢慢来。","先把手上的事做好，下午更顺。"],2:["今天低调一点，多休息，明天更好。","小心细节，发帖前多看一眼。"]};
 const TP_TUBE='<svg viewBox="0 0 110 150" aria-hidden="true"><g stroke="#7A5A22" stroke-width="1.2" fill="#E8C98A"><rect x="34" y="14" width="5" height="60" transform="rotate(-12 36 74)"/><rect x="44" y="6" width="5" height="68" transform="rotate(-4 46 74)"/><rect x="53" y="2" width="5" height="72"/><rect x="62" y="6" width="5" height="68" transform="rotate(5 64 74)"/><rect x="71" y="12" width="5" height="62" transform="rotate(13 73 74)"/></g><g fill="#C8282E"><rect x="33" y="14" width="5" height="6" transform="rotate(-12 36 74)"/><rect x="53" y="2" width="5" height="6"/><rect x="71" y="12" width="5" height="6" transform="rotate(13 73 74)"/></g><defs><linearGradient id="tpBam" x1="0" x2="1"><stop offset="0" stop-color="#A9822F"/><stop offset=".45" stop-color="#E9C77E"/><stop offset="1" stop-color="#9C7428"/></linearGradient></defs><rect x="24" y="52" width="62" height="94" rx="9" fill="url(#tpBam)" stroke="#5E4212" stroke-width="2"/><path d="M24 72h62M24 128h62" stroke="#7A5A22" stroke-width="2"/><rect x="24" y="86" width="62" height="28" fill="#C8282E"/><text x="55" y="107" font-size="20" text-anchor="middle" fill="#FFD66B" font-weight="900" font-family="\'Songti SC\',\'STSong\',serif">签</text></svg>';
 const TP_JIAO='<svg viewBox="0 0 80 44" aria-hidden="true"><g class="f-round"><path d="M4 36Q40-16 76 36Q40 32 4 36Z" fill="#A3141A" stroke="#4A070A" stroke-width="1.5"/><path d="M16 25Q36 8 56 15" stroke="rgba(255,255,255,.35)" stroke-width="4" fill="none" stroke-linecap="round"/></g><g class="f-flat"><path d="M4 36Q40-16 76 36Q40 32 4 36Z" fill="#E4533F" stroke="#4A070A" stroke-width="1.5"/><path d="M9 32Q40 23 71 32" stroke="#8E1A1C" stroke-width="2" fill="none"/><path d="M18 26Q40 13 62 26M27 20Q40 12 53 20" stroke="rgba(110,15,15,.4)" stroke-width="1.5" fill="none"/></g></svg>';
-let tp={snd:true,n:0};
-try{ const v=JSON.parse(localStorage.getItem(TP_KEY)||"{}"); if(typeof v.snd==="boolean") tp.snd=v.snd; if(Number(v.n)>0) tp.n=Math.floor(Number(v.n)) }catch(e){}
+let tp={snd:true,n:0,zod:-1};
+try{ const v=JSON.parse(localStorage.getItem(TP_KEY)||"{}"); if(typeof v.snd==="boolean") tp.snd=v.snd; if(Number(v.n)>0) tp.n=Math.floor(Number(v.n)); if(Number.isInteger(v.zod)&&v.zod>=0&&v.zod<12) tp.zod=v.zod }catch(e){}
 const tpSave=()=>{ try{ localStorage.setItem(TP_KEY,JSON.stringify(tp)) }catch(e){} };
 let tpLast=-1, tpTimers=[], tpAudio=null, tpSayT=0, tpDraw={n:0,tries:0};
-const pl={f:.5,dir:0,target:null,then:null,raf:0,last:0,hold:false,left:0,offered:false,busy:false,moved:false,uiKey:""};
+const pl={x:.42,z:.98,keys:new Set(),target:null,then:null,raf:0,last:0,face:false,hold:false,left:0,offered:false,busy:false,moved:false,uiKey:""};
+const PL_START={x:.42,z:.98,keys:new Set(),target:null,then:null,raf:0,last:0,face:false,hold:false,left:0,offered:false,busy:false,moved:false,uiKey:""};
 const tpLater=(fn,ms)=>{ tpTimers.push(setTimeout(fn,ms)) };
 const tpRestart=(el,cls)=>{ el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls) };
 const tpLive=t=>{ $("tpLive").textContent=t };
@@ -2075,29 +2089,58 @@ function tpSound(kind){
 }
 function tpPaintSnd(){ const b=$("tpSnd"); b.setAttribute("aria-pressed",String(tp.snd)); b.setAttribute("aria-label",tp.snd?"声音开着，点一下静音":"声音关了，点一下打开"); b.title=tp.snd?"声音开":"声音关" }
 
-/* walking */
-const tpW=()=>$("tpIn").clientWidth||1;
-function plPaint(){ $("tpMe").style.setProperty("--x",(pl.f*tpW())+"px") }
-function plNear(){ const W=tpW(), r=Math.max(36,W*.07)/W; for(const k in TP_ST) if(Math.abs(pl.f-TP_ST[k])<=r) return k; return null }
+/* walking on a 2.5D floor: things further back are higher up, smaller and drawn behind */
+let tpGeo=null;
+function tpMeasure(){
+  const box=$("tpIn"), W=box.clientWidth||1, H=box.clientHeight||1, ui=document.querySelector("#tpIn .tp-ui");
+  const top=H*.54+4, bottom=Math.max(top+60,(ui?ui.offsetTop:H-110)+2);
+  tpGeo={W,H,top,bottom,bw:W*.62,fw:W*.98};
+}
+function tpPos(x,z){
+  const g=tpGeo, w=g.bw+(g.fw-g.bw)*z, cam=pl.x-.5;
+  return {sx:g.W/2+(x-.5)*w-cam*(8+30*z), sy:g.top+(g.bottom-g.top)*z, sc:.58+.5*z, zi:10+Math.round(z*100)};
+}
+function tpPlace(el,x,z){ if(!el) return; const p=tpPos(x,z); el.style.setProperty("--sx",p.sx.toFixed(1)+"px"); el.style.setProperty("--sy",p.sy.toFixed(1)+"px"); el.style.setProperty("--sc",p.sc.toFixed(3)); el.style.setProperty("--zi",p.zi) }
+function plPaint(){
+  if(!tpGeo) tpMeasure();
+  $("tpIn").style.setProperty("--cx",(pl.x-.5).toFixed(3));
+  tpPlace($("tpMe"),pl.x,pl.z);
+  for(const k in TP_EL) tpPlace(document.querySelector("#tpIn "+TP_EL[k]),TP_ST[k].at.x,TP_ST[k].at.z);
+}
+function tpFloorPoint(cx,cy){   // a tap on the screen → a point on the floor
+  const g=tpGeo, r=$("tpIn").getBoundingClientRect(), px=cx-r.left, py=cy-r.top;
+  const z=Math.min(1,Math.max(0,(py-g.top)/(g.bottom-g.top))), w=g.bw+(g.fw-g.bw)*z;
+  const x=(px+(pl.x-.5)*(8+30*z)-g.W/2)/w+.5;
+  return {x:Math.min(.96,Math.max(.04,x)),z};
+}
+function plNear(){
+  let best=null, bd=.11;
+  for(const k in TP_ST){ const s=TP_ST[k].stand, d=Math.hypot(pl.x-s.x,(pl.z-s.z)*.8); if(d<bd){ bd=d; best=k } }
+  return best;
+}
 function plStep(t){
-  pl.raf=0;
+  pl.raf=0; if(!tpGeo) tpMeasure();
   const dt=pl.last?Math.min(.05,(t-pl.last)/1000):0; pl.last=t;
-  const sp=Math.max(170,tpW()*.3)/tpW();
-  let d=pl.dir, arrived=false;
-  if(!d&&pl.target!=null){ d=Math.sign(pl.target-pl.f); if(!d){ pl.target=null; arrived=true } }
-  if(d){
-    let nf=pl.f+d*sp*dt;
-    if(!pl.dir&&pl.target!=null&&(d>0?nf>=pl.target:nf<=pl.target)){ nf=pl.target; pl.target=null; arrived=true }
-    pl.f=Math.min(.94,Math.max(.06,nf));
+  const g=tpGeo, pxW=g.fw, pxD=Math.max(40,g.bottom-g.top), speed=Math.max(150,Math.min(260,g.W*.28));
+  let ux=0, uz=0, dist=Infinity, arrived=false;
+  if(pl.keys.size){ ux=(pl.keys.has("r")?1:0)-(pl.keys.has("l")?1:0); uz=(pl.keys.has("d")?1:0)-(pl.keys.has("u")?1:0); const n=Math.hypot(ux,uz); if(n){ ux/=n; uz/=n } }
+  else if(pl.target){ const dx=(pl.target.x-pl.x)*pxW, dz=(pl.target.z-pl.z)*pxD; dist=Math.hypot(dx,dz); if(dist<1.5){ pl.x=pl.target.x; pl.z=pl.target.z; pl.target=null; arrived=true } else { ux=dx/dist; uz=dz/dist } }
+  if(ux||uz){
+    const step=speed*dt;
+    if(!pl.keys.size&&pl.target&&step>=dist){ pl.x=pl.target.x; pl.z=pl.target.z; pl.target=null; arrived=true }
+    else { pl.x=Math.min(.96,Math.max(.04,pl.x+ux*step/pxW)); pl.z=Math.min(1,Math.max(0,pl.z+uz*step/pxD)) }
+    if(Math.abs(uz)>Math.abs(ux)*.6) pl.face=uz>0;
   }
-  const el=$("tpMe"), moving=!!d&&!arrived&&(pl.dir||pl.target!=null);
-  el.classList.toggle("walk",moving); if(d) el.classList.toggle("left",d<0);
+  const el=$("tpMe"), moving=(ux||uz)&&!arrived;
+  el.classList.toggle("walk",!!moving); el.classList.toggle("face",pl.face);
+  if(Math.abs(ux)>.2) el.classList.toggle("left",ux<0);
   plPaint(); tpUi();
   if(arrived&&pl.then){ const fn=pl.then; pl.then=null; fn() }
-  if(pl.dir||pl.target!=null) pl.raf=requestAnimationFrame(plStep); else pl.last=0;
+  if(pl.keys.size||pl.target) pl.raf=requestAnimationFrame(plStep); else pl.last=0;
 }
 function plGo(){ pl.moved=true; if(!pl.raf){ pl.last=0; pl.raf=requestAnimationFrame(plStep) } }
-function walkTo(f,then){ if(!tpFree()) return; pl.dir=0; pl.target=Math.min(.94,Math.max(.06,f)); pl.then=then||null; plGo() }
+function walkTo(pt,then){ if(!tpFree()) return; pl.keys.clear(); pl.target={x:Math.min(.96,Math.max(.04,pt.x)),z:Math.min(1,Math.max(0,pt.z))}; pl.then=then||null; plGo() }
+function goStation(k,then){ const s=TP_ST[k].stand; walkTo(s,()=>{ pl.face=k==="teller"?false:false; $("tpMe").classList.toggle("face",pl.face); if(then) then() }) }
 const tpFree=()=>$("temple").classList.contains("inside")&&$("tpEv").hidden&&$("tpBless").hidden&&!pl.busy;
 const canOffer=()=>pl.hold&&pl.left>0&&plNear()==="altar";
 
@@ -2107,18 +2150,19 @@ function tpUi(){
   if(st==="incense"){ if(pl.hold) hint="香拿好了，去中间供桌上香 →"; else acts=[["take","🔥 拿香"]] }
   else if(st==="altar"){ if(pl.hold) hint="点香炉上香，手上还有 "+pl.left+" 支"; else hint=pl.offered?"香上好了，去右边求签 →":"← 先去左边拿香" }
   else if(st==="fortune"){ acts=pl.offered?[["draw","🎋 求签"],["ask","🌙 掷筊问事"]]:[["ask","🌙 掷筊问事"]]; if(!pl.offered) hint="上了香才能求签" }
-  else hint=pl.hold?"去中间供桌上香":pl.offered?"去右边求签 →":"← 去左边拿香";
-  if(!pl.moved) hint+="<small>点地面或按 ◀ ▶ 走路</small>";
+  else if(st==="teller"){ acts=[["luck","🔮 算今日运势"]]; hint="算命先生：来，算一卦？" }
+  else hint=pl.hold?"去供桌上香 ↑":pl.offered?"去右边求签，或到右前方算命":"← 去左边拿香";
+  if(!pl.moved) hint+="<small>点地面或用方向键走路</small>";
   const key=st+"|"+hint+"|"+pl.busy+"|"+acts.map(a=>a.join()).join(";");
   if(key===pl.uiKey) return; pl.uiKey=key;
   $("tpHint").innerHTML=hint;
   $("tpActs").innerHTML=acts.map(a=>'<button type="button" class="tp-act" data-act="'+a[0]+'"'+(pl.busy?" disabled":"")+'>'+a[1]+'</button>').join("");
-  document.querySelectorAll(".tp-table").forEach(b=>b.classList.toggle("near",b.dataset.go===st));
+  document.querySelectorAll("#tpIn [data-go]").forEach(b=>b.classList.toggle("near",b.dataset.go===st));
   document.querySelector(".tp-burner").classList.toggle("ready",st==="altar"&&pl.hold);
 }
 function tpAct(k){
   if(!tpFree()) return;
-  if(k==="take") takeIncense(); else if(k==="draw") drawStick(); else if(k==="ask") askBlocks();
+  if(k==="take") takeIncense(); else if(k==="draw") drawStick(); else if(k==="ask") askBlocks(); else if(k==="luck") tellerOpen();
 }
 function takeIncense(){
   if(pl.hold) return;
@@ -2206,15 +2250,39 @@ function showFortune(){
   tpLive("第"+tpNum(n)+"签，"+f[0]+"。"+f[2]);
 }
 
+/* the fortune teller: today's luck for your zodiac sign, the same all day */
+function tpRng(seed){ let h=2166136261; for(const c of seed){ h^=c.charCodeAt(0); h=Math.imul(h,16777619) } return ()=>{ h+=0x6D2B79F5; let t=h; t=Math.imul(t^t>>>15,t|1); t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296 } }
+const tpStars=n=>'<span class="tp-stars">'+"★".repeat(n)+'<i>'+"★".repeat(5-n)+'</i></span>';
+function tellerOpen(){
+  evShow('<h3>算命摊</h3><p class="tp-evt">算命先生：来来来，报上你的生肖，帮你看看今天的运势。</p><div class="tp-zods">'+
+    TP_ZOD.map((z,i)=>'<button type="button" data-zod="'+i+'"'+(tp.zod===i?' class="on"':"")+'><span>'+z[1]+'</span>属'+z[0]+'</button>').join("")+'</div>'+evBtns([["close","下次再算"]]));
+  if(tp.zod>=0){ const b=$("tpEvCard").querySelector('[data-zod="'+tp.zod+'"]'); if(b) b.focus() }
+}
+function showLuck(i){
+  tp.zod=i; tpSave();
+  const d=new Date(), day=d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate(), r=tpRng("gz-luck|"+day+"|"+i);
+  const pick=(a,n)=>{ const c=a.slice(), out=[]; while(out.length<n&&c.length) out.push(c.splice(Math.floor(r()*c.length),1)[0]); return out };
+  const rows=["财运","事业","流量","人缘"].map(k=>[k,2+Math.floor(r()*4)]);
+  const all=Math.max(2,Math.min(5,Math.round(rows.reduce((a,b)=>a+b[1],0)/4+(r()<.3?.5:0))));
+  const col=TP_COLORS[Math.floor(r()*TP_COLORS.length)], num=1+Math.floor(r()*9), yi=pick(TP_YI,2), ji=pick(TP_JI,2), talk=pick(TP_TALK[all],1)[0];
+  evShow('<div class="tp-luck"><small>'+(d.getMonth()+1)+'月'+d.getDate()+'日 · 属'+TP_ZOD[i][0]+' '+TP_ZOD[i][1]+'</small><b class="tp-lvl tp-zh">今日运势 '+tpStars(all)+'</b>'+
+    '<div class="tp-lrows">'+rows.map(x=>'<div><span>'+x[0]+'</span>'+tpStars(x[1])+'</div>').join("")+'</div>'+
+    '<div class="tp-lmeta"><span>幸运色<i style="background:'+col[1]+'"></i>'+col[0]+'</span><span>幸运数字 <b>'+num+'</b></span></div>'+
+    '<div class="tp-yiji"><p><b class="yi">宜</b>'+yi.join(" · ")+'</p><p><b class="ji">忌</b>'+ji.join(" · ")+'</p></div>'+
+    '<p class="tp-jie"><b class="tp-zh">先生说</b>'+talk+'</p></div>'+evBtns([["close","好"],["teller","换个生肖"]]));
+  tpSound(all>=4?"coins":"ding");
+  tpLive("属"+TP_ZOD[i][0]+"今日运势"+all+"颗星。"+talk);
+}
+
 /* opening, walking in, leaving */
 function tpReset(){
   tpTimers.forEach(clearTimeout); tpTimers=[];
   if(pl.raf) cancelAnimationFrame(pl.raf);
-  Object.assign(pl,{f:.5,dir:0,target:null,then:null,raf:0,last:0,hold:false,left:0,offered:false,busy:false,moved:false,uiKey:""});
+  Object.assign(pl,PL_START,{keys:new Set()});
   $("temple").classList.remove("opening","zoom","inside");
   $("tpOut").style.transformOrigin=""; $("tpOut").removeAttribute("inert"); $("tpIn").setAttribute("inert","");
   $("tpBless").hidden=true; $("tpEv").hidden=true; $("tpRain").innerHTML=""; $("tpSay").hidden=true;
-  $("tpMe").className="tp-me"; delete $("tpMe").dataset.left; $("tpGod").classList.remove("blessed","jump","nod","wiggle");
+  $("tpMe").className="tp-me"; delete $("tpMe").dataset.left; document.querySelectorAll(".tp-pad .on").forEach(b=>b.classList.remove("on")); $("tpGod").classList.remove("blessed","jump","nod","wiggle");
   [...$("tpSticks").children].forEach(x=>x.classList.remove("lit"));
 }
 function openTemple(){
@@ -2225,9 +2293,9 @@ function openTemple(){
 }
 function enterTemple(){
   const d=$("temple"); if(pl.busy||d.classList.contains("inside")) return; pl.busy=true;
-  const inside=()=>{ d.classList.add("inside"); $("tpOut").setAttribute("inert",""); $("tpIn").removeAttribute("inert"); plPaint();
+  const inside=()=>{ d.classList.add("inside"); $("tpOut").setAttribute("inert",""); $("tpIn").removeAttribute("inert"); tpMeasure(); plPaint();
     tpLive("进庙了。左边拿香，中间供桌上香，右边求签。");
-    tpLater(()=>{ pl.busy=false; pl.uiKey=""; tpUi(); $("tpL").focus() },calmMotion.matches?0:900) };
+    tpLater(()=>{ pl.busy=false; pl.uiKey=""; tpUi(); const b=document.querySelector(".tp-pad button"); if(b) b.focus() },calmMotion.matches?0:900) };
   if(calmMotion.matches){ inside(); return }
   tpSound("door"); d.classList.add("opening");
   tpLater(()=>{
@@ -2243,45 +2311,49 @@ function tpPoke(){
   s.textContent=t; s.hidden=true; void s.offsetWidth; s.hidden=false; tpSound("ding");
   clearTimeout(tpSayT); tpSayT=setTimeout(()=>{ s.hidden=true },2400);
 }
-if($("temple")&&$("templeBtn")&&$("tpMe")){
+if($("temple")&&$("templeBtn")&&$("tpMe")&&document.querySelector(".tp-pad")){
   $("templeBtn").onclick=openTemple;
   $("tpGo").onclick=enterTemple; $("tpDoors").addEventListener("click",enterTemple);
-  $("tpGod").onclick=e=>{ e.stopPropagation(); if(!tpFree()) return; if(canOffer()) offerStick(); else if(pl.hold) walkTo(TP_ST.altar); else tpPoke() };
+  $("tpGod").onclick=e=>{ e.stopPropagation(); if(!tpFree()) return; if(canOffer()) offerStick(); else if(pl.hold) goStation("altar"); else tpPoke() };
   $("tpActs").addEventListener("click",e=>{ const b=e.target.closest("[data-act]"); if(b) tpAct(b.dataset.act) });
   $("tpIn").addEventListener("click",e=>{
     if(!tpFree()) return;
     const go=e.target.closest("[data-go]");
-    if(go){ const k=go.dataset.go; walkTo(TP_ST[k],k==="incense"&&!pl.hold?takeIncense:null); return }
+    if(go){ const k=go.dataset.go; goStation(k,k==="incense"&&!pl.hold?takeIncense:k==="teller"?tellerOpen:null); return }
     if(e.target.closest(".tp-ui,.tp-bless,.tp-ev,button")) return;
-    if(e.target.closest(".tp-shrine")){ if(canOffer()) offerStick(); else walkTo(TP_ST.altar); return }
-    const r=$("tpIn").getBoundingClientRect(); walkTo((e.clientX-r.left)/r.width);
+    if(e.target.closest(".tp-shrine")){ if(canOffer()) offerStick(); else goStation("altar"); return }
+    if(!tpGeo) tpMeasure();
+    walkTo(tpFloorPoint(e.clientX,e.clientY));
   });
-  [["tpL",-1],["tpR",1]].forEach(([id,d])=>{
-    const b=$(id), stop=()=>{ if(pl.dir===d) pl.dir=0 };
-    b.addEventListener("pointerdown",e=>{ if(!tpFree()) return; e.preventDefault(); try{ b.setPointerCapture(e.pointerId) }catch(_){} pl.target=null; pl.then=null; pl.dir=d; plGo() });
+  document.querySelectorAll(".tp-pad [data-mv]").forEach(b=>{
+    const k=b.dataset.mv, stop=()=>{ pl.keys.delete(k); b.classList.remove("on") };
+    b.addEventListener("pointerdown",e=>{ if(!tpFree()) return; e.preventDefault(); try{ b.setPointerCapture(e.pointerId) }catch(_){} pl.target=null; pl.then=null; pl.keys.add(k); b.classList.add("on"); plGo() });
     b.addEventListener("pointerup",stop); b.addEventListener("pointercancel",stop); b.addEventListener("lostpointercapture",stop);
-    b.addEventListener("click",e=>{ if(e.detail===0) walkTo(pl.f+d*.12) });
+    b.addEventListener("click",e=>{ if(e.detail===0){ const d={u:[0,-.15],d:[0,.15],l:[-.12,0],r:[.12,0]}[k]; walkTo({x:pl.x+d[0],z:pl.z+d[1]}) } });
   });
+  const KEYMAP={ArrowUp:"u",w:"u",W:"u",ArrowDown:"d",s:"d",S:"d",ArrowLeft:"l",a:"l",A:"l",ArrowRight:"r",d:"r",D:"r"};
   $("temple").addEventListener("keydown",e=>{
-    if(!tpFree()) return; const k=e.key;
-    if(k==="ArrowLeft"||k==="a"||k==="A"||k==="ArrowRight"||k==="d"||k==="D"){ e.preventDefault(); if(e.repeat) return; pl.target=null; pl.then=null; pl.dir=(k==="ArrowLeft"||k==="a"||k==="A")?-1:1; plGo() }
+    if(!tpFree()) return; const k=e.key, m=KEYMAP[k];
+    if(m){ e.preventDefault(); if(e.repeat) return; pl.target=null; pl.then=null; pl.keys.add(m); plGo() }
     else if(k==="e"||k==="E"||(k===" "&&!e.target.closest("button"))){
       if(canOffer()){ e.preventDefault(); offerStick(); return }
       const b=$("tpActs").querySelector("button:not([disabled])"); if(b){ e.preventDefault(); b.click() }
     }
   });
-  $("temple").addEventListener("keyup",e=>{ if(/^(ArrowLeft|ArrowRight|a|A|d|D)$/.test(e.key)) pl.dir=0 });
+  $("temple").addEventListener("keyup",e=>{ const m=KEYMAP[e.key]; if(m) pl.keys.delete(m) });
   $("tpEvCard").addEventListener("click",e=>{
+    const z=e.target.closest("[data-zod]"); if(z){ showLuck(Number(z.dataset.zod)); return }
     const b=e.target.closest("[data-ev]"); if(!b) return; const k=b.dataset.ev;
     if(k==="confirm") throwBlocks("confirm"); else if(k==="ask-throw") throwBlocks("ask"); else if(k==="ask") askBlocks();
-    else if(k==="read") showFortune(); else if(k==="draw") drawStick(); else evClose();
+    else if(k==="read") showFortune(); else if(k==="draw") drawStick(); else if(k==="teller") tellerOpen(); else evClose();
   });
-  $("tpAgain").onclick=()=>{ $("tpBless").hidden=true; walkTo(TP_ST.fortune) };
+  $("tpAgain").onclick=()=>{ $("tpBless").hidden=true; goStation("fortune") };
   $("tpBye").onclick=()=>{ $("tpBless").hidden=true; pl.uiKey=""; tpUi() };
   $("tpClose").onclick=()=>$("temple").close();
   $("tpSnd").onclick=()=>{ tp.snd=!tp.snd; tpSave(); tpPaintSnd(); tpSound("ding") };
-  $("temple").addEventListener("close",()=>{ tpTimers.forEach(clearTimeout); tpTimers=[]; $("tpRain").innerHTML=""; clearTimeout(tpSayT); pl.dir=0; pl.target=null; if(pl.raf){ cancelAnimationFrame(pl.raf); pl.raf=0 } });
-  window.addEventListener("resize",()=>{ if($("temple").open) plPaint() });
+  $("temple").addEventListener("close",()=>{ tpTimers.forEach(clearTimeout); tpTimers=[]; $("tpRain").innerHTML=""; clearTimeout(tpSayT); pl.keys.clear(); pl.target=null; if(pl.raf){ cancelAnimationFrame(pl.raf); pl.raf=0 } });
+  window.addEventListener("resize",()=>{ if($("temple").open&&$("temple").classList.contains("inside")){ tpMeasure(); plPaint() } });
+  window.addEventListener("blur",()=>{ pl.keys.clear() });
   const tpStage=$("temple").querySelector(".tp-stage"); if(tpStage) tpStage.addEventListener("scroll",()=>{ tpStage.scrollTop=0; tpStage.scrollLeft=0 });
 }
 

@@ -1603,6 +1603,59 @@ dialog#temple::backdrop{background:#2A0A0B}
 .deskcover .cover-img{width:64px;border-radius:10px}
 .deskcover b{display:block;font-size:13px}
 .deskcover span{font-size:12.5px;color:var(--ink-3)}
+
+/* temple v4: 2.5D floor, depth-sorted people and things, fortune teller */
+.tp-floor{top:54%;height:auto}
+#tpIn{z-index:1}
+.tp-floor::before{transform:perspective(260px) rotateX(52deg)}
+.tp-shrine{bottom:46%;width:min(56vw,480px);translate:calc(var(--cx,0) * -8px) 0}
+.tp-god img{height:min(27vh,56vw,760px)}
+.tp-pillar{bottom:46%;translate:calc(var(--cx,0) * -12px) 0}
+.tp-couplet{top:clamp(24px,6vh,80px);font-size:clamp(13px,2.3vh,24px)}
+.tp-lantern{translate:calc(var(--cx,0) * -20px) 0}
+.tp-plaque{translate:calc(-50% + var(--cx,0) * -6px) 0;transform:none}
+#tpIn .tp-me,#tpIn .tp-table{left:var(--sx,50%);top:var(--sy,80%);bottom:auto;translate:-50% -100%;scale:var(--sc,1);transform-origin:50% 100%;z-index:var(--zi,10)}
+#tpIn .tp-table{width:clamp(92px,15vh,150px)}
+#tpIn .tp-stall{width:clamp(100px,16vh,160px)}
+.tp-me .me-front{display:none}
+.tp-me.face .me-front{display:block}
+.tp-me.face .me-back{display:none}
+.tp-fpillar{position:absolute;top:0;bottom:0;z-index:150;width:clamp(22px,5.5vw,64px);pointer-events:none;background:linear-gradient(90deg,#2A0405,#6E1012 45%,#3A0607);box-shadow:0 0 40px rgba(0,0,0,.55);translate:calc(var(--cx,0) * -44px) 0}
+.tp-fpillar.l{left:-12px}
+.tp-fpillar.r{right:-12px}
+.tp-rain{z-index:160}
+.tp-ui{z-index:170;padding-top:8px}
+.tp-bless{z-index:180}
+.tp-hands{z-index:165}
+.tp-ctrl{justify-content:flex-start;gap:12px}
+.tp-pad{flex:none;display:grid;grid-template-columns:repeat(3,34px);grid-template-rows:repeat(2,34px);gap:4px}
+.tp-pad button{width:34px;height:34px;padding:0;border:0;border-radius:10px;background:rgba(255,231,176,.16);color:#FFE7B0;font-size:13px;box-shadow:inset 0 0 0 1.5px rgba(255,231,176,.45);cursor:pointer;touch-action:none;-webkit-touch-callout:none}
+.tp-pad button:active,.tp-pad button.on{background:rgba(255,231,176,.36)}
+.tp-pad [data-mv="u"]{grid-column:2;grid-row:1}
+.tp-pad [data-mv="l"]{grid-column:1;grid-row:2}
+.tp-pad [data-mv="d"]{grid-column:2;grid-row:2}
+.tp-pad [data-mv="r"]{grid-column:3;grid-row:2}
+.tp-acts2{justify-content:flex-start}
+.tp-zods{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
+.tp-zods button{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;border-radius:14px;padding:8px 0;background:rgba(255,255,255,.12);color:#FFF3D6;font:700 15px/1.1 var(--body);cursor:pointer;box-shadow:inset 0 0 0 1.5px rgba(255,231,176,.35)}
+.tp-zods button span{font-size:24px}
+.tp-zods button.on{background:#F5C342;color:#5A1206}
+.tp-luck small{display:block;font-size:12.5px;font-weight:700;letter-spacing:.06em;color:#FFD66B}
+.tp-luck .tp-lvl{margin:8px 0 12px}
+.tp-stars{color:#FFD66B;letter-spacing:2px}
+.tp-stars i{font-style:normal;color:rgba(255,231,176,.3)}
+.tp-lvl .tp-stars{color:#B3171D}
+.tp-lvl .tp-stars i{color:rgba(122,14,16,.28)}
+.tp-lrows{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;text-align:left;margin:0 auto 12px;max-width:280px;font-size:14px;color:#FFF3D6}
+.tp-lrows div{display:flex;justify-content:space-between;gap:6px}
+.tp-lmeta{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;font-size:14px;color:#FFF3D6;margin-bottom:12px}
+.tp-lmeta i{display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:-2px;margin:0 4px;box-shadow:0 0 0 2px rgba(255,255,255,.6)}
+.tp-yiji{text-align:left;max-width:300px;margin:0 auto 12px;font-size:14px;color:#FFF3D6}
+.tp-yiji p{margin:0 0 6px}
+.tp-yiji b{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;margin-right:8px;font-size:13px}
+.tp-yiji .yi{background:#2E8C7A;color:#fff}
+.tp-yiji .ji{background:#1C1C1E;color:#fff}
+@media (max-width:640px){ .tp-pad{grid-template-columns:repeat(3,32px);grid-template-rows:repeat(2,32px)} .tp-pad button{width:32px;height:32px} }
 </style>
 </head>
 <body>
@@ -1942,7 +1995,27 @@ dialog#temple::backdrop{background:#2A0A0B}
           <path d="M52 43Q62 30 72 43Q62 40 52 43Z" fill="#B3171D" stroke="#5A0A0D" stroke-width="1.2"/><path d="M70 43Q80 31 90 43Q80 40 70 43Z" fill="#E4533F" stroke="#5A0A0D" stroke-width="1.2"/>
           <rect x="8" y="44" width="84" height="9" rx="2" fill="#9A5428" stroke="#3A1A0B" stroke-width="1.5"/><path d="M16 53v24M84 53v24" stroke="#5C2C12" stroke-width="6"/><path d="M14 62h72" stroke="#5C2C12" stroke-width="3"/>
         </svg><span>求签</span></button>
-      <div class="tp-me" id="tpMe" aria-hidden="true"><span class="tp-mename" id="tpMeName">我</span><svg viewBox="0 0 60 100">
+      <button type="button" class="tp-table tp-stall" data-go="teller" aria-label="算命摊"><svg viewBox="0 0 140 150" aria-hidden="true">
+          <path d="M14 4v142" stroke="#6E3B1A" stroke-width="4" stroke-linecap="round"/>
+          <rect x="16" y="8" width="28" height="74" rx="2" fill="#F5E6C8" stroke="#B3171D" stroke-width="2"/>
+          <g font-family="'Songti SC','STSong',serif" font-weight="900" font-size="19" fill="#B3171D" text-anchor="middle"><text x="30" y="34">神</text><text x="30" y="60">算</text></g>
+          <path d="M16 82l4 8 4-8 4 8 4-8 4 8 4-8 4 8" stroke="#B3171D" stroke-width="2" fill="none"/>
+          <path d="M58 112Q60 72 84 70Q108 72 110 112Z" fill="#33507E" stroke="#1E3050" stroke-width="1.5"/>
+          <path d="M84 72V112" stroke="#1E3050" stroke-width="1.5"/>
+          <circle cx="84" cy="52" r="15" fill="#F2C7A5"/>
+          <path d="M69 50Q69 34 84 34Q99 34 99 50Z" fill="#1C1C1E"/><circle cx="84" cy="33" r="3" fill="#C8282E"/>
+          <path d="M74 47h6M88 47h6" stroke="#EDEDED" stroke-width="2" stroke-linecap="round"/>
+          <g fill="rgba(255,255,255,.35)" stroke="#2B1F1A" stroke-width="1.4"><circle cx="78" cy="53" r="4.6"/><circle cx="90" cy="53" r="4.6"/></g><path d="M82.6 53h2.8" stroke="#2B1F1A" stroke-width="1.4"/>
+          <path d="M76 61Q84 92 92 61Q88 66 84 66Q80 66 76 61Z" fill="#F4F4F4" stroke="#CFCFCF"/>
+          <path d="M78 60Q84 63 90 60" stroke="#CFCFCF" fill="none"/>
+          <rect x="50" y="100" width="86" height="9" rx="2" fill="#9A5428" stroke="#3A1A0B" stroke-width="1.5"/>
+          <rect x="54" y="109" width="78" height="38" fill="#F5C342" stroke="#B07A1C" stroke-width="1.5"/>
+          <path d="M54 109h78l-6 8H60z" fill="#E5A21C"/>
+          <text x="93" y="138" font-family="'Songti SC','STSong',serif" font-weight="900" font-size="17" fill="#B3171D" text-anchor="middle" letter-spacing="3">算命</text>
+          <g transform="translate(64 92)"><rect width="16" height="10" rx="1.5" fill="#F5E6C8" stroke="#B07A1C"/><path d="M8 0v10" stroke="#B07A1C"/></g>
+        </svg><span>算命</span></button>
+      <span class="tp-fpillar l" aria-hidden="true"></span><span class="tp-fpillar r" aria-hidden="true"></span>
+      <div class="tp-me" id="tpMe" aria-hidden="true"><span class="tp-mename" id="tpMeName">我</span><svg class="me-back" viewBox="0 0 60 100">
           <g class="me-leg l"><rect x="20" y="62" width="9" height="27" rx="4" fill="#2F3A4A"/><ellipse cx="24" cy="91" rx="6.5" ry="4" fill="#F4F4F4" stroke="#B9BEC4"/></g>
           <g class="me-leg r"><rect x="31" y="62" width="9" height="27" rx="4" fill="#2F3A4A"/><ellipse cx="36" cy="91" rx="6.5" ry="4" fill="#F4F4F4" stroke="#B9BEC4"/></g>
           <g class="me-up">
@@ -1956,11 +2029,30 @@ dialog#temple::backdrop{background:#2A0A0B}
             <circle cx="30" cy="18" r="16" fill="#2B1F1A"/>
             <path d="M19 9Q30 2 41 9" stroke="#56402F" stroke-width="2.5" fill="none" stroke-linecap="round"/>
           </g>
+        </svg><svg class="me-front" viewBox="0 0 60 100">
+          <g class="me-leg l"><rect x="20" y="62" width="9" height="27" rx="4" fill="#2F3A4A"/><ellipse cx="24" cy="91" rx="6.5" ry="4" fill="#F4F4F4" stroke="#B9BEC4"/></g>
+          <g class="me-leg r"><rect x="31" y="62" width="9" height="27" rx="4" fill="#2F3A4A"/><ellipse cx="36" cy="91" rx="6.5" ry="4" fill="#F4F4F4" stroke="#B9BEC4"/></g>
+          <g class="me-up">
+            <g class="me-arm l"><rect x="9" y="37" width="9" height="24" rx="4.5" fill="#F2C7A5"/><rect x="8" y="35" width="11" height="11" rx="4" fill="#1C1C1E"/></g>
+            <g class="me-arm r"><rect x="42" y="37" width="9" height="24" rx="4.5" fill="#F2C7A5"/><rect x="41" y="35" width="11" height="11" rx="4" fill="#1C1C1E"/></g>
+            <path d="M15 40Q15 34 22 33H38Q45 34 45 40L44 66H16Z" fill="#1C1C1E"/>
+            <path d="M25 33Q30 38 35 33" stroke="#3A3A3E" stroke-width="2" fill="none"/>
+            <text x="30" y="55" text-anchor="middle" font-size="7" font-weight="800" fill="#EC4E8E" font-family="Arial,sans-serif" letter-spacing=".3">GEARIZO</text>
+            <rect x="26" y="27" width="8" height="8" fill="#E8B892"/>
+            <circle cx="13.5" cy="20" r="3.6" fill="#F2C7A5"/><circle cx="46.5" cy="20" r="3.6" fill="#F2C7A5"/>
+            <circle cx="30" cy="18" r="16" fill="#F6CFAE"/>
+            <path d="M13.6 19Q13 2 30 2Q47 2 46.4 19Q43 10 36 9Q31 13 22 12Q16 13 13.6 19Z" fill="#2B1F1A"/>
+            <circle cx="24" cy="20.5" r="1.9" fill="#2B1F1A"/><circle cx="36" cy="20.5" r="1.9" fill="#2B1F1A"/>
+            <ellipse cx="20.5" cy="25" rx="3" ry="1.8" fill="#F29A9A" opacity=".6"/><ellipse cx="39.5" cy="25" rx="3" ry="1.8" fill="#F29A9A" opacity=".6"/>
+            <path d="M26.5 26Q30 29.5 33.5 26" stroke="#8E3B2E" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+            <g class="me-held"><g class="stk s1"><path d="M27 44 20 -20" stroke="#B5651D" stroke-width="2.4" stroke-linecap="round"/><path d="M27 44 25 26" stroke="#C8282E" stroke-width="2.6" stroke-linecap="round"/><circle cx="20" cy="-20" r="2.4" fill="#FF6A2B"/><circle class="smk" cx="20" cy="-24" r="4" fill="rgba(240,230,220,.6)"/></g><g class="stk s2"><path d="M30 44 30 -24" stroke="#B5651D" stroke-width="2.4" stroke-linecap="round"/><path d="M30 44 30 26" stroke="#C8282E" stroke-width="2.6" stroke-linecap="round"/><circle cx="30" cy="-24" r="2.4" fill="#FF6A2B"/><circle class="smk" cx="30" cy="-28" r="4" fill="rgba(240,230,220,.6)"/></g><g class="stk s3"><path d="M33 44 40 -20" stroke="#B5651D" stroke-width="2.4" stroke-linecap="round"/><path d="M33 44 35 26" stroke="#C8282E" stroke-width="2.6" stroke-linecap="round"/><circle cx="40" cy="-20" r="2.4" fill="#FF6A2B"/><circle class="smk" cx="40" cy="-24" r="4" fill="rgba(240,230,220,.6)"/></g></g>
+            
+          </g>
         </svg></div>
       <div class="tp-rain" id="tpRain" aria-hidden="true"></div>
       <div class="tp-ui">
         <p class="tp-hint" id="tpHint"></p>
-        <div class="tp-ctrl"><button type="button" class="tp-mv" id="tpL" aria-label="向左走">◀</button><div class="tp-acts2" id="tpActs"></div><button type="button" class="tp-mv" id="tpR" aria-label="向右走">▶</button></div>
+        <div class="tp-ctrl"><div class="tp-pad" role="group" aria-label="走路"><button type="button" data-mv="u" aria-label="往前走">▲</button><button type="button" data-mv="l" aria-label="向左走">◀</button><button type="button" data-mv="r" aria-label="向右走">▶</button><button type="button" data-mv="d" aria-label="往后走">▼</button></div><div class="tp-acts2" id="tpActs"></div></div>
       </div>
       <div class="tp-bless" id="tpBless" hidden>
         <div class="tp-card" role="group" aria-labelledby="tpBlessZh">
