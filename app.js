@@ -2150,7 +2150,7 @@ function tpUi(){
   if(st==="incense"){ if(pl.hold) hint="香拿好了，去中间供桌上香 →"; else acts=[["take","🔥 拿香"]] }
   else if(st==="altar"){ if(pl.hold) hint="点香炉上香，手上还有 "+pl.left+" 支"; else hint=pl.offered?"香上好了，去右边求签 →":"← 先去左边拿香" }
   else if(st==="fortune"){ acts=pl.offered?[["draw","🎋 求签"],["ask","🌙 掷筊问事"]]:[["ask","🌙 掷筊问事"]]; if(!pl.offered) hint="上了香才能求签" }
-  else if(st==="teller"){ acts=[["luck","🔮 算命"]]; hint="算命先生：来，算一卦？" }
+  else if(st==="teller"){ acts=[["luck","📜 算命"]]; hint="算命先生：来，算一卦？" }
   else hint=pl.hold?"去供桌上香 ↑":pl.offered?"去右边求签，或找前面的算命先生":"← 去左边拿香";
   if(!pl.moved) hint+="<small>点地面或用方向键走路</small>";
   const key=st+"|"+hint+"|"+pl.busy+"|"+acts.map(a=>a.join()).join(";");
@@ -2266,13 +2266,13 @@ function tellerDo(k){
   if(k==="luck") return tellerZodiac();
   const r=tpRng("gz-"+k+"|"+tpDayKey()+"|"+(myId||"me")), pick=a=>a[Math.floor(r()*a.length)];
   if(k==="ask"){
-    evShow('<h3>问先生</h3><p class="tp-evt">算命先生：心里有什么问题，说来听听。</p><textarea id="tpQ" class="tp-q" maxlength="80" rows="2" placeholder="例如：这支片会爆吗？"></textarea>'+evBtns([["q-go","🔮 请先生回答"],["teller","算别的"]]));
+    evShow('<h3>问先生</h3><p class="tp-evt">算命先生：心里有什么问题，说来听听。</p><textarea id="tpQ" class="tp-q" maxlength="80" rows="2" placeholder="例如：这支片会爆吗？"></textarea>'+evBtns([["q-go","📜 请先生回答"],["teller","算别的"]]));
     setTimeout(()=>{ const q=$("tpQ"); if(q) q.focus() },50);
     return;
   }
   if(k==="birth"){
     const today=ymd(new Date());
-    evShow('<h3>生日运势</h3><p class="tp-evt">报上你的出生日期，先生帮你看看。</p><input type="date" id="tpB" class="tp-q" max="'+today+'" min="1930-01-01" value="'+esc(tp.bday||"")+'" aria-label="出生日期">'+evBtns([["b-go","🔮 看运势"],["teller","算别的"]]));
+    evShow('<h3>生日运势</h3><p class="tp-evt">报上你的出生日期，先生帮你看看。</p><input type="date" id="tpB" class="tp-q" max="'+today+'" min="1930-01-01" value="'+esc(tp.bday||"")+'" aria-label="出生日期">'+evBtns([["b-go","📜 看运势"],["teller","算别的"]]));
     return;
   }
   if(k==="word"){
@@ -2313,7 +2313,7 @@ function tellerAnswer(){
   const q=($("tpQ")||{}).value||"", t=q.trim();
   if(!t){ const el=$("tpQ"); if(el){ el.focus(); el.placeholder="先写下你的问题…" } return }
   const cat=TP_Q.find(c=>c[0].test(t)), r=tpRng("gz-ask|"+tpDayKey()+"|"+(myId||"me")+"|"+t), a=cat[1][Math.floor(r()*cat[1].length)];
-  evShow('<h3>问先生</h3><div class="tp-palm"><span>🔮</span><i></i></div><p class="tp-evt">先生闭上眼睛想了想…</p>');
+  evShow('<h3>问先生</h3><div class="tp-palm"><span>🀄</span><i></i></div><p class="tp-evt">先生闭上眼睛想了想…</p>');
   tpSound("rattle");
   tpLater(()=>{
     evShow('<div class="tp-luck"><small>你问：「'+esc(t)+'」</small><b class="tp-big tp-zh">'+a[0]+'</b><p class="tp-jie"><b class="tp-zh">先生说</b>'+a[1]+'</p></div>'+evBtns([["q-new","💬 再问一个"],["teller","算别的"],["close","好"]]));
