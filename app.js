@@ -629,11 +629,13 @@ const NAS_CHECKING="Content Video/Checking", NAS_APPROVE="Content Video/approve"
 const smbUrl=rel=>NAS_SMB+rel.split("/").map(encodeURIComponent).join("/");
 function nasBoxHtml(it){
   const mk=isMk(), rel=mk?NAS_APPROVE:NAS_CHECKING;
-  const nextN=((vFor(it.id)[0]||{n:0}).n)+1, fname=(it.code?it.code+" ":"")+fileSafe(it.title)+" v"+nextN+".mp4";
+  const nextN=((vFor(it.id)[0]||{n:0}).n)+1, base=(it.code?it.code+" ":"")+fileSafe(it.title), vname=base+" v"+nextN, cname=base+" cover";
   const hint=mk?"When you approve a video, its file moves from Checking to this folder within about 15 minutes."
-    :"Export the finished version here with this file name. Within about 15 minutes it’s added here, sent for review, and marketing gets a notification. Once approved, the file moves to approve.";
+    :"Export the finished video and its cover picture here with these names. Within about 15 minutes the video is added here and sent for review, and the picture becomes its cover. Once approved, both move to approve.";
   return '<div class="nas"><div><b>NAS folder</b><code>Marketing Content / '+esc(rel.split("/").join(" / "))+'</code>'+
-    (mk?"":'<div class="fname"><b>File name</b><code>'+esc(fname)+'</code><button class="btn sm ghost" type="button" data-copy="'+esc(fname.replace(/\.mp4$/,""))+'">Copy name</button></div>')+
+    (mk?"":'<div class="fnames"><b>File names</b>'+
+      '<div class="fnrow"><span>Video</span><code>'+esc(vname)+'<i>.mp4</i></code><button class="btn sm" type="button" data-copy="'+esc(vname)+'">Copy</button></div>'+
+      '<div class="fnrow"><span>Cover</span><code>'+esc(cname)+'<i>.jpg</i></code><button class="btn sm" type="button" data-copy="'+esc(cname)+'">Copy</button></div></div>')+
     '<span class="hint">'+esc(hint)+'</span></div><div class="acts"><a class="btn sm" href="'+esc(smbUrl(rel))+'" target="_blank" rel="noopener" title="Open in Finder">Finder ↗</a><button class="btn sm ghost" type="button" data-copy="'+esc(NAS_MAC+rel)+'">Copy path</button></div></div>';
 }
 function linkHtml(link){
