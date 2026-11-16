@@ -17,6 +17,7 @@ sys.path.insert(0, HERE)
 import settings as S  # noqa: E402
 import nas_preview as NP  # noqa: E402
 import autopost  # noqa: E402
+import gz_edit  # noqa: E402
 
 URL, KEY = S.URL, S.KEY
 OWNER_ID = S.OWNER_ID  # the content owner: versions found on the NAS are credited to them
@@ -177,35 +178,41 @@ def handle_new(items, versions):
         if dup:
             NP.do_mark(f["path"])
             continue
-        pv = NP.make_preview(f["path"])
-        if "error" in pv:
-            log(f"no preview for {f['name']}: {pv['error']}")
-            NP.do_mark(f["path"])
-            continue
-        try:
-            oid = upload(pv["out"], "video/mp4")
-        finally:
-            try:
-                os.remove(pv["out"])
-            except OSError:
-                pass
-        note = "From Checking: " + f["name"] + (" (preview shows the first 8 minutes)" if pv.get("trimmed") else "")
-        now = int(time.time() * 1000)
-        if f["item"]:
-            n = max([v.get("n", 0) for v in versions.values() if v.get("item") == f["item"]] or [0]) + 1
-            vdoc = {"item": f["item"], "n": n, "link": f["path"], "asset": "/_blob/" + oid, "assetType": "video/mp4",
-                    "note": note, "files": [], "size": f["size"], "mtime": f["mtime"], "at": now, "by": OWNER_ID}
-            put("versions", f"chk-{f['mtime']}-v{n}", vdoc)
-            versions[f"chk-{f['mtime']}-v{n}"] = vdoc
-            if items[f["item"]].get("status") != "posted":
-                merge("items", f["item"], {"status": "review", "submittedBy": OWNER_ID, "submittedAt": now, "submittedV": n})
-            log(f"added v{n} of {items[f['item']].get('title')} from {f['name']} and sent it for review")
-        else:
-            put("inbox", f"chk-{f['mtime']}-{''.join(c for c in f['name'] if c.isalnum())[:8]}",
-                {"path": f["path"], "name": f["name"], "asset": "/_blob/" + oid, "assetType": "video/mp4",
-                 "size": f["size"], "mtime": f["mtime"], "at": now, "by": OWNER_ID})
-            log(f"{f['name']} did not match any item: put in New in Checking")
+        add_file(f, items, versions)
+
+
+def add_file(f, items, versions, note=None, by=None):
+    """A video file in Checking -> small preview -> a new version of its item (sent for review), or New in Checking."""
+    pv = NP.make_preview(f["path"])
+    if "error" in pv:
+        log(f"no preview for {f['name']}: {pv['error']}")
         NP.do_mark(f["path"])
+        return
+    try:
+        oid = upload(pv["out"], "video/mp4")
+    finally:
+        try:
+            os.remove(pv["out"])
+        except OSError:
+            pass
+    note = (note or "From Checking") + ": " + f["name"] + (" (preview shows the first 8 minutes)" if pv.get("trimmed") else "")
+    by = by or OWNER_ID
+    now = int(time.time() * 1000)
+    if f["item"]:
+        n = max([v.get("n", 0) for v in versions.values() if v.get("item") == f["item"]] or [0]) + 1
+        vdoc = {"item": f["item"], "n": n, "link": f["path"], "asset": "/_blob/" + oid, "assetType": "video/mp4",
+                "note": note, "files": [], "size": f["size"], "mtime": f["mtime"], "at": now, "by": by}
+        put("versions", f"chk-{f['mtime']}-v{n}", vdoc)
+        versions[f"chk-{f['mtime']}-v{n}"] = vdoc
+        if items[f["item"]].get("status") != "posted":
+            merge("items", f["item"], {"status": "review", "submittedBy": by, "submittedAt": now, "submittedV": n})
+        log(f"added v{n} of {items[f['item']].get('title')} from {f['name']} and sent it for review")
+    else:
+        put("inbox", f"chk-{f['mtime']}-{''.join(c for c in f['name'] if c.isalnum())[:8]}",
+            {"path": f["path"], "name": f["name"], "asset": "/_blob/" + oid, "assetType": "video/mp4",
+             "size": f["size"], "mtime": f["mtime"], "at": now, "by": OWNER_ID})
+        log(f"{f['name']} did not match any item: put in New in Checking")
+    NP.do_mark(f["path"])
 
 
 def handle_covers(items):
@@ -285,6 +292,10 @@ def run():
             clean_previews(items, versions)
         except Exception:
             log("cleanup ERROR " + traceback.format_exc().strip().replace("\n", " | "))
+        try:
+            gz_edit.handle_renders(api, docs, merge, log, items, versions, add_file)
+        except Exception:
+            log("render ERROR " + traceback.format_exc().strip().replace("\n", " | "))
     if not S.AUTOPOST:
         return
     try:

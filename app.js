@@ -41,7 +41,7 @@ const shortDate=s=>{const d=parse(s);return d.getDate()+" "+MONTHS[d.getMonth()]
 const fmtTime=ms=>{const d=new Date(ms);let h=d.getHours();const ap=h>=12?"pm":"am";h=h%12||12;return d.getDate()+" "+MONTHS[d.getMonth()].slice(0,3)+", "+h+":"+pad(d.getMinutes())+" "+ap};
 const newId=()=>"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
-let items=new Map(), versions=[], feedback=[], focus=[], ideas=[], ideaFrom=null, liveIdeas=false;
+let edits=new Map(), items=new Map(), versions=[], feedback=[], focus=[], ideas=[], ideaFrom=null, liveIdeas=false;
 let db=null, assets=null, userNs=null, myId=null, amOwner=false, names={}, myName="";
 let mode="local", readOnly=false, live={items:false,focus:false,team:false};
 let team={}, promptedRole=false, inbox=[], tasks=[], shoots=[], avail=[], busy=[], jobs={}, metaState=null;
@@ -407,6 +407,11 @@ async function connect(){
       team=t; render(); resolveNames(); maybeAskRole();
       if($("roleDlg").open) renderRoleDlg();
     },()=>{});
+    db.collection("edits").onSnapshot(snap=>{
+      edits=new Map(snap.docs.filter(x=>x.exists).map(x=>[x.id,x.data()||{}]));
+      if(view==="review"&&!(window.gzAdjust&&gzAdjust.isOpen())) render();
+      if(window.gzAdjust) edits.forEach((d,id)=>gzAdjust.remote(id,d));
+    },()=>{});
     db.collection("postjobs").onSnapshot(snap=>{
       const j={}; snap.docs.forEach(x=>{ if(x.exists) j[x.id]=x.data()||{} }); jobs=j;
       if(view==="home") renderHome(); if($("dlg").open&&editingId) renderPublish();
@@ -667,6 +672,22 @@ function pickSel(){
   for(const g of qgroups()){ const f=all.find(i=>g.sts.includes(i.status)); if(f){ selId=f.id; return } }
   selId=null;
 }
+/* Claude-made videos with an editable project: content opens the Adjust screen (adjust.js, loaded on demand) */
+function adjCardHtml(it){
+  const d=edits.get(it.id); if(!d||!isCr()) return "";
+  const r=d.render||{}, n=Array.isArray(d.layers)?d.layers.length:0;
+  const st=r.state==="queued"?"Waiting for the Mac to render":r.state==="rendering"?"Rendering on the Mac…":r.state==="done"?"Rendered v"+r.n+(r.doneAt?" · "+fmtTime(r.doneAt):""):r.state==="failed"?"Last render failed":"";
+  return '<div class="adjcard"><span class="ai">🎛</span><div><b>Adjustable project</b><span>'+n+' layers · subtitles, 花字 and stickers'+(st?" · "+esc(st):"")+'</span></div><button class="btn primary sm" type="button" data-adjust="'+esc(it.id)+'">Adjust</button></div>';
+}
+let adjLoading=null;
+function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement("script"); s.src=src; s.onload=res; s.onerror=()=>rej(new Error("load")); document.head.appendChild(s) }) }
+async function openAdjust(id){
+  const v=(window.GZ_CONFIG&&GZ_CONFIG.version)||"1";
+  try{ adjLoading=adjLoading||(async()=>{ if(!window.GZL) await loadScript("gzlayers.js?v="+v); if(!window.gzAdjust) await loadScript("adjust.js?v="+v) })(); await adjLoading }
+  catch(e){ adjLoading=null; toast("Couldn’t open the editor. Check your connection."); return }
+  gzAdjust.open(id,{db,items,edits,myId,readOnly,toast,esc,who,fbFor,attHtml});
+}
+document.addEventListener("click",e=>{ const b=e.target.closest("[data-adjust]"); if(b){ e.preventDefault(); openAdjust(b.dataset.adjust) } });
 function verCard(v,latest,it){
   if(it&&it.type==="design"&&v.files&&v.files.length&&!v.asset){
     const imgs=v.files.filter(f=>f.type.startsWith("image/")), other=v.files.filter(f=>!f.type.startsWith("image/"));
@@ -745,7 +766,7 @@ function renderDesk(){
   setHTML($("vStatus"),'<div class="banner" style="--k:'+k+'"><div><b>'+esc(head)+'</b><span>'+esc(sub)+'</span></div>'+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>');
 
   const isD=it.type==="design";
-  setHTML($("nasBox"),(isD?"":nasBoxHtml(it)+deskCoverHtml(it))+(it.refs.length?'<div class="refs"><b>References</b>'+attHtml(it.refs)+'</div>':""));
+  setHTML($("nasBox"),(isD?"":adjCardHtml(it)+nasBoxHtml(it)+deskCoverHtml(it))+(it.refs.length?'<div class="refs"><b>References</b>'+attHtml(it.refs)+'</div>':""));
   setHTML($("vLatest"),latest?verCard(latest,true,it):'<p class="empty">'+(isD?"No design yet.":"No video yet.")+(can?" Add the first "+(isD?"version":"cut")+" below.":" The content team hasn’t added one.")+'</p>');
   setHTML($("vOlder"),vs.length>1?'<details class="older"><summary>Earlier versions ('+(vs.length-1)+')</summary>'+vs.slice(1).map(v=>verCard(v,false,it)).join("")+'</details>':"");
   $("vVideoRows").hidden=isD; $("vAttTxt").textContent=isD?"+ Images":"+ Files";
