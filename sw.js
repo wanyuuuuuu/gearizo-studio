@@ -13,8 +13,11 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const u = new URL(e.request.url);
   if (e.request.method !== "GET" || u.origin !== location.origin) return;
+  // The page, config.js and other unversioned code skip the browser's 10-minute HTTP cache (GitHub Pages
+  // sends max-age=600), so opening the app always picks up a new release; an unchanged file is just a 304.
+  const fresh = e.request.mode === "navigate" || (!u.search && /\.(html|js|css|json|webmanifest)$|\/$/.test(u.pathname));
   e.respondWith(
-    fetch(e.request)
+    (fresh ? fetch(u.href, { cache: "no-cache", credentials: "same-origin" }) : fetch(e.request))
       .then((r) => { if (r.ok) { const copy = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); } return r; })
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then((r) => r || caches.match("index.html")))
   );
