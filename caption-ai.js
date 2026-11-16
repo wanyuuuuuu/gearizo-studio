@@ -15,7 +15,7 @@
 (function () {
   "use strict";
 
-  var LIMIT = { reel: 2200, carousel: 2200, story: 1000, fb: 2000, tiktok: 2200, shop: 500 };
+  var LIMIT = { reel: 2200, carousel: 2200, story: 1000, fb: 2000, tiktok: 2200, tt_gz: 2200, tt_my: 2200, tt_sg: 2200, shop: 500 };
   var LANGS = [
     { id: "en", name: "English" },
     { id: "manglish", name: "Manglish" },

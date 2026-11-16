@@ -15,7 +15,7 @@ const STATUSES=[
 ];
 const PLATFORMS=[
   {id:"reel",name:"IG Reel",s:"Reel"},{id:"carousel",name:"IG Carousel",s:"Carousel"},{id:"story",name:"IG Story",s:"Story"},
-  {id:"tiktok",name:"TikTok",s:"TikTok"},{id:"fb",name:"Facebook",s:"FB"},{id:"shop",name:"Shopee / Lazada",s:"Shop"},
+  {id:"tiktok",name:"TikTok",s:"TikTok",legacy:1},{id:"tt_gz",name:"TikTok @gearizo",s:"TT @gearizo"},{id:"tt_my",name:"TikTok @gearizomy",s:"TT MY"},{id:"tt_sg",name:"TikTok @gearizo.sg",s:"TT SG"},{id:"fb",name:"Facebook",s:"FB"},{id:"shop",name:"Shopee / Lazada",s:"Shop"},
   {id:"shopee",name:"Shopee",s:"Shopee"},{id:"lazada",name:"Lazada",s:"Lazada"},{id:"web",name:"Website",s:"Website"}
 ];
 const LANGS=[{id:"en",name:"English"},{id:"manglish",name:"Manglish"},{id:"bm",name:"BM"},{id:"zh",name:"中文"}];
@@ -44,6 +44,7 @@ let db=null, assets=null, userNs=null, myId=null, amOwner=false, names={}, myNam
 let mode="local", readOnly=false, live={items:false,focus:false,team:false};
 let team={}, promptedRole=false, inbox=[], tasks=[], shoots=[], avail=[], busy=[], jobs={}, metaState=null;
 const AUTO_P=["reel","fb"];
+const TT_P=["tiktok","tt_gz","tt_my","tt_sg"];                // the old single "tiktok" plus one per account
 const ROLES={content:{name:"Content & video",k:"var(--blue)"},marketing:{name:"Marketing",k:"var(--mk)"},ecomm:{name:"E-commerce",k:"#E8772E"},hr:{name:"HR",k:"#8C6BD1"}};
 const TEAMS={marketing:"Marketing",ecomm:"E-commerce"};
 const SIZES=[{id:"sq",name:"Square 1:1 (product)",s:"1:1"},{id:"post",name:"Post 4:5",s:"4:5"},{id:"story",name:"Story 9:16",s:"9:16"},{id:"banner",name:"Banner 16:9",s:"16:9"},{id:"wide",name:"Wide banner 3:1",s:"3:1"},{id:"thumb",name:"Thumbnail 1280×720",s:"Thumbnail"}];
@@ -466,7 +467,7 @@ function openItem(id,presetDate,presetProduct){
 /* Platforms follow the team: E-commerce → Shopee, Lazada, Website; marketing → social */
 function platVis(){
   const team=isCr()?$("fTeam").value:(isMk()?myRole():"marketing"), shop=team==="ecomm";
-  $("fPlatforms").querySelectorAll("label").forEach(l=>{ const v=l.querySelector("input").value; l.hidden=shop?!SHOP_P.includes(v):SHOP_P.includes(v) });
+  $("fPlatforms").querySelectorAll("label").forEach(l=>{ const v=l.querySelector("input").value; l.hidden=(shop?!SHOP_P.includes(v):SHOP_P.includes(v))||(pMap[v].legacy&&!l.querySelector("input").checked) });
   const lab=$("fDate").closest(".f").querySelector(".lab"); if(lab) lab.textContent=shop?"Needed by":"Post";
   $("fSeries").closest(".f").hidden=isEc();
 }
@@ -910,11 +911,13 @@ function renderPublish(){
   if(it.status==="posted"){ setHTML(box,banner("var(--blue)","Posted",it.postedAt?fmtTime(it.postedAt):"",it.postUrl?'<a class="btn sm" href="'+esc(it.postUrl)+'" target="_blank" rel="noopener">Open post ↗</a>':"")); return }
   if(!["approved","scheduled"].includes(it.status)){ setHTML(box,banner("var(--ink-3)","Not approved yet","You can pick a time once it’s approved.")); return }
   const can=!readOnly&&mode==="db"&&isMk(), sch=it.status==="scheduled"&&it.postAt>0, due=sch&&it.postAt<=now;
-  const ig=it.platforms.some(p=>["reel","carousel","story","fb"].includes(p)), tt=it.platforms.includes("tiktok");
+  const ig=it.platforms.some(p=>["reel","carousel","story","fb"].includes(p)), tt=it.platforms.some(p=>TT_P.includes(p));
   const d0=sch?new Date(it.postAt):null, today=ymd(new Date());
   const dv=sch?ymd(d0):(it.date&&it.date>=today?it.date:today), tv=sch?pad(d0.getHours())+":"+pad(d0.getMinutes()):"20:00";
-  let html=sch?banner(due?"var(--pink)":"var(--sched)",due?"Time to post":"Scheduled",[postWhen(it.postAt),plats].filter(Boolean).join(" · ")):banner("var(--ready)","Ready to post",plats||"Pick platforms in Plan");
+  let html=sch?banner(due?"var(--pink)":"var(--sched)",due?"Time to post":"Scheduled",[postWhen(it.postAt),plats].filter(Boolean).join(" · ")):banner("var(--ready)","Ready to post",plats||(can?"Pick where it goes below":"Pick platforms in Plan"));
   if(can){
+    html+='<div class="toggles pubplat" role="group" aria-label="Post to">'+PLATFORMS.filter(p=>!SHOP_P.includes(p.id)&&(!p.legacy||it.platforms.includes(p.id)))
+      .map(p=>'<label title="'+esc(p.name)+'"><input type="checkbox" data-plat="'+p.id+'"'+(it.platforms.includes(p.id)?" checked":"")+' aria-label="'+esc(p.name)+'"><span>'+esc(p.s)+'</span></label>').join("")+'</div>';
     html+='<div class="pubwhen"><input type="date" id="pubDate" value="'+dv+'" aria-label="Post date"><input type="time" id="pubTime" value="'+tv+'" step="300" aria-label="Post time">'+
       '<button class="btn primary sm" type="button" data-pub="schedule">'+(sch?"Update time":"Schedule")+'</button>'+(sch?'<button class="btn ghost sm" type="button" data-pub="unschedule">Unschedule</button>':"")+'</div>'+
       '<div class="pubdone"><input type="url" id="pubLink" placeholder="Post link (optional)" aria-label="Link to the live post"><button class="btn go sm" type="button" data-pub="posted">Mark posted</button></div>';
@@ -949,6 +952,15 @@ $("pubInfo").addEventListener("click",e=>{
     const url=($("pubLink").value||"").trim(); if(url&&!/^https?:\/\/\S+$/i.test(url)){ toast("The link should start with https://"); return }
     $("fStatus").value="posted"; persist(id,{...base,status:"posted",...stamp("posted",id),postUrl:url||base.postUrl||""}); catMove("hop"); toast(base.team==="ecomm"?"Marked live.":"Marked as posted.");
   }
+});
+$("pubInfo").addEventListener("change",e=>{
+  const c=e.target.closest("[data-plat]"); if(!c||!editingId) return;
+  if(readOnly||!isMk()){ c.checked=!c.checked; toast("Marketing picks the platforms."); return }
+  const id=editingId, prev=items.get(id); if(!prev) return;
+  const platforms=c.checked?[...new Set([...prev.platforms,c.dataset.plat])]:prev.platforms.filter(p=>p!==c.dataset.plat);
+  if(prev.status==="scheduled"&&!platforms.length){ c.checked=true; toast("A scheduled post needs somewhere to go. Unschedule it first."); return }
+  const box=$("fPlatforms").querySelector('input[value="'+c.dataset.plat+'"]'); if(box) box.checked=c.checked;
+  persist(id,{...prev,platforms}); renderPublish();
 });
 async function copyText(t){
   try{ await navigator.clipboard.writeText(t); toast("Copied."); return }catch(e){}
