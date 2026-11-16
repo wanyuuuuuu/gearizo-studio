@@ -1656,6 +1656,32 @@ dialog#temple::backdrop{background:#2A0A0B}
 .tp-yiji .yi{background:#2E8C7A;color:#fff}
 .tp-yiji .ji{background:#1C1C1E;color:#fff}
 @media (max-width:640px){ .tp-pad{grid-template-columns:repeat(3,32px);grid-template-rows:repeat(2,32px)} .tp-pad button{width:32px;height:32px} }
+
+/* fortune teller menu and readings */
+.tp-menu{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.tp-menu button{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;border-radius:14px;padding:10px 4px;background:rgba(255,255,255,.12);color:#FFF3D6;cursor:pointer;box-shadow:inset 0 0 0 1.5px rgba(255,231,176,.35);font:inherit}
+.tp-menu button:hover{background:rgba(255,231,176,.22)}
+.tp-menu span{font-size:26px;line-height:1.1}
+.tp-menu b{font-size:14.5px}
+.tp-menu small{font-size:11.5px;opacity:.75}
+.tp-big{display:block;font-size:clamp(36px,10vw,48px);line-height:1.15;margin:8px 0 2px;color:#FFE08A;letter-spacing:.06em;text-shadow:0 2px 0 #7A0E10}
+.tp-palm{position:relative;width:140px;height:150px;margin:10px auto 0;display:grid;place-items:center;overflow:hidden;border-radius:18px;background:rgba(255,255,255,.08)}
+.tp-palm span{font-size:96px;line-height:1}
+.tp-palm i{position:absolute;left:0;right:0;height:16px;top:-16px;background:linear-gradient(180deg,rgba(255,214,107,0),rgba(255,214,107,.85),rgba(255,214,107,0));animation:tpScan 1.1s ease-in-out infinite alternate}
+@keyframes tpScan{from{top:-16px}to{top:150px}}
+.tp-palmres{display:flex;flex-direction:column;gap:10px;text-align:left;margin-top:12px}
+.tp-palmres b{font-size:14px;color:#FFD66B;margin-right:8px}
+.tp-palmres p{margin:2px 0 0;font-size:14px;line-height:1.45;color:#FFF3D6}
+.tp-cards{display:flex;justify-content:center;gap:10px;margin:14px 0 4px}
+.tp-cards button,.tp-cardface{width:76px;height:106px;border-radius:12px;border:2px solid #F5C342;display:grid;place-items:center;cursor:pointer;padding:0;box-shadow:0 8px 16px rgba(0,0,0,.35)}
+.tp-cards button{background:repeating-linear-gradient(45deg,#8A1215 0 6px,#A8181C 6px 12px);color:#FFD66B;font:700 26px/1 var(--body);transition:translate .15s}
+.tp-cards button:hover{translate:0 -4px}
+.tp-cardface{background:rgba(255,255,255,.1);opacity:.4;cursor:default}
+.tp-cardface span{font-size:40px;color:#FFE08A}
+.tp-cardface.pick{opacity:1;background:linear-gradient(180deg,#FFE79A,#F5B731);animation:tpFlip .5s ease}
+.tp-cardface.pick span{color:#8A1215}
+@keyframes tpFlip{from{transform:rotateY(90deg)}to{transform:none}}
+@media (prefers-reduced-motion: reduce){ .tp-palm i,.tp-cardface.pick{animation:none} }
 </style>
 </head>
 <body>

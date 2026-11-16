@@ -2049,9 +2049,9 @@ const tpNum=n=>{ const d="一二三四五六七八九"; return n<10?d[n-1]:n===1
 // "at" is where the thing stands, "stand" is where you stand to use it.
 const TP_ST={
   altar:{at:{x:.5,z:0},stand:{x:.5,z:.07}},
-  incense:{at:{x:.12,z:.3},stand:{x:.2,z:.44}},
-  fortune:{at:{x:.9,z:.22},stand:{x:.8,z:.36}},
-  teller:{at:{x:.76,z:.8},stand:{x:.62,z:.9}}
+  incense:{at:{x:.27,z:.3},stand:{x:.33,z:.44}},
+  fortune:{at:{x:.73,z:.3},stand:{x:.67,z:.44}},
+  teller:{at:{x:.4,z:.76},stand:{x:.42,z:.93}}
 };
 const TP_EL={incense:'[data-go="incense"]',fortune:'[data-go="fortune"]',teller:'[data-go="teller"]'};
 const TP_ZOD=[["鼠","🐭"],["牛","🐮"],["虎","🐯"],["兔","🐰"],["龙","🐲"],["蛇","🐍"],["马","🐴"],["羊","🐑"],["猴","🐵"],["鸡","🐔"],["狗","🐶"],["猪","🐷"]];
@@ -2065,8 +2065,8 @@ let tp={snd:true,n:0,zod:-1};
 try{ const v=JSON.parse(localStorage.getItem(TP_KEY)||"{}"); if(typeof v.snd==="boolean") tp.snd=v.snd; if(Number(v.n)>0) tp.n=Math.floor(Number(v.n)); if(Number.isInteger(v.zod)&&v.zod>=0&&v.zod<12) tp.zod=v.zod }catch(e){}
 const tpSave=()=>{ try{ localStorage.setItem(TP_KEY,JSON.stringify(tp)) }catch(e){} };
 let tpLast=-1, tpTimers=[], tpAudio=null, tpSayT=0, tpDraw={n:0,tries:0};
-const pl={x:.42,z:.98,keys:new Set(),target:null,then:null,raf:0,last:0,face:false,hold:false,left:0,offered:false,busy:false,moved:false,uiKey:""};
-const PL_START={x:.42,z:.98,keys:new Set(),target:null,then:null,raf:0,last:0,face:false,hold:false,left:0,offered:false,busy:false,moved:false,uiKey:""};
+const pl={x:.64,z:.98,keys:new Set(),target:null,then:null,raf:0,last:0,face:false,hold:false,left:0,offered:false,busy:false,moved:false,uiKey:""};
+const PL_START={x:.64,z:.98,keys:new Set(),target:null,then:null,raf:0,last:0,face:false,hold:false,left:0,offered:false,busy:false,moved:false,uiKey:""};
 const tpLater=(fn,ms)=>{ tpTimers.push(setTimeout(fn,ms)) };
 const tpRestart=(el,cls)=>{ el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls) };
 const tpLive=t=>{ $("tpLive").textContent=t };
@@ -2150,8 +2150,8 @@ function tpUi(){
   if(st==="incense"){ if(pl.hold) hint="香拿好了，去中间供桌上香 →"; else acts=[["take","🔥 拿香"]] }
   else if(st==="altar"){ if(pl.hold) hint="点香炉上香，手上还有 "+pl.left+" 支"; else hint=pl.offered?"香上好了，去右边求签 →":"← 先去左边拿香" }
   else if(st==="fortune"){ acts=pl.offered?[["draw","🎋 求签"],["ask","🌙 掷筊问事"]]:[["ask","🌙 掷筊问事"]]; if(!pl.offered) hint="上了香才能求签" }
-  else if(st==="teller"){ acts=[["luck","🔮 算今日运势"]]; hint="算命先生：来，算一卦？" }
-  else hint=pl.hold?"去供桌上香 ↑":pl.offered?"去右边求签，或到右前方算命":"← 去左边拿香";
+  else if(st==="teller"){ acts=[["luck","🔮 算命"]]; hint="算命先生：来，算一卦？" }
+  else hint=pl.hold?"去供桌上香 ↑":pl.offered?"去右边求签，或找前面的算命先生":"← 去左边拿香";
   if(!pl.moved) hint+="<small>点地面或用方向键走路</small>";
   const key=st+"|"+hint+"|"+pl.busy+"|"+acts.map(a=>a.join()).join(";");
   if(key===pl.uiKey) return; pl.uiKey=key;
@@ -2253,9 +2253,64 @@ function showFortune(){
 /* the fortune teller: today's luck for your zodiac sign, the same all day */
 function tpRng(seed){ let h=2166136261; for(const c of seed){ h^=c.charCodeAt(0); h=Math.imul(h,16777619) } return ()=>{ h+=0x6D2B79F5; let t=h; t=Math.imul(t^t>>>15,t|1); t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296 } }
 const tpStars=n=>'<span class="tp-stars">'+"★".repeat(n)+'<i>'+"★".repeat(5-n)+'</i></span>';
+const TP_MENU=[["luck","🐲","今日运势","按生肖看今天"],["palm","✋","看手相","四条掌纹"],["word","🀄","抽字测运","翻一张字卡"],["noble","🤝","今日贵人","今天找谁帮忙"],["time","⏰","发帖吉时","今天几点发"],["hit","🔥","爆款预测","下一支谁会爆"]];
+const TP_WORDS=[["财","财源广进，今天谈价钱、谈合作都会顺。"],["福","福气满满，做事有人帮，记得说声谢谢。"],["顺","一路顺利，照计划走就好，不用改来改去。"],["新","宜尝试新东西：新剪法、新角度、新开头。"],["稳","稳中求进，先把基本功做好，再求快。"],["爆","有爆款的气场，大胆发，别犹豫！"],["静","静下心来，先把一件事做完再开下一件。"],["合","合作运好，多跟同事一起想点子。"],["勤","多动手多拍，勤快的一天会有收获。"],["喜","有好消息，留意留言和私讯。"],["进","进步的一天，今天学到的东西很快用得上。"],["光","灵感会闪光，想到什么马上记下来。"],["慢","慢一点没关系，细节做好比赶快更重要。"],["笑","多笑一笑，镜头前的笑容最吸人。"]];
+const TP_PALM=[["事业线",["又长又清楚，今天做事很有方向。","中间有分叉，会有新的机会找上门。","有点淡，先把手上的事做好再说。","一路往上走，适合推进大计划。"]],["财运线",["很深，近期会有进账的好消息。","有个小岔口，花钱前多想一下。","稳稳的一条，细水长流。","尾端发亮，坚持下去会有回报。"]],["感情线",["很温柔，今天跟同事相处特别好。","线条清楚，有话直说反而更顺。","有小星纹，会收到别人的关心。","平平稳稳，适合约朋友吃饭。"]],["智慧线",["又长又弯，点子特别多，记得写下来。","清楚笔直，今天适合做决定。","跟事业线相连，想法很快能变成作品。","有点细，多问问别人的意见。"]]];
+const TP_TIMES=[["辰时","早上 8:00–9:00","早起的观众在通勤，适合轻松短片。"],["午时","中午 12:00–13:00","午饭时间大家在滑手机，适合实用小技巧。"],["酉时","傍晚 18:00–19:00","下班路上，适合有趣开场的片。"],["戌时","晚上 20:00–21:00","黄金时段，流量最旺，适合主打片。"],["亥时","晚上 21:00–22:00","睡前放松，适合开箱和 ASMR。"]];
+const TP_DIRS=["东","南","西","北","东南","西南","东北","西北"];
+const tpDayKey=()=>{ const d=new Date(); return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate() };
+const tpMenuBtns=()=>'<div class="tp-menu">'+TP_MENU.map(m=>'<button type="button" data-tell="'+m[0]+'"><span>'+m[1]+'</span><b>'+m[2]+'</b><small>'+m[3]+'</small></button>').join("")+'</div>';
 function tellerOpen(){
-  evShow('<h3>算命摊</h3><p class="tp-evt">算命先生：来来来，报上你的生肖，帮你看看今天的运势。</p><div class="tp-zods">'+
-    TP_ZOD.map((z,i)=>'<button type="button" data-zod="'+i+'"'+(tp.zod===i?' class="on"':"")+'><span>'+z[1]+'</span>属'+z[0]+'</button>').join("")+'</div>'+evBtns([["close","下次再算"]]));
+  evShow('<h3>算命摊</h3><p class="tp-evt">算命先生：来来来，想算什么？</p>'+tpMenuBtns()+evBtns([["close","下次再算"]]));
+}
+function tellerDo(k){
+  if(k==="luck") return tellerZodiac();
+  const r=tpRng("gz-"+k+"|"+tpDayKey()+"|"+(myId||"me")), pick=a=>a[Math.floor(r()*a.length)];
+  if(k==="palm"){
+    evShow('<h3>看手相</h3><div class="tp-palm"><span>🖐️</span><i></i></div><p class="tp-evt">把手伸出来，先生仔细看看…</p>');
+    tpSound("rattle");
+    tpLater(()=>{
+      const rows=TP_PALM.map(p=>[p[0],2+Math.floor(r()*4),pick(p[1])]);
+      evShow('<div class="tp-luck"><small>看手相 · 今天</small><div class="tp-palmres">'+rows.map(x=>'<div><b>'+x[0]+'</b>'+tpStars(x[1])+'<p>'+x[2]+'</p></div>').join("")+'</div></div>'+evBtns([["close","好"],["teller","算别的"]]));
+      tpSound("ding"); tpLive("手相："+rows.map(x=>x[0]+x[2]).join(" "));
+    },calmMotion.matches?200:1800);
+    return;
+  }
+  if(k==="word"){
+    const c=TP_WORDS.slice(), three=[]; while(three.length<3) three.push(c.splice(Math.floor(Math.random()*c.length),1)[0]);
+    tpWordSet=three;
+    evShow('<h3>抽字测运</h3><p class="tp-evt">心里想着今天最在意的事，翻一张字卡。</p><div class="tp-cards">'+three.map((w,i)=>'<button type="button" data-card="'+i+'" aria-label="第'+(i+1)+'张字卡"><span>?</span></button>').join("")+'</div>');
+    return;
+  }
+  if(k==="noble"){
+    const ids=Object.keys(team).filter(id=>id!==myId&&names[id]).sort(), dir=pick(TP_DIRS);
+    const id=ids.length?ids[Math.floor(r()*ids.length)]:null, nm=id?names[id]:"";
+    evShow('<div class="tp-luck"><small>今日贵人</small><b class="tp-big tp-zh">'+(nm?esc(nm):"你自己")+'</b><p class="tp-evt">'+(nm?"今天有事找 "+esc(nm)+" 商量，会顺很多。":"今天靠自己就行，相信自己的判断。")+'</p><div class="tp-lmeta"><span>贵人方位 <b>'+dir+'</b></span></div></div>'+evBtns([["close","好"],["teller","算别的"]]));
+    tpSound("ding"); tpLive("今日贵人："+(nm||"你自己")); return;
+  }
+  if(k==="time"){
+    const t=TP_TIMES[Math.floor(tpRng("gz-time|"+tpDayKey())()*TP_TIMES.length)];
+    evShow('<div class="tp-luck"><small>发帖吉时 · 今天</small><b class="tp-big tp-zh">'+t[0]+'</b><p class="tp-evt" style="font-size:18px;margin-top:4px">'+t[1]+'</p><p class="tp-jie">'+t[2]+'</p></div>'+evBtns([["close","好"],["teller","算别的"]]));
+    tpSound("ding"); tpLive("今日发帖吉时："+t[0]+" "+t[1]); return;
+  }
+  if(k==="hit"){
+    const list=[...items.values()].filter(it=>it.type!=="design"&&["edit","changes","review","approved","scheduled"].includes(it.status)).sort((a,b)=>(a.code||a.id).localeCompare(b.code||b.id));
+    if(!list.length){ evShow('<div class="tp-luck"><small>爆款预测</small><p class="tp-evt">最近没有准备要发的视频，先去拍一支吧！</p></div>'+evBtns([["close","好"],["teller","算别的"]])); return }
+    const it=list[Math.floor(r()*list.length)], pct=72+Math.floor(r()*27), why=pick(["开头三秒很抓人","标题有话题","画面节奏刚好","实用到想收藏","会被转发给朋友"]);
+    evShow('<div class="tp-luck"><small>爆款预测 · 今天</small><b class="tp-big tp-zh">'+pct+'%</b><p class="tp-evt">'+esc((it.code?it.code+" ":"")+it.title)+'</p><p class="tp-jie"><b class="tp-zh">先生说</b>这支'+why+'，爆的机会很大！</p></div>'+evBtns([["close","好"],["teller","算别的"]]));
+    tpSound("coins"); tpLive("爆款预测："+(it.code||"")+" "+it.title+" "+pct+"%");
+  }
+}
+let tpWordSet=[];
+function tellerCard(i){
+  const w=tpWordSet[i]; if(!w) return;
+  tpSound("clack");
+  evShow('<h3>抽字测运</h3><div class="tp-cards">'+tpWordSet.map((x,j)=>'<div class="tp-cardface'+(j===i?" pick":"")+'"><span class="tp-zh">'+x[0]+'</span></div>').join("")+'</div><p class="tp-evt">你抽到「'+w[0]+'」</p><p class="tp-jie">'+w[1]+'</p>'+evBtns([["close","好"],["word","再抽一次"],["teller","算别的"]]));
+  tpLive("抽到"+w[0]+"字。"+w[1]);
+}
+function tellerZodiac(){
+  evShow('<h3>今日运势</h3><p class="tp-evt">算命先生：报上你的生肖，帮你看看今天的运势。</p><div class="tp-zods">'+
+    TP_ZOD.map((z,i)=>'<button type="button" data-zod="'+i+'"'+(tp.zod===i?' class="on"':"")+'><span>'+z[1]+'</span>属'+z[0]+'</button>').join("")+'</div>'+evBtns([["teller","算别的"],["close","下次再算"]]));
   if(tp.zod>=0){ const b=$("tpEvCard").querySelector('[data-zod="'+tp.zod+'"]'); if(b) b.focus() }
 }
 function showLuck(i){
@@ -2269,7 +2324,7 @@ function showLuck(i){
     '<div class="tp-lrows">'+rows.map(x=>'<div><span>'+x[0]+'</span>'+tpStars(x[1])+'</div>').join("")+'</div>'+
     '<div class="tp-lmeta"><span>幸运色<i style="background:'+col[1]+'"></i>'+col[0]+'</span><span>幸运数字 <b>'+num+'</b></span></div>'+
     '<div class="tp-yiji"><p><b class="yi">宜</b>'+yi.join(" · ")+'</p><p><b class="ji">忌</b>'+ji.join(" · ")+'</p></div>'+
-    '<p class="tp-jie"><b class="tp-zh">先生说</b>'+talk+'</p></div>'+evBtns([["close","好"],["teller","换个生肖"]]));
+    '<p class="tp-jie"><b class="tp-zh">先生说</b>'+talk+'</p></div>'+evBtns([["close","好"],["luck","换个生肖"],["teller","算别的"]]));
   tpSound(all>=4?"coins":"ding");
   tpLive("属"+TP_ZOD[i][0]+"今日运势"+all+"颗星。"+talk);
 }
@@ -2343,9 +2398,11 @@ if($("temple")&&$("templeBtn")&&$("tpMe")&&document.querySelector(".tp-pad")){
   $("temple").addEventListener("keyup",e=>{ const m=KEYMAP[e.key]; if(m) pl.keys.delete(m) });
   $("tpEvCard").addEventListener("click",e=>{
     const z=e.target.closest("[data-zod]"); if(z){ showLuck(Number(z.dataset.zod)); return }
+    const tl=e.target.closest("[data-tell]"); if(tl){ tellerDo(tl.dataset.tell); return }
+    const cd=e.target.closest("[data-card]"); if(cd){ tellerCard(Number(cd.dataset.card)); return }
     const b=e.target.closest("[data-ev]"); if(!b) return; const k=b.dataset.ev;
     if(k==="confirm") throwBlocks("confirm"); else if(k==="ask-throw") throwBlocks("ask"); else if(k==="ask") askBlocks();
-    else if(k==="read") showFortune(); else if(k==="draw") drawStick(); else if(k==="teller") tellerOpen(); else evClose();
+    else if(k==="read") showFortune(); else if(k==="draw") drawStick(); else if(k==="teller") tellerOpen(); else if(k==="luck") tellerZodiac(); else if(k==="word") tellerDo("word"); else evClose();
   });
   $("tpAgain").onclick=()=>{ $("tpBless").hidden=true; goStation("fortune") };
   $("tpBye").onclick=()=>{ $("tpBless").hidden=true; pl.uiKey=""; tpUi() };
