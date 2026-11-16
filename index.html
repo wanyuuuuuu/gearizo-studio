@@ -1682,6 +1682,38 @@ dialog#temple::backdrop{background:#2A0A0B}
 .tp-cardface.pick span{color:#8A1215}
 @keyframes tpFlip{from{transform:rotateY(90deg)}to{transform:none}}
 @media (prefers-reduced-motion: reduce){ .tp-palm i,.tp-cardface.pick{animation:none} }
+
+/* tarot booth outside the temple */
+.tp-tarot{position:absolute;bottom:calc(31% - 30px);left:calc(50% + min(47vw,280px,36vh) + 14px);width:clamp(110px,14vw,170px);border:0;background:none;padding:0;margin:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;filter:drop-shadow(0 10px 12px rgba(60,20,80,.3));transition:translate .2s}
+.tp-tarot svg{display:block;width:100%;height:auto;overflow:visible}
+.tp-tarot span{background:#5B2A86;color:#FFE08A;font:700 13px/1 var(--body);padding:6px 12px;border-radius:999px;box-shadow:0 4px 10px rgba(45,24,70,.35);white-space:nowrap}
+.tp-tarot:hover{translate:0 -4px}
+.tp-tarot:focus-visible{outline:3px solid #5B2A86;outline-offset:4px;border-radius:12px}
+.tt-twinkle{transform-box:fill-box;transform-origin:50% 50%;animation:ttTw 1.6s ease-in-out infinite alternate}
+@keyframes ttTw{from{opacity:.5;scale:.8}to{opacity:1;scale:1.1}}
+#temple.opening .tp-tarot{opacity:0;transition:opacity .2s}
+@media (max-width:760px){ .tp-tarot{left:auto;right:4%;bottom:5%;width:min(30vw,130px)} }
+.tt-fan{display:flex;justify-content:center;margin:22px 0 8px;padding-left:34px;height:130px}
+.tt-back{position:relative;flex:none;width:64px;height:104px;margin-left:-34px;border-radius:9px;border:2px solid #E2AC3F;padding:0;cursor:pointer;background:radial-gradient(circle at 50% 50%,#7E3FBF 0 18%,transparent 19%),repeating-linear-gradient(45deg,#3A1A5C 0 5px,#4A2272 5px 10px);box-shadow:0 6px 12px rgba(0,0,0,.35);transform:rotate(calc(var(--k) * 5deg)) translateY(calc(var(--k) * var(--k) * 1.6px));transform-origin:50% 120%;transition:translate .2s,opacity .25s}
+.tt-back::after{content:"✦";position:absolute;inset:0;display:grid;place-items:center;color:#FFE08A;font-size:18px}
+.tt-back:hover{translate:0 -10px}
+.tt-back.picked{translate:0 -26px;box-shadow:0 0 0 3px #FFE08A,0 10px 18px rgba(0,0,0,.4)}
+.tt-row{display:flex;justify-content:center;gap:12px;margin:14px 0 10px}
+.tt-slot{display:flex;flex-direction:column;align-items:center;gap:5px}
+.tt-slot small{font-size:12px;font-weight:700;color:#FFD66B}
+.tt-slot em{font-style:normal;font-size:12px;color:#FFF3D6;opacity:.85}
+.tt-face{width:76px;height:122px;border-radius:10px;border:2px solid #E2AC3F;background:linear-gradient(180deg,#3A1A5C,#22103A);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:6px 4px;color:#FFE08A;box-shadow:0 8px 16px rgba(0,0,0,.4);animation:ttFlip .6s ease both;animation-delay:var(--d,0s)}
+.tt-face b{font:700 11px/1 Georgia,serif;letter-spacing:.06em}
+.tt-face span{font-size:32px;line-height:1}
+.tt-face i{font-style:normal;font-size:14px;color:#FFF3D6}
+.tt-face.rev{rotate:180deg}
+@keyframes ttFlip{from{transform:rotateY(90deg);opacity:0}to{transform:none;opacity:1}}
+.tt-read{text-align:left;display:flex;flex-direction:column;gap:8px;margin:4px 0 10px;font-size:14px;line-height:1.5;color:#FFF3D6}
+.tt-read p{margin:0}
+.tt-read b{display:block;color:#FFD66B;font-size:13.5px}
+.tt-modes{grid-template-columns:1fr 1fr}
+@media (max-width:420px){ .tt-face{width:68px;height:110px} .tt-face span{font-size:28px} .tt-back{width:56px;height:92px;margin-left:-30px} }
+@media (prefers-reduced-motion: reduce){ .tt-face,.tt-twinkle{animation:none} }
 </style>
 </head>
 <body>
@@ -1983,6 +2015,26 @@ dialog#temple::backdrop{background:#2A0A0B}
     <g class="tp-lan"><path d="M46 186v14" stroke="#2A1A12" stroke-width="2"/><rect x="40" y="199" width="12" height="4" rx="1" fill="#F5B731" stroke-width="1.5"/><ellipse cx="46" cy="214" rx="11" ry="12" fill="#E0262B" stroke-width="2"/><rect x="40" y="225" width="12" height="4" rx="1" fill="#F5B731" stroke-width="1.5"/><path d="M46 229v9" stroke="#F5B731" stroke-width="2"/></g><g class="tp-lan"><path d="M354 186v14" stroke="#2A1A12" stroke-width="2"/><rect x="348" y="199" width="12" height="4" rx="1" fill="#F5B731" stroke-width="1.5"/><ellipse cx="354" cy="214" rx="11" ry="12" fill="#E0262B" stroke-width="2"/><rect x="348" y="225" width="12" height="4" rx="1" fill="#F5B731" stroke-width="1.5"/><path d="M354 229v9" stroke="#F5B731" stroke-width="2"/></g>
   </g>
 </svg><button type="button" class="tp-go" id="tpGo">点门进去</button></div>
+      <button type="button" class="tp-tarot" id="tpTarot" aria-label="塔罗占卜摊"><svg viewBox="0 0 160 172" aria-hidden="true">
+          <rect x="22" y="58" width="116" height="104" fill="#2D1846"/>
+          <g fill="#FFE08A"><circle cx="40" cy="80" r="1.6"/><circle cx="120" cy="76" r="1.6"/><circle cx="58" cy="96" r="1.2"/><circle cx="104" cy="94" r="1.2"/><circle cx="128" cy="104" r="1.4"/><circle cx="34" cy="108" r="1.2"/></g>
+          <path d="M80 72l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" fill="#E2AC3F" class="tt-twinkle"/>
+          <rect x="14" y="58" width="8" height="106" rx="2" fill="#3A1A5C"/><rect x="138" y="58" width="8" height="106" rx="2" fill="#3A1A5C"/>
+          <path d="M80 6 L4 64 L156 64Z" fill="#5B2A86" stroke="#2D1846" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M80 10 L16 62 L28 62Z" fill="#E2AC3F"/><path d="M80 10 L46 62 L58 62Z" fill="#E2AC3F"/><path d="M80 10 L76 62 L88 62Z" fill="#E2AC3F"/><path d="M80 10 L106 62 L118 62Z" fill="#E2AC3F"/><path d="M80 10 L136 62 L148 62Z" fill="#E2AC3F"/><circle cx="12" cy="62" r="8" fill="#5B2A86"/><circle cx="28" cy="62" r="8" fill="#E2AC3F"/><circle cx="44" cy="62" r="8" fill="#5B2A86"/><circle cx="60" cy="62" r="8" fill="#E2AC3F"/><circle cx="76" cy="62" r="8" fill="#5B2A86"/><circle cx="92" cy="62" r="8" fill="#E2AC3F"/><circle cx="108" cy="62" r="8" fill="#5B2A86"/><circle cx="124" cy="62" r="8" fill="#E2AC3F"/><circle cx="140" cy="62" r="8" fill="#5B2A86"/>
+          <circle cx="80" cy="8" r="5" fill="#E2AC3F" stroke="#2D1846" stroke-width="1.5"/>
+          <rect x="52" y="30" width="56" height="20" rx="4" fill="#2D1846" stroke="#E2AC3F" stroke-width="2"/>
+          <text x="80" y="45" text-anchor="middle" font-size="13" font-weight="900" fill="#FFE08A" font-family="'Songti SC','STSong',serif" letter-spacing="3">塔罗</text>
+          <rect x="70" y="114" width="20" height="6" rx="2" fill="#B07A1C"/>
+          <circle cx="80" cy="102" r="14" fill="url(#ttBall)" stroke="#9FB8FF" stroke-width="1"/>
+          <defs><radialGradient id="ttBall" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#C9D8FF"/><stop offset="1" stop-color="#6E5BD6"/></radialGradient></defs>
+          <g transform="rotate(-12 50 116)"><rect x="42" y="104" width="14" height="22" rx="2" fill="#3A1A5C" stroke="#E2AC3F" stroke-width="1.5"/></g>
+          <g transform="rotate(10 112 116)"><rect x="104" y="104" width="14" height="22" rx="2" fill="#F5E6C8" stroke="#E2AC3F" stroke-width="1.5"/><circle cx="111" cy="115" r="3" fill="#E2AC3F"/></g>
+          <path d="M26 122H134V164H26Z" fill="#6B2FA0"/>
+          <path d="M26 122H134" stroke="#E2AC3F" stroke-width="3"/>
+          <path d="M30 164l4-6 4 6 4-6 4 6 4-6 4 6 4-6 4 6 4-6 4 6 4-6 4 6 4-6 4 6 4-6 4 6 4-6 4 6 4-6 4 6 4-6 4 6 4-6 4 6 4-6 4 6" stroke="#E2AC3F" stroke-width="1.5" fill="none"/>
+          <text x="80" y="148" text-anchor="middle" font-size="16" fill="#FFE08A">✦ ☾ ✦</text>
+        </svg><span>塔罗占卜</span></button>
     </div>
     <div class="tp-in" id="tpIn" inert>
       <div class="tp-world" id="tpWorld">

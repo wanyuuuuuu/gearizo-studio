@@ -2204,7 +2204,7 @@ function tpBlessed(){
 
 /* fortune sticks and moon blocks */
 function evShow(html){ $("tpEvCard").innerHTML=html; $("tpEv").hidden=false; const b=$("tpEvCard").querySelector("button"); if(b) b.focus() }
-function evClose(){ $("tpEv").hidden=true; $("tpMe").classList.remove("shaking"); pl.uiKey=""; tpUi(); const a=$("tpActs").querySelector("button"); if(a) a.focus() }
+function evClose(){ $("tpEv").hidden=true; $("tpMe").classList.remove("shaking"); pl.uiKey=""; tpUi(); const a=$("temple").classList.contains("inside")?$("tpActs").querySelector("button"):$("tpTarot"); if(a) a.focus() }
 const evBtns=list=>'<div class="tp-evacts">'+list.map((b,i)=>'<button type="button" data-ev="'+b[0]+'"'+(i===0?' class="pri"':"")+'>'+b[1]+'</button>').join("")+'</div>';
 function drawStick(){
   tpDraw={n:1+Math.floor(Math.random()*TP_FORTUNES.length),tries:0};
@@ -2329,6 +2329,61 @@ function showLuck(i){
   tpLive("属"+TP_ZOD[i][0]+"今日运势"+all+"颗星。"+talk);
 }
 
+/* tarot booth outside: the 22 major arcana, upright or reversed */
+const TT=[["愚者","🎒","大胆开始新的尝试，别想太多，先做再说。","冲动之前先做好准备，计划一下再出发。"],
+  ["魔术师","🪄","手上的资源已经够用，动手做就对了。","别只说不做，先拍一支试试看。"],
+  ["女祭司","🔮","相信直觉，答案其实已经在心里。","资讯还不够，多观察一下再决定。"],
+  ["皇后","🌸","创意丰盛，适合做美美的内容。","别太追求完美，先完成再慢慢调整。"],
+  ["皇帝","👑","定好规则和计划，事情会很稳。","太固执容易卡住，听听别人的意见。"],
+  ["教皇","📜","跟着经验和方法走，稳稳的就对了。","可以打破常规，试试新玩法。"],
+  ["恋人","💞","合作愉快，选择时跟着心走。","沟通要说清楚，避免误会。"],
+  ["战车","🏇","冲刺的时候到了，一鼓作气往前冲。","方向先对准，再加速。"],
+  ["力量","🦁","温柔的坚持最有力量。","别勉强自己，适时休息一下。"],
+  ["隐者","🏮","静下来想清楚，会找到方向。","别一个人闷着，找同事聊聊。"],
+  ["命运之轮","🎡","转机来了，好运就在路上。","暂时卡关，耐心等风向转。"],
+  ["正义","⚖️","做对的事，就会有回报。","检查细节和数字，避免出错。"],
+  ["倒吊人","🙃","换个角度看，会有新灵感。","别一直拖着，该决定就决定。"],
+  ["死神","🍂","旧的结束、新的开始，放下过去的做法。","改变有点难，但很值得。"],
+  ["节制","🍵","工作和休息平衡，节奏刚刚好。","别一下子做太多，排好先后。"],
+  ["恶魔","😈","小心拖延和分心，专注在目标上。","正是摆脱坏习惯的好时机。"],
+  ["高塔","🗼","有突发状况，冷静应对就会过去。","只是小风波，提前准备就没事。"],
+  ["星星","⭐","希望满满，坚持下去会发光。","别灰心，给自己多一点信心。"],
+  ["月亮","🌙","有些事还不明朗，先别急着下定论。","迷雾慢慢散去，答案越来越清楚。"],
+  ["太阳","☀️","超级好运，作品会被很多人看见！","好事会来，只是晚一点。"],
+  ["审判","📯","好消息到，过去的努力有回报。","回头检查一下，再重新出发。"],
+  ["世界","🌍","圆满完成，可以庆祝了！","差最后一步，坚持到底。"]];
+const ttRoman=n=>{ if(!n) return "0"; const r=[[10,"X"],[9,"IX"],[5,"V"],[4,"IV"],[1,"I"]]; let s=""; for(const [v,c] of r) while(n>=v){ s+=c; n-=v } return s };
+let tt={n:1,pos:[],deck:[],picked:[]};
+function tarotOpen(){
+  if(pl.busy||$("temple").classList.contains("opening")) return;
+  evShow('<h3>塔罗占卜</h3><p class="tp-evt">占卜师：静下心来，想着你的问题，选一种牌阵。</p><div class="tp-menu tt-modes"><button type="button" data-tarot="1"><span>🃏</span><b>今日一张</b><small>今天的指引</small></button><button type="button" data-tarot="3"><span>🔮</span><b>过去 · 现在 · 未来</b><small>三张牌</small></button></div>'+evBtns([["close","下次再来"]]));
+}
+function tarotDeal(n){
+  const ids=[...Array(22).keys()];
+  for(let i=ids.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [ids[i],ids[j]]=[ids[j],ids[i]] }
+  tt={n,pos:n===1?["今日指引"]:["过去","现在","未来"],deck:ids.slice(0,9).map(i=>({i,rev:Math.random()<.3})),picked:[]};
+  evShow('<h3>'+(n===1?"今日一张":"过去 · 现在 · 未来")+'</h3><p class="tp-evt" id="ttTip">牌洗好了，凭直觉选 '+n+' 张。</p><div class="tt-fan">'+
+    tt.deck.map((c,k)=>'<button type="button" class="tt-back" data-tt="'+k+'" style="--k:'+(k-4)+'" aria-label="第'+(k+1)+'张牌"></button>').join("")+'</div>'+evBtns([["tarot","换牌阵"]]));
+  tpSound("rattle");
+}
+function tarotPick(k,btn){
+  if(tt.picked.includes(k)||tt.picked.length>=tt.n) return;
+  tt.picked.push(k); btn.classList.add("picked"); tpSound("clack");
+  const left=tt.n-tt.picked.length, tip=$("ttTip");
+  if(left>0){ if(tip) tip.textContent="还要选 "+left+" 张。"; return }
+  if(tip) tip.textContent="翻牌…";
+  tpLater(tarotReveal,calmMotion.matches?0:500);
+}
+function tarotReveal(){
+  const cards=tt.picked.map(k=>tt.deck[k]), ups=cards.filter(c=>!c.rev).length;
+  const sum=ups===3?"三张都是正位，整体非常顺，放手去做！":ups===2?"大方向是好的，留意逆位那张的提醒。":ups===1?"有些挑战，照着牌的提醒一步步来就好。":"今天适合慢下来，整理好再出发。";
+  evShow('<h3>'+(tt.n===1?"今日一张":"过去 · 现在 · 未来")+'</h3><div class="tt-row">'+cards.map((c,j)=>{ const t=TT[c.i]; return '<div class="tt-slot"><small>'+tt.pos[j]+'</small><div class="tt-face'+(c.rev?" rev":"")+'" style="--d:'+(j*.25)+'s"><b>'+ttRoman(c.i)+'</b><span>'+t[1]+'</span><i class="tp-zh">'+t[0]+'</i></div><em>'+(c.rev?"逆位":"正位")+'</em></div>' }).join("")+'</div>'+
+    '<div class="tt-read">'+cards.map((c,j)=>{ const t=TT[c.i]; return '<p><b>'+tt.pos[j]+' · '+t[0]+(c.rev?"（逆位）":"（正位）")+'</b>'+(c.rev?t[3]:t[2])+'</p>' }).join("")+'</div>'+
+    (tt.n===3?'<p class="tp-jie"><b class="tp-zh">占卜师说</b>'+sum+'</p>':"")+evBtns([["close","好"],["tt-again","再抽一次"],["tarot","换牌阵"]]));
+  tpSound(ups===cards.length?"coins":"ding");
+  tpLive(cards.map((c,j)=>tt.pos[j]+"："+TT[c.i][0]+(c.rev?"逆位，":"正位，")+(c.rev?TT[c.i][3]:TT[c.i][2])).join(" "));
+}
+
 /* opening, walking in, leaving */
 function tpReset(){
   tpTimers.forEach(clearTimeout); tpTimers=[];
@@ -2369,6 +2424,7 @@ function tpPoke(){
 if($("temple")&&$("templeBtn")&&$("tpMe")&&document.querySelector(".tp-pad")){
   $("templeBtn").onclick=openTemple;
   $("tpGo").onclick=enterTemple; $("tpDoors").addEventListener("click",enterTemple);
+  if($("tpTarot")) $("tpTarot").onclick=tarotOpen;
   $("tpGod").onclick=e=>{ e.stopPropagation(); if(!tpFree()) return; if(canOffer()) offerStick(); else if(pl.hold) goStation("altar"); else tpPoke() };
   $("tpActs").addEventListener("click",e=>{ const b=e.target.closest("[data-act]"); if(b) tpAct(b.dataset.act) });
   $("tpIn").addEventListener("click",e=>{
@@ -2399,10 +2455,12 @@ if($("temple")&&$("templeBtn")&&$("tpMe")&&document.querySelector(".tp-pad")){
   $("tpEvCard").addEventListener("click",e=>{
     const z=e.target.closest("[data-zod]"); if(z){ showLuck(Number(z.dataset.zod)); return }
     const tl=e.target.closest("[data-tell]"); if(tl){ tellerDo(tl.dataset.tell); return }
+    const tm=e.target.closest("[data-tarot]"); if(tm){ tarotDeal(Number(tm.dataset.tarot)); return }
+    const tc=e.target.closest("[data-tt]"); if(tc){ tarotPick(Number(tc.dataset.tt),tc); return }
     const cd=e.target.closest("[data-card]"); if(cd){ tellerCard(Number(cd.dataset.card)); return }
     const b=e.target.closest("[data-ev]"); if(!b) return; const k=b.dataset.ev;
     if(k==="confirm") throwBlocks("confirm"); else if(k==="ask-throw") throwBlocks("ask"); else if(k==="ask") askBlocks();
-    else if(k==="read") showFortune(); else if(k==="draw") drawStick(); else if(k==="teller") tellerOpen(); else if(k==="luck") tellerZodiac(); else if(k==="word") tellerDo("word"); else evClose();
+    else if(k==="read") showFortune(); else if(k==="draw") drawStick(); else if(k==="teller") tellerOpen(); else if(k==="tarot") tarotOpen(); else if(k==="tt-again") tarotDeal(tt.n); else if(k==="luck") tellerZodiac(); else if(k==="word") tellerDo("word"); else evClose();
   });
   $("tpAgain").onclick=()=>{ $("tpBless").hidden=true; goStation("fortune") };
   $("tpBye").onclick=()=>{ $("tpBless").hidden=true; pl.uiKey=""; tpUi() };
