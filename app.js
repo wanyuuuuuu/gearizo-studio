@@ -92,6 +92,7 @@ function normalize(id,d){
     sizes:Array.isArray(d.sizes)?d.sizes.filter(x=>typeof x==="string").slice(0,12):[],
     sizeNote:String(d.sizeNote||"").slice(0,300),
     refs:normFiles(d.refs),
+    cover:normFiles(d.cover&&typeof d.cover==="object"?[d.cover]:[])[0]||null,
     notes:String(d.notes||""),
     caption:String(d.caption||""),
     approvedBy:String(d.approvedBy||""), approvedAt:Number(d.approvedAt)||0, postedAt:Number(d.postedAt)||0, postedBy:String(d.postedBy||""),
@@ -451,7 +452,7 @@ function openItem(id,presetDate,presetProduct){
   $("fSizes").querySelectorAll("input").forEach(i=>i.checked=(it.sizes||[]).includes(i.value));
   $("fSizeNote").value=it.sizeNote||"";
   $("fRefs").innerHTML=attHtml(it.refs||[]);
-  pending.refs=[]; renderPending("refs");
+  pending.refs=[]; renderPending("refs"); coverPending=null; renderCover();
   $("fMore").open=!!(it.kind||(it.langs||[]).length||(it.refs||[]).length||it.notes);
   typeFields(); platVis();
   $("fCode").hidden=!(id&&it.code); $("fCode").textContent=id&&it.code?it.code:"";
@@ -469,7 +470,7 @@ function platVis(){
   const lab=$("fDate").closest(".f").querySelector(".lab"); if(lab) lab.textContent=shop?"Needed by":"Post";
   $("fSeries").closest(".f").hidden=isEc();
 }
-function typeFields(){ const d=(document.querySelector("#fType input:checked")||{}).value==="design"; $("fSizesWrap").hidden=!d; $("fKindWrap").hidden=d }
+function typeFields(){ const d=(document.querySelector("#fType input:checked")||{}).value==="design"; $("fSizesWrap").hidden=!d; $("fKindWrap").hidden=d; if($("coverWrap")) $("coverWrap").hidden=d }
 function tint(){ $("dlgInner").style.setProperty("--c",sMap[$("fSeries").value].c) }
 function formData(prev,id){
   const d={id,title:$("fTitle").value.trim()||(prev?prev.title:"Untitled"),series:$("fSeries").value,status:$("fStatus").value,
@@ -481,7 +482,7 @@ function formData(prev,id){
     type:(document.querySelector("#fType input:checked")||{}).value==="design"?"design":"video",
     sizes:[...$("fSizes").querySelectorAll("input:checked")].map(i=>i.value),
     sizeNote:$("fSizeNote").value.trim().slice(0,300),
-    refs:prev?prev.refs||[]:[]};
+    refs:prev?prev.refs||[]:[], cover:prev?prev.cover||null:null};
   STAMP_KEYS.forEach(k=>{ d[k]=prev?prev[k]:(k.endsWith("By")?"":0) });
   d.createdBy=prev?prev.createdBy:(myId||"");
   d.code=prev&&prev.code?prev.code:nextCode();
@@ -498,6 +499,12 @@ async function saveItem(close){
     if(!assets){ toast("You can’t upload files here. Remove the references or add them later."); return }
     $("fSave").disabled=true; $("fSave").textContent="Uploading…";
     try{ data.refs=[...data.refs,...await uploadPending("refs")]; pending.refs=[]; renderPending("refs") }
+    catch(e){ uploadErr(e); return }
+    finally{ $("fSave").disabled=false; $("fSave").textContent="Save" }
+  }
+  if(coverPending&&assets){
+    $("fSave").disabled=true; $("fSave").textContent="Uploading…";
+    try{ const f=coverPending, r=await assets.upload(f,{type:typeFor(f)}); data.cover={id:r.id,name:f.name,type:r.contentType||typeFor(f)}; coverPending=null }
     catch(e){ uploadErr(e); return }
     finally{ $("fSave").disabled=false; $("fSave").textContent="Save" }
   }
@@ -722,7 +729,7 @@ function renderDesk(){
   setHTML($("vStatus"),'<div class="banner" style="--k:'+k+'"><div><b>'+esc(head)+'</b><span>'+esc(sub)+'</span></div>'+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>');
 
   const isD=it.type==="design";
-  setHTML($("nasBox"),(isD?"":nasBoxHtml(it))+(it.refs.length?'<div class="refs"><b>References</b>'+attHtml(it.refs)+'</div>':""));
+  setHTML($("nasBox"),(isD?"":nasBoxHtml(it)+deskCoverHtml(it))+(it.refs.length?'<div class="refs"><b>References</b>'+attHtml(it.refs)+'</div>':""));
   setHTML($("vLatest"),latest?verCard(latest,true,it):'<p class="empty">'+(isD?"No design yet.":"No video yet.")+(can?" Add the first "+(isD?"version":"cut")+" below.":" The content team hasn’t added one.")+'</p>');
   setHTML($("vOlder"),vs.length>1?'<details class="older"><summary>Earlier versions ('+(vs.length-1)+')</summary>'+vs.slice(1).map(v=>verCard(v,false,it)).join("")+'</details>':"");
   $("vVideoRows").hidden=isD; $("vAttTxt").textContent=isD?"+ Images":"+ Files";
@@ -815,6 +822,62 @@ async function addFeedback(){
   }catch(e){ writeErr(e,"feedback") }
   btn.disabled=false; renderDesk();
 }
+
+/* Cover photo: one picture per video, set from the Publish tab (or the review desk). */
+let coverPending=null, coverBusy=false;
+const COVER_TYPES=/^image\/(jpeg|png|webp)$/;
+function renderCover(){
+  const box=$("coverBox"); if(!box) return;
+  const it=editingId?items.get(editingId):null, cv=it&&it.cover, can=!readOnly&&!!assets&&mode==="db";
+  const pick=(txt,cls)=>'<label class="'+cls+'">'+txt+'<input type="file" id="coverAtt" accept="image/jpeg,image/png,image/webp" aria-label="Upload a cover photo"></label>';
+  let html;
+  if(coverPending){
+    const u=coverPending._u||(coverPending._u=URL.createObjectURL(coverPending));
+    html='<div class="cover-img" title="'+esc(coverPending.name)+'"><img src="'+u+'" alt="Cover photo"></div><div class="cover-side"><p class="hint">'+esc(coverPending.name)+' · uploads when you save</p><div class="cover-acts">'+pick("Change","btn sm")+'<button class="btn sm ghost" type="button" data-cover="clear">Remove</button></div></div>';
+  }else if(cv){
+    html='<button type="button" class="cover-img" data-lb="/_blob/'+cv.id+'" data-name="'+esc(cv.name)+'" title="View the cover"><img src="/_blob/'+cv.id+'" alt="Cover photo"></button><div class="cover-side"><p class="hint">'+esc(cv.name)+'</p>'+(can?'<div class="cover-acts">'+pick("Change","btn sm")+'<button class="btn sm ghost" type="button" data-cover="remove">Remove</button></div>':"")+'</div>';
+  }else if(can){
+    html=pick('<b>+</b>Upload cover<span class="hint" style="font-weight:400">or drop a picture here</span>',"cover-drop")+'<p class="hint cover-side">JPG or PNG, tall 9:16 for Reels and TikTok.</p>';
+  }else html='<p class="hint">No cover photo yet.</p>';
+  box.innerHTML=html; box.classList.toggle("cover-busy",coverBusy);
+}
+async function setCover(file){
+  if(!file) return;
+  if(!COVER_TYPES.test(file.type)){ toast("Use a JPG, PNG or WebP picture for the cover."); return }
+  if(file.size>20*1024*1024){ toast("That picture is over 20 MB. Use a smaller one."); return }
+  if(!assets||readOnly){ toast("You can’t upload files here."); return }
+  if(!editingId||!items.get(editingId)){ coverPending=file; renderCover(); return }   // new item: uploads on Save
+  const id=editingId; coverBusy=true; renderCover(); toast("Uploading the cover…");
+  try{
+    const r=await assets.upload(file,{type:typeFor(file)}), prev=items.get(id); if(!prev) return;
+    const old=prev.cover;
+    await persist(id,{...prev,cover:{id:r.id,name:file.name,type:r.contentType||typeFor(file)}});
+    if(old&&old.id!==r.id) assets.delete("/_blob/"+old.id).catch(()=>{});
+    toast("Cover saved.");
+  }catch(e){ uploadErr(e) }
+  finally{ coverBusy=false; renderCover(); if(selId===id) renderDesk() }
+}
+if($("coverBox")){
+  const box=$("coverBox");
+  box.addEventListener("change",e=>{ if(e.target.id==="coverAtt"){ const f=e.target.files&&e.target.files[0]; e.target.value=""; setCover(f) } });
+  box.addEventListener("click",async e=>{
+    const b=e.target.closest("[data-cover]"); if(!b) return;
+    if(b.dataset.cover==="clear"){ coverPending=null; renderCover(); return }
+    const id=editingId, prev=id&&items.get(id); if(!prev||!prev.cover) return;
+    if(!b.dataset.armed){ b.dataset.armed="1"; b.textContent="Tap again to remove"; return }
+    const old=prev.cover; await persist(id,{...prev,cover:null}); if(assets) assets.delete("/_blob/"+old.id).catch(()=>{});
+    toast("Cover removed."); renderCover(); if(selId===id) renderDesk();
+  });
+  box.addEventListener("dragover",e=>{ if(!e.dataTransfer||![...e.dataTransfer.types].includes("Files")) return; e.preventDefault(); e.stopPropagation(); const d=box.querySelector(".cover-drop,.cover-img"); if(d) d.classList.add(d.classList.contains("cover-drop")?"over":"drop-on") });
+  box.addEventListener("dragleave",()=>box.querySelectorAll(".over,.drop-on").forEach(x=>x.classList.remove("over","drop-on")));
+  box.addEventListener("drop",e=>{ const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(!f) return; e.preventDefault(); e.stopPropagation(); box.querySelectorAll(".over,.drop-on").forEach(x=>x.classList.remove("over","drop-on")); if(!readOnly) setCover(f) });
+}
+const deskCoverHtml=it=>{
+  if(it.type==="design"||!$("coverBox")) return "";
+  const cv=it.cover, can=!readOnly&&mode==="db";
+  return '<div class="deskcover">'+(cv?'<button type="button" class="cover-img" data-lb="/_blob/'+cv.id+'" data-name="'+esc(cv.name)+'" title="View the cover"><img src="/_blob/'+cv.id+'" alt="Cover photo"></button>':"")+
+    '<div><b>Cover photo</b><span>'+(cv?esc(cv.name):"Not added yet")+'</span>'+(can?'<div style="margin-top:6px"><button type="button" class="btn sm" data-cover-edit="'+esc(it.id)+'">'+(cv?"Change":"Add cover")+'</button></div>':"")+'</div></div>';
+};
 
 /* Publish tab */
 function renderPublish(){
@@ -1497,6 +1560,7 @@ $("desk").addEventListener("click",e=>{
     return;
   }
   const cp2=e.target.closest("[data-cap]"); if(cp2){ captureFrame(cp2); return }
+  const ce=e.target.closest("[data-cover-edit]"); if(ce){ openItem(ce.dataset.coverEdit); setTab("publish"); return }
   const ib2=e.target.closest("[data-img]");
   if(ib2&&selId){ const v=vFor(selId).find(x=>x.n===Number(ib2.dataset.v))||vFor(selId)[0]; const f=v&&(v.files||[]).filter(x=>x.type.startsWith("image/"))[Number(ib2.dataset.img)-1]; if(f) openLb("/_blob/"+f.id,f.name); else toast("That image isn’t in this version any more."); return }
   const ts=e.target.closest(".ts"); if(ts){ seek(Number(ts.dataset.t),ts); return }

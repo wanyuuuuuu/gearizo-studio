@@ -1578,6 +1578,26 @@ dialog#temple::backdrop{background:#2A0A0B}
 .tp-en{margin:0;font-size:14px;line-height:1.45;color:#FFE7C4;opacity:.92}
 @media (max-width:640px){ .tp-act{padding:0 14px;font-size:14px} .tp-mv{width:44px;height:44px} }
 @media (prefers-reduced-motion: reduce){ .tp-me *,.tp-me svg,.tp-tube svg,.tp-blocks .tp-jiao,.tp-stickout{animation:none!important} .tp-stickout{transform:translate(10%,-34px) rotate(16deg);opacity:1} }
+/* Cover photo for a video */
+#coverWrap{margin-bottom:14px}
+.cover-box{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.cover-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:120px;aspect-ratio:9/16;border:2px dashed var(--line);border-radius:14px;background:rgba(255,255,255,.55);color:var(--ink-2);font-size:13px;font-weight:600;text-align:center;cursor:pointer;padding:8px;transition:border-color .15s,background .15s}
+.cover-drop b{font-size:26px;line-height:1;color:var(--pink);font-weight:500}
+.cover-drop:hover,.cover-drop.over{border-color:var(--pink);background:var(--pink-soft)}
+.cover-drop:focus-within{outline:2px solid var(--pink);outline-offset:2px}
+.cover-drop input,.cover-acts label input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.cover-img{position:relative;width:120px;aspect-ratio:9/16;border:0;padding:0;border-radius:14px;overflow:hidden;background:var(--sunk);box-shadow:var(--lift,0 6px 16px rgba(0,0,0,.12));cursor:zoom-in}
+.cover-img img{width:100%;height:100%;object-fit:cover;display:block}
+.cover-img.drop-on{outline:3px solid var(--pink);outline-offset:2px}
+.cover-side{display:flex;flex-direction:column;gap:8px;min-width:0;flex:1 1 160px}
+.cover-side .hint{margin:0;word-break:break-all}
+.cover-acts{display:flex;gap:8px;flex-wrap:wrap}
+.cover-acts label{position:relative}
+.cover-busy{opacity:.6;pointer-events:none}
+.deskcover{display:flex;align-items:center;gap:12px;margin:10px 0}
+.deskcover .cover-img{width:64px;border-radius:10px}
+.deskcover b{display:block;font-size:13px}
+.deskcover span{font-size:12.5px;color:var(--ink-3)}
 </style>
 </head>
 <body>
@@ -1737,6 +1757,7 @@ dialog#temple::backdrop{background:#2A0A0B}
       </section>
 
       <section id="pPub" role="tabpanel" aria-labelledby="tPub" hidden>
+        <div class="f full" id="coverWrap"><div class="caph"><span class="lab" id="coverLab">Cover photo</span></div><div class="cover-box" id="coverBox"></div></div>
         <div class="f full" id="capWrap"><div class="caph"><label for="fCaption">Caption</label><button class="btn sm" id="copyCap" type="button">Copy</button></div><textarea id="fCaption" style="min-height:140px" placeholder="Caption and #hashtags"></textarea></div>
         <div id="pubInfo"></div>
       </section>
