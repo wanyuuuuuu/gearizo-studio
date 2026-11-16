@@ -5,11 +5,13 @@ it re-encodes the final file from the NAS to what Meta accepts (see SPEC) and up
   - Instagram: a Reels container, fetched by Meta from a short-lived link (see ig_upload); Instagram only
     publishes on request, so the server publishes it at the time
   - Facebook: a Page Reel scheduled by Meta for the exact time
+If the item has a cover photo, Instagram gets it as the Reel cover (cover_url) and Facebook as the video's
+preferred thumbnail; a cover Meta refuses never stops the post itself.
 and records what happened in the "postjobs" collection so the app can show it.
 If a post is unscheduled or its caption/time/platforms change, the Facebook schedule is removed and redone.
 It never deletes or changes files on the NAS.
 """
-import hashlib, json, os, shutil, subprocess, time, urllib.error, urllib.parse, urllib.request
+import hashlib, json, os, shutil, subprocess, time, urllib.error, urllib.parse, urllib.request, uuid
 
 import settings as S
 
@@ -92,7 +94,11 @@ def encode(path, log):
 
 def sig(it):
     plats = sorted(p for p in it.get("platforms", []) if p in AUTO)
-    raw = json.dumps([it.get("caption", ""), it.get("postAt", 0), plats], ensure_ascii=False)
+    parts = [it.get("caption", ""), it.get("postAt", 0), plats]
+    cover = (it.get("cover") or {}).get("id")
+    if cover:   # a new cover re-does the upload; items without one keep their old signature
+        parts.append(cover)
+    raw = json.dumps(parts, ensure_ascii=False)
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
@@ -129,12 +135,12 @@ def _storage(method, path, data=None, headers=None, timeout=300):
         raise GraphError(("storage %s: HTTP %s %s" % (method, e.code, e.read().decode("utf-8", "replace")))[:300])
 
 
-def stash(path):
+def stash(path, ctype="video/mp4", ext="mp4"):
     """Put path in the storage bucket; returns (object name, one-hour signed link)."""
-    obj = "autopost/%s-%d.mp4" % (hashlib.sha1(path.encode("utf-8")).hexdigest()[:12], int(time.time()))
+    obj = "autopost/%s-%d.%s" % (hashlib.sha1(path.encode("utf-8")).hexdigest()[:12], int(time.time()), ext)
     with open(path, "rb") as f:
         _storage("POST", "object/%s/%s" % (BUCKET, obj), f, {
-            "Content-Type": "video/mp4", "Content-Length": str(os.path.getsize(path)), "x-upsert": "true"})
+            "Content-Type": ctype, "Content-Length": str(os.path.getsize(path)), "x-upsert": "true"})
     try:
         out = json.loads(_storage("POST", "object/sign/%s/%s" % (BUCKET, obj),
                                   json.dumps({"expiresIn": 3600}).encode(), {"Content-Type": "application/json"}))
@@ -168,34 +174,105 @@ def ready(cid, tok):
     raise GraphError("Instagram was still processing the video after %d minutes" % (READY_WAIT_S // 60))
 
 
-def ig_upload(m, path, caption, log=lambda s: None):
+def cover_file(it, log):
+    """The item's cover photo as a local JPEG for Meta, or None (no cover, or it couldn't be fetched)."""
+    oid = (it.get("cover") or {}).get("id")
+    if not oid:
+        return None
+    raw = os.path.join(S.DATA, "cover-src-%s" % oid)
+    out = os.path.join(S.DATA, "cover-%s.jpg" % oid)
+    try:
+        with open(raw, "wb") as f:
+            f.write(_storage("GET", "object/%s/%s" % (BUCKET, oid), timeout=120))
+        ff = S.FFMPEG if S.FFMPEG and os.path.exists(S.FFMPEG) else shutil.which("ffmpeg")
+        if ff:
+            for q in (3, 6, 10):   # Instagram: JPEG, sRGB, 8 MB at most
+                subprocess.run([ff, "-hide_banner", "-loglevel", "error", "-y", "-i", raw, "-frames:v", "1",
+                                "-vf", "scale='min(1080,iw)':'min(1920,ih)':force_original_aspect_ratio=decrease,format=yuvj420p",
+                                "-q:v", str(q), out], check=True, capture_output=True, timeout=120)
+                if os.path.getsize(out) <= 7.5 * 1024 * 1024:
+                    break
+        else:
+            os.replace(raw, out)
+        if not os.path.isfile(out) or os.path.getsize(out) > 8 * 1024 * 1024:
+            raise GraphError("cover picture is over 8 MB")
+        return out
+    except Exception as e:
+        log("autopost: couldn't prepare the cover of %s, posting without it: %s" % (it.get("title"), e))
+        if os.path.exists(out):
+            os.remove(out)
+        return None
+    finally:
+        if os.path.exists(raw):
+            os.remove(raw)
+
+
+def ig_upload(m, path, caption, log=lambda s: None, cover=None):
     tokens = [t for t in (m.get("page_token"), m.get("user_token")) if t]
     if not tokens:
         raise GraphError("No Instagram token")
-    obj = link = None
+    obj = link = cobj = clink = None
     try:
         obj, link = stash(path)
     except Exception as e:
         log("autopost: couldn't put the video in storage (%s); trying a direct upload instead" % e)
+    if cover:
+        try:
+            cobj, clink = stash(cover, "image/jpeg", "jpg")
+        except Exception as e:
+            log("autopost: couldn't put the cover in storage (%s); the Reel goes out without it" % e)
     try:
         last = None
         for tok in tokens:
-            try:
-                if link:
-                    r = g("POST", "/%s/media" % m["ig_id"],
-                          {"media_type": "REELS", "video_url": link, "caption": caption}, tok)
-                    ready(r["id"], tok)
-                else:
-                    r = g("POST", "/%s/media" % m["ig_id"],
-                          {"media_type": "REELS", "upload_type": "resumable", "caption": caption}, tok)
-                    rupload(r.get("uri") or "https://rupload.facebook.com/ig-api-upload/v27.0/%s" % r["id"], tok, path)
-                return r["id"]
-            except GraphError as e:
-                last = e
+            for cl in ([clink, None] if clink else [None]):   # if Instagram refuses the cover, still post the Reel
+                try:
+                    params = {"media_type": "REELS", "caption": caption}
+                    if cl:
+                        params["cover_url"] = cl
+                    if link:
+                        r = g("POST", "/%s/media" % m["ig_id"], dict(params, video_url=link), tok)
+                        ready(r["id"], tok)
+                    else:
+                        r = g("POST", "/%s/media" % m["ig_id"], dict(params, upload_type="resumable"), tok)
+                        rupload(r.get("uri") or "https://rupload.facebook.com/ig-api-upload/v27.0/%s" % r["id"], tok, path)
+                    if clink and not cl:
+                        log("autopost: Instagram Reel ready without the cover")
+                    return r["id"]
+                except GraphError as e:
+                    last = e
+                    if cl:
+                        log("autopost: Instagram didn't take the cover (%s); trying without it" % e)
         raise last
     finally:
         if obj:
             unstash(obj)
+        if cobj:
+            unstash(cobj)
+
+
+def fb_cover(video_id, cover, tok):
+    """Makes the cover the Facebook video's preferred thumbnail (POST /{video}/thumbnails)."""
+    b = "----gz" + uuid.uuid4().hex
+    with open(cover, "rb") as f:
+        img = f.read()
+    body = ("--%s\r\nContent-Disposition: form-data; name=\"is_preferred\"\r\n\r\ntrue\r\n"
+            "--%s\r\nContent-Disposition: form-data; name=\"access_token\"\r\n\r\n%s\r\n"
+            "--%s\r\nContent-Disposition: form-data; name=\"source\"; filename=\"cover.jpg\"\r\n"
+            "Content-Type: image/jpeg\r\n\r\n" % (b, b, tok, b)).encode() + img + ("\r\n--%s--\r\n" % b).encode()
+    req = urllib.request.Request(GRAPH + "/%s/thumbnails" % video_id, data=body, method="POST",
+                                 headers={"Content-Type": "multipart/form-data; boundary=" + b})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            out = json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        try:
+            err = json.loads(e.read()).get("error", {})
+            msg = err.get("error_user_msg") or err.get("message") or str(e)
+        except Exception:
+            msg = str(e)
+        raise GraphError(msg[:300])
+    if out.get("success") is False:
+        raise GraphError(json.dumps(out)[:300])
 
 
 def fb_upload(m, path, caption, post_at):
@@ -257,10 +334,13 @@ def run(api, docs, put, log, items, versions):
                 log("autopost: final video of %s not found on the NAS" % it.get("title"))
             continue
         cap = it.get("caption", "")
+        cover = cover_file(it, log)
         try:
             src = encode(path, log)   # one re-encode feeds both uploads
         except Exception as e:
             err = ("encode: " + str(e))[:300]
+            if cover and os.path.exists(cover):
+                os.remove(cover)
             if job.get("error") != err:
                 job["error"] = err
                 put("postjobs", iid, job)
@@ -271,7 +351,7 @@ def run(api, docs, put, log, items, versions):
             if need_ig:
                 tries = (igj.get("tries", 0) + 1) if igj.get("sig") == s and igj.get("state") == "failed" else 1
                 try:
-                    job["ig"] = {"state": "uploaded", "container": ig_upload(m, src, cap, log), "sig": s, "at": now}
+                    job["ig"] = {"state": "uploaded", "container": ig_upload(m, src, cap, log, cover), "sig": s, "at": now, "cover": bool(cover)}
                     log("autopost: Instagram upload ready for %s" % it.get("title"))
                 except Exception as e:
                     job["ig"] = {"state": "failed", "error": str(e)[:300], "sig": s, "tries": tries, "at": now}
@@ -282,13 +362,22 @@ def run(api, docs, put, log, items, versions):
                 try:
                     job["fb"] = {"state": "scheduled", "video": fb_upload(m, src, cap, post_at), "sig": s, "at": now}
                     log("autopost: Facebook reel scheduled for %s" % it.get("title"))
+                    if cover:
+                        try:
+                            fb_cover(job["fb"]["video"], cover, m["page_token"])
+                            job["fb"]["cover"] = True
+                            log("autopost: Facebook cover set for %s" % it.get("title"))
+                        except Exception as e:
+                            job["fb"]["cover"] = False
+                            job["fb"]["coverError"] = str(e)[:300]
+                            log("autopost: Facebook didn't take the cover for %s: %s" % (it.get("title"), e))
                 except Exception as e:
                     job["fb"] = {"state": "failed", "error": str(e)[:300], "sig": s, "tries": tries, "at": now}
                     log("autopost: Facebook upload failed for %s: %s" % (it.get("title"), e))
                 put("postjobs", iid, job)
         finally:
-            if src != path:
+            for tmp in ([src] if src != path else []) + ([cover] if cover else []):
                 try:
-                    os.remove(src)
+                    os.remove(tmp)
                 except OSError:
                     pass

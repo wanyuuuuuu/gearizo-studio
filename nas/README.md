@@ -5,12 +5,16 @@ Runs every 3 minutes next to the "Marketing Content" NAS share and talks to Supa
 - **sync** (`nas_sync.py` + `nas_preview.py`): a new video in `Content Video/Checking` gets a small preview,
   becomes a new version of its item (matched by the GZ code in the file name, else by title) and is sent for
   review. When an item is approved / scheduled / posted, its file moves from Checking to `approve`.
+  A picture (jpg/png/webp) in Checking whose name has an item's GZ code (or title), e.g. `GZ012 cover.jpg`, becomes
+  that item's cover photo (JPEG, at most 1080x1920) and moves to `approve` with the video.
   14 days after a video is posted, its previews are deleted from Supabase storage (free plan: 1 GB);
   the final version's preview only when its full file is found on the NAS. NAS files are never touched.
 - **autopost** (`autopost.py`): up to 23 h before a scheduled post, re-encodes the final file to what Meta
   accepts (H.264 High, 1920 px on the long edge, AAC 48 kHz, faststart -- phone and Final Cut exports are
   usually 4K HEVC in a QuickTime container, which Meta rejects without saying why) and uploads it to Instagram Reels
   (a container the server publishes at the exact minute) and to the Facebook Page (a Reel Meta schedules).
+  If the item has a cover photo it goes along: Instagram `cover_url`, Facebook the video's preferred thumbnail
+  (needs the pages_manage_engagement permission; without it the Reel still posts with Meta's own thumbnail).
   Status goes to the `postjobs` collection. Needs the Meta connection made in the app (Team > Social).
 
 Settings live in a private JSON file on the computer that runs the job (see `settings.py`,

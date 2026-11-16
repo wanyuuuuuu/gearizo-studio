@@ -28,6 +28,9 @@ STATE = os.path.join(HOME, "processed.json")
 PREV = os.path.join(HOME, "previews")
 FFMPEG = S.FFMPEG
 VIDEO_EXT = (".mp4", ".mov", ".m4v")
+IMAGE_EXT = (".jpg", ".jpeg", ".png", ".webp")   # cover photos
+COVER_SETTLE_SECONDS = 60
+COVER_LIMIT_BYTES = int(7.5 * 1024 * 1024)       # Instagram takes JPEG covers up to 8 MB
 SETTLE_SECONDS = 180          # skip files still being copied/exported
 LIMIT_BYTES = int(19.5 * 1024 * 1024)
 MAX_SECONDS = 480             # previews cover at most the first 8 minutes
@@ -131,6 +134,50 @@ def find_new(items):
                 new.append({"path": p, "name": fn, "size": st.st_size, "mtime": int(st.st_mtime), "item": match_item(fn, items)})
     new.sort(key=lambda x: x["mtime"])
     return new
+
+
+def find_new_covers(items):
+    """Cover photos dropped in Checking: pictures not seen before, matched to an item like videos are."""
+    state, now, new = load_state(), time.time(), []
+    seen = seen_keys(state)
+    if os.path.isdir(CHECKING):
+        for dirpath, dirnames, files in os.walk(CHECKING):
+            dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+            for fn in files:
+                if fn.startswith(".") or not fn.lower().endswith(IMAGE_EXT):
+                    continue
+                p = os.path.join(dirpath, fn)
+                try:
+                    st = os.stat(p)
+                except OSError:
+                    continue
+                if st.st_size == 0 or now - st.st_mtime < COVER_SETTLE_SECONDS or key(p, st) in seen:
+                    continue
+                new.append({"path": p, "name": fn, "size": st.st_size, "mtime": int(st.st_mtime), "item": match_item(fn, items)})
+    new.sort(key=lambda x: x["mtime"])
+    return new
+
+
+def to_cover_jpeg(src, dst):
+    """A JPEG copy of a picture, at most 1080x1920 and under Instagram's 8 MB limit. Returns dst or raises."""
+    for q in (3, 6, 10):
+        subprocess.run([FFMPEG, "-hide_banner", "-loglevel", "error", "-y", "-i", src, "-frames:v", "1",
+                        "-vf", "scale='min(1080,iw)':'min(1920,ih)':force_original_aspect_ratio=decrease,format=yuvj420p",
+                        "-q:v", str(q), dst], check=True, capture_output=True, timeout=120)
+        if os.path.getsize(dst) <= COVER_LIMIT_BYTES:
+            return dst
+    os.remove(dst)
+    raise ValueError("cover picture too large even after compressing")
+
+
+def make_cover(src):
+    os.makedirs(PREV, exist_ok=True)
+    dst = os.path.join(PREV, "cover-%d.jpg" % int(time.time() * 1000))
+    try:
+        to_cover_jpeg(src, dst)
+    except Exception as e:
+        return {"error": str(e)[:200]}
+    return {"out": dst, "size": os.path.getsize(dst)}
 
 
 def cmd_check():

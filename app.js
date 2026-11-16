@@ -92,7 +92,7 @@ function normalize(id,d){
     sizes:Array.isArray(d.sizes)?d.sizes.filter(x=>typeof x==="string").slice(0,12):[],
     sizeNote:String(d.sizeNote||"").slice(0,300),
     refs:normFiles(d.refs),
-    cover:normFiles(d.cover&&typeof d.cover==="object"?[d.cover]:[])[0]||null,
+    cover:normCover(d.cover),
     notes:String(d.notes||""),
     caption:String(d.caption||""),
     approvedBy:String(d.approvedBy||""), approvedAt:Number(d.approvedAt)||0, postedAt:Number(d.postedAt)||0, postedBy:String(d.postedBy||""),
@@ -529,6 +529,16 @@ const ACCEPT={png:"image/png",jpg:"image/jpeg",jpeg:"image/jpeg",gif:"image/gif"
 const ACCEPT_TYPES=new Set(Object.values(ACCEPT));
 function typeFor(f){ if(ACCEPT_TYPES.has(f.type)) return f.type; const ext=(f.name.split(".").pop()||"").toLowerCase(); return ACCEPT[ext]||"" }
 const secOrNull=v=>typeof v==="number"&&isFinite(v)&&v>=0?v:null;
+// a cover keeps where it came from on the NAS, so the NAS job can move it with the video
+function normCover(c){
+  const f=normFiles(c&&typeof c==="object"?[c]:[])[0]; if(!f) return null;
+  if(typeof c.link==="string"&&c.link) f.link=c.link.slice(0,600);
+  if(Number(c.size)>0) f.size=Number(c.size);
+  if(Number(c.mtime)>0) f.mtime=Number(c.mtime);
+  if(c.from==="nas") f.from="nas";
+  if(Number(c.at)>0) f.at=Number(c.at);
+  return f;
+}
 const normFiles=a=>Array.isArray(a)?a.filter(f=>f&&typeof f.id==="string"&&/^[A-Za-z0-9_-]{8,64}$/.test(f.id)).slice(0,12).map(f=>({id:f.id,name:String(f.name||"file"),type:String(f.type||"")})):[];
 function parseTime(str){
   str=String(str||"").trim(); if(!str) return null;
@@ -835,9 +845,9 @@ function renderCover(){
     const u=coverPending._u||(coverPending._u=URL.createObjectURL(coverPending));
     html='<div class="cover-img" title="'+esc(coverPending.name)+'"><img src="'+u+'" alt="Cover photo"></div><div class="cover-side"><p class="hint">'+esc(coverPending.name)+' · uploads when you save</p><div class="cover-acts">'+pick("Change","btn sm")+'<button class="btn sm ghost" type="button" data-cover="clear">Remove</button></div></div>';
   }else if(cv){
-    html='<button type="button" class="cover-img" data-lb="/_blob/'+cv.id+'" data-name="'+esc(cv.name)+'" title="View the cover"><img src="/_blob/'+cv.id+'" alt="Cover photo"></button><div class="cover-side"><p class="hint">'+esc(cv.name)+'</p>'+(can?'<div class="cover-acts">'+pick("Change","btn sm")+'<button class="btn sm ghost" type="button" data-cover="remove">Remove</button></div>':"")+'</div>';
+    html='<button type="button" class="cover-img" data-lb="/_blob/'+cv.id+'" data-name="'+esc(cv.name)+'" title="View the cover"><img src="/_blob/'+cv.id+'" alt="Cover photo"></button><div class="cover-side"><p class="hint">'+esc(cv.name)+(cv.from==="nas"?" · from Checking":"")+'</p><p class="hint">Auto-posting puts it on Instagram and Facebook.</p>'+(can?'<div class="cover-acts">'+pick("Change","btn sm")+'<button class="btn sm ghost" type="button" data-cover="remove">Remove</button></div>':"")+'</div>';
   }else if(can){
-    html=pick('<b>+</b>Upload cover<span class="hint" style="font-weight:400">or drop a picture here</span>',"cover-drop")+'<p class="hint cover-side">JPG or PNG, tall 9:16 for Reels and TikTok.</p>';
+    html=pick('<b>+</b>Upload cover<span class="hint" style="font-weight:400">or drop a picture here</span>',"cover-drop")+'<p class="hint cover-side">JPG or PNG, tall 9:16 for Reels and TikTok.<br>Or put it in Checking on the NAS with the GZ code in its name, e.g. '+esc(((it&&it.code)||"GZ012")+" cover.jpg")+'.</p>';
   }else html='<p class="hint">No cover photo yet.</p>';
   box.innerHTML=html; box.classList.toggle("cover-busy",coverBusy);
 }

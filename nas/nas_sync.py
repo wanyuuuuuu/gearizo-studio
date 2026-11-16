@@ -3,6 +3,7 @@
 
 - New videos in  Marketing Content/Content Video/Checking  -> small preview -> uploaded ->
   a new version of the matching item, sent for review (or "New in Checking" if no match)
+- New pictures in Checking whose name has an item's GZ code (or title) -> that item's cover photo
 - Items marked approved/posted -> their approved file moves from Checking to approve
 - 14 days after a video is posted, its small previews are removed from the app's storage
   (the free plan holds 1 GB). The full video on the NAS is never touched.
@@ -22,6 +23,8 @@ OWNER_ID = S.OWNER_ID  # the content owner: versions found on the NAS are credit
 LOG = os.path.join(S.DATA, "sync.log")
 CHECKING_PREFIX = os.path.join(NP.CHECKING, "")
 MAX_NEW_PER_RUN = 3
+MAX_COVERS_PER_RUN = 5
+COVER_SKIPPED = os.path.join(S.DATA, "cover_skipped.json")
 KEEP_DAYS = 14          # previews of a posted video are kept this long after posting
 MAX_CLEAN_PER_RUN = 20
 
@@ -74,10 +77,29 @@ def upload(path, ctype):
     return oid
 
 
+def move_cover(item_id, it):
+    """A cover picture taken from Checking follows its video into approve."""
+    cv = it.get("cover") or {}
+    link = cv.get("link") or ""
+    if not link.startswith(CHECKING_PREFIX):
+        return
+    try:
+        r = NP.do_move(link, cv.get("size"), cv.get("mtime"))
+    except OSError as e:
+        log(f"cover move failed for {it.get('title')}, will retry: {e}")
+        return
+    if "error" in r:
+        return
+    merge("items", item_id, {"cover": dict(cv, link=r["to"])})
+    it["cover"] = dict(cv, link=r["to"])
+    log(f"moved the cover of {it.get('title')} -> {r['to']}")
+
+
 def move_approved(items, versions):
     for item_id, it in items.items():
         if it.get("status") not in ("approved", "scheduled", "posted"):
             continue
+        move_cover(item_id, it)
         mine = [(vid, v) for vid, v in versions.items() if v.get("item") == item_id]
         if not mine:
             continue
@@ -186,6 +208,55 @@ def handle_new(items, versions):
         NP.do_mark(f["path"])
 
 
+def handle_covers(items):
+    listing = [{"id": k, "title": v.get("title", ""), "status": v.get("status", ""), "code": v.get("code", "")} for k, v in items.items()]
+    new = NP.find_new_covers(listing)[:MAX_COVERS_PER_RUN]
+    if not new:
+        return
+    try:
+        skipped = json.load(open(COVER_SKIPPED))
+    except Exception:
+        skipped = {}
+    noted = False
+    for f in new:
+        if not f["item"]:
+            k = "%s|%d|%d" % (f["path"], f["size"], f["mtime"])
+            if k not in skipped:   # say it once; it is picked up as soon as it is renamed with a GZ code
+                skipped[k] = int(time.time())
+                noted = True
+                log(f"picture {f['name']} in Checking did not match any item: put its GZ code in the name to use it as a cover")
+            continue
+        cv = NP.make_cover(f["path"])
+        if "error" in cv:
+            log(f"couldn't use {f['name']} as a cover: {cv['error']}")
+            NP.do_mark(f["path"])
+            continue
+        try:
+            oid = upload(cv["out"], "image/jpeg")
+        finally:
+            try:
+                os.remove(cv["out"])
+            except OSError:
+                pass
+        it = items[f["item"]]
+        old = (it.get("cover") or {}).get("id")
+        cover = {"id": oid, "name": f["name"], "type": "image/jpeg", "link": f["path"], "size": f["size"],
+                 "mtime": f["mtime"], "at": int(time.time() * 1000), "from": "nas"}
+        merge("items", f["item"], {"cover": cover})
+        it["cover"] = cover
+        if old and old != oid:
+            try:
+                api("DELETE", "/storage/v1/object/media/" + old)
+            except urllib.error.HTTPError:
+                pass  # already gone
+        NP.do_mark(f["path"])
+        log(f"set the cover of {it.get('title')} from {f['name']}")
+    if noted:
+        keep = dict(sorted(skipped.items(), key=lambda kv: kv[1])[-300:])
+        with open(COVER_SKIPPED, "w") as fh:
+            json.dump(keep, fh)
+
+
 def run():
     lock = open(os.path.join(S.DATA, ".sync.lock"), "w")
     try:
@@ -206,6 +277,10 @@ def run():
     if S.SYNC:
         move_approved(items, versions)
         handle_new(items, versions)
+        try:
+            handle_covers(items)
+        except Exception:
+            log("cover ERROR " + traceback.format_exc().strip().replace("\n", " | "))
         try:
             clean_previews(items, versions)
         except Exception:
