@@ -386,7 +386,7 @@ async function connect(){
       live.shoots=true;
       shoots=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,talent:Array.isArray(v.talent)?v.talent.map(String):[],item:String(v.item||""),items:Array.isArray(v.items)?v.items.map(String).filter(Boolean).slice(0,12):v.item?[String(v.item)]:[],scripts:shScripts(v.scripts),title:String(v.title||""),
         start:Number(v.start)||0,end:Number(v.end)||0,location:String(v.location||""),notes:String(v.notes||""),status:["proposed","confirmed","declined","cancelled"].includes(v.status)?v.status:"proposed",
-        reply:String(v.reply||""),by:String(v.by||""),at:Number(v.at)||0,respondedBy:String(v.respondedBy||""),respondedAt:Number(v.respondedAt)||0}}).filter(x=>x.start&&x.end>x.start);
+        reply:String(v.reply||""),by:String(v.by||""),at:Number(v.at)||0,respondedBy:String(v.respondedBy||""),respondedAt:Number(v.respondedAt)||0,movedFrom:Number(v.movedFrom)||0,movedTo:Number(v.movedTo)||0}}).filter(x=>x.start&&x.end>x.start);
       render(); shootWatch(); syncShootScripts();
     },()=>{ live.shoots=true });
     db.collection("availability").onSnapshot(snap=>{
@@ -1002,7 +1002,7 @@ const isUnread=e=>(!myId||e.by!==myId)&&e.at>nRead.floor&&!nRead.ids.has(e.id);
 function nText(e){
   const t=e.item?'<b>'+esc(e.item.title)+'</b>':'', w='<b>'+esc(who(e.by))+'</b>', v=e.n?' v'+e.n:'';
   if(e.type==="shoot") return w+' booked a shoot with '+esc(e.shoot.talent.map(who).join(", "))+': '+esc(shootWhen(e.shoot))+(e.shoot.title?' · '+esc(e.shoot.title):'');
-  if(e.type==="shootreply") return w+(e.shoot.status==="declined"?' can’t make the shoot on ':' confirmed the shoot on ')+esc(shootWhen(e.shoot));
+  if(e.type==="shootreply") return w+(e.shoot.status==="declined"?' can’t make the shoot on ':e.shoot.movedFrom?' changed the shoot to ':' confirmed the shoot on ')+esc(shootWhen(e.shoot));
   if(e.type==="task") return w+' added a task for '+ROLE_SHORT[e.for]+': '+esc(e.text);
   if(e.type==="taskdone") return w+' finished: '+esc(e.text);
   if(e.type==="planned") return w+(["marketing","ecomm"].includes(team[e.by])?' assigned ':' planned ')+t+(e.item.date?' for '+esc(shortDate(e.item.date)):'');
@@ -1866,11 +1866,19 @@ function shootCard(x,forHr){
     if(forHr&&x.status==="proposed") acts='<button class="btn go sm" type="button" data-sh="confirm" data-id="'+x.id+'">Confirm</button><input type="text" data-reply="'+x.id+'" placeholder="Reason or new time (optional)" aria-label="Reason or another time (optional)"><button class="btn sm" type="button" data-sh="decline" data-id="'+x.id+'">Can’t make it</button>';
     if(!forHr&&x.status!=="cancelled") acts='<button class="btn sm" type="button" data-sh="edit" data-id="'+x.id+'">Change</button><button class="btn ghost sm danger" type="button" data-sh="cancel" data-id="'+x.id+'">Cancel</button>';
     if(forHr&&x.status==="confirmed") acts='<button class="btn sm" type="button" data-sh="undo" data-id="'+x.id+'">Can’t make it</button>';
+    if(forHr&&["proposed","confirmed"].includes(x.status)) acts+='<button class="btn sm" type="button" data-sh="move" data-id="'+x.id+'">Change time</button>'+shMoveRow(x);
   }
   if(x.status==="confirmed"&&!past) acts+='<a class="btn sm" href="'+esc(gcalLink(x))+'" target="_blank" rel="noopener" title="Add to Google Calendar">+ Google Calendar</a>';
   return '<div class="shcard"><div class="when"><small>'+DOW[(d.getDay()+6)%7]+'</small>'+d.getDate()+' '+MONTHS[d.getMonth()].slice(0,3)+'<small>'+esc(hm(x.start))+'</small></div>'+
     '<div class="what"><b>'+esc(x.title||"Shoot")+' '+pill+'</b><span>'+esc(hm(x.start)+"–"+hm(x.end))+(forHr?"":" · with "+esc(x.talent.map(who).join(", ")))+(x.location?" · "+esc(x.location):"")+'</span>'+
-    (x.notes?'<span>'+esc(x.notes)+'</span>':"")+(x.reply?'<span><b>Reply:</b> '+esc(x.reply)+'</span>':"")+'</div>'+shootScriptsHtml(x)+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>';
+    (x.notes?'<span>'+esc(x.notes)+'</span>':"")+(x.movedFrom?'<span class="moved">'+(forHr?"You":esc(who(x.respondedBy)))+' changed the time · was '+esc(shootWhen({start:x.movedFrom,end:x.movedTo||x.movedFrom+(x.end-x.start)}))+'</span>':"")+(x.reply?'<span><b>'+(x.movedFrom?"Note":"Reply")+':</b> '+esc(x.reply)+'</span>':"")+'</div>'+shootScriptsHtml(x)+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>';
+}
+/* HR can't make the asked time → they pick one that works; it's confirmed at once and the hub is told */
+function shMoveRow(x){
+  const d=new Date(x.start), t=ms=>pad(new Date(ms).getHours())+":"+pad(new Date(ms).getMinutes());
+  return '<div class="shmove" data-move="'+x.id+'" hidden><span class="hint">A time that works for you:</span>'+
+    '<input type="date" data-mv="date" aria-label="Date" value="'+ymd(d)+'"><input type="time" data-mv="from" step="900" aria-label="From" value="'+t(x.start)+'"><span>to</span><input type="time" data-mv="to" step="900" aria-label="To" value="'+t(x.end)+'">'+
+    '<input type="text" data-mv="note" placeholder="Note (optional)" aria-label="Note (optional)"><button class="btn go sm" type="button" data-sh="movesave" data-id="'+x.id+'">Send new time</button></div>';
 }
 function dayBar(uid,day){
   const d0=new Date(day+"T00:00:00").getTime(), from=d0+DAY_FROM*3600e3, to=d0+DAY_TO*3600e3, span=to-from;
@@ -1966,7 +1974,7 @@ $("shootForm").addEventListener("submit",async e=>{
   const sc=shScriptsFor(ids,[]);
   const data={talent:[$("shWho").value],item:ids[0]||"",items:ids,scripts:sc,title:sc.length?sc.map(s=>s.title).join(" · "):"Shoot",start:tm.start,end:tm.end,location:$("shLoc").value.trim(),notes:$("shNotes").value.trim(),status:"proposed",reply:"",by:myId||"",at:Date.now(),respondedBy:"",respondedAt:0};
   try{
-    if(editingShoot) await db.collection("shoots").doc(editingShoot).update({start:data.start,end:data.end,item:data.item,items:data.items,scripts:data.scripts,title:data.title,location:data.location,notes:data.notes,talent:data.talent,status:"proposed",reply:"",respondedBy:"",respondedAt:0});
+    if(editingShoot) await db.collection("shoots").doc(editingShoot).update({start:data.start,end:data.end,item:data.item,items:data.items,scripts:data.scripts,title:data.title,location:data.location,notes:data.notes,talent:data.talent,status:"proposed",reply:"",respondedBy:"",respondedAt:0,movedFrom:0});
     else await db.collection("shoots").add(data);
     $("shootDlg").close(); toast(editingShoot?"New time sent. They’ll get a notification.":"Request sent. "+who(data.talent[0])+" gets a notification to confirm.");
   }catch(err){ writeErr(err,"the shoot") }
@@ -1981,8 +1989,16 @@ $("shoots").addEventListener("click",async e=>{
     if(act==="book") openShoot();
     else if(act==="edit") openShoot({id});
     else if(act==="cancel"){ if(!b.dataset.armed){ b.dataset.armed="1"; b.textContent="Tap again to cancel"; return } await ref.update({status:"cancelled"}); toast("Shoot cancelled. They’ll get a notification.") }
-    else if(act==="confirm"){ await ref.update({status:"confirmed",reply:"",respondedBy:myId||"",respondedAt:Date.now()}); toast("Confirmed. Add it to your Google Calendar with the button.") }
-    else if(act==="decline"||act==="undo"){ const inp=document.querySelector('[data-reply="'+id+'"]'); await ref.update({status:"declined",reply:inp?inp.value.trim().slice(0,200):"",respondedBy:myId||"",respondedAt:Date.now()}); toast("Sent. The content team will find another time.") }
+    else if(act==="confirm"){ await ref.update({status:"confirmed",reply:"",respondedBy:myId||"",respondedAt:Date.now(),movedFrom:0}); toast("Confirmed. Add it to your Google Calendar with the button.") }
+    else if(act==="decline"||act==="undo"){ const inp=document.querySelector('[data-reply="'+id+'"]'); await ref.update({status:"declined",reply:inp?inp.value.trim().slice(0,200):"",respondedBy:myId||"",respondedAt:Date.now(),movedFrom:0}); toast("Sent. The content team will find another time.") }
+    else if(act==="move"){ const row=b.closest(".shcard").querySelector(".shmove"); if(row){ row.hidden=!row.hidden; if(!row.hidden) row.querySelector('[data-mv="date"]').focus() } }
+    else if(act==="movesave"){ const row=b.closest(".shmove"), x=shoots.find(s=>s.id===id), g=k=>row.querySelector('[data-mv="'+k+'"]').value;
+      if(!x) return; if(!g("date")||!g("from")||!g("to")){ toast("Pick a date and times."); return }
+      const s=new Date(g("date")+"T"+g("from")+":00").getTime(), en=new Date(g("date")+"T"+g("to")+":00").getTime();
+      if(!(en>s)){ toast("The end time must be after the start."); return } if(en<Date.now()){ toast("That time has already passed."); return }
+      if(s===x.start&&en===x.end){ toast("That’s the same time."); return }
+      await ref.update({start:s,end:en,status:"confirmed",movedFrom:x.movedFrom||x.start,movedTo:x.movedFrom?x.movedTo:x.end,reply:g("note").trim().slice(0,200),respondedBy:myId||"",respondedAt:Date.now()});
+      toast("New time sent. The content team gets a notification.") }
     else if(act==="freeadd"){ const d=$("frDate").value, f=$("frFrom").value, t=$("frTo").value; if(!d||!f||!t){ toast("Pick a date and times."); return }
       const s=new Date(d+"T"+f+":00").getTime(), en=new Date(d+"T"+t+":00").getTime(); if(!(en>s)){ toast("The end time must be after the start."); return }
       await db.collection("availability").add({user:myId||"",start:s,end:en}); toast("Free time added.") }

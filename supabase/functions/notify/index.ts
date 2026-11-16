@@ -77,6 +77,7 @@ async function describe(type: string, rec: Doc, old: Doc | null, roleOf: Record<
       if (type === "INSERT" && d.status === "proposed")
         return { users: talent, body: `${await nameOf(d.by || actor)} wants to book you for a shoot: ${when(d.start)}${what}${d.location ? " · " + d.location : ""}. Tap to confirm.`, url: "./#shoots", tag: "shoot-" + rec.id };
       if (type !== "UPDATE") return null;
+      if (d.start !== o.start && talent.includes(actor)) return { role: "content", body: `${await nameOf(actor)} changed the shoot to ${when(d.start)}${what}` + (d.reply ? `: ${d.reply}` : ""), url: "./#shoots", tag: "shoot-" + rec.id };
       if (d.status !== o.status) {
         if (d.status === "confirmed") return { role: "content", body: `${await nameOf(actor)} confirmed the shoot on ${when(d.start)}${what}`, url: "./#shoots", tag: "shoot-" + rec.id };
         if (d.status === "declined") return { role: "content", body: `${await nameOf(actor)} can't make the shoot on ${when(d.start)}${what}` + (d.reply ? `: ${d.reply}` : ""), url: "./#shoots", tag: "shoot-" + rec.id };
@@ -101,7 +102,7 @@ async function describe(type: string, rec: Doc, old: Doc | null, roleOf: Record<
       if (d.status === "review") return { role: itemTeam, body: `${await nameOf(d.submittedBy || actor)} sent ${title}` + (d.submittedV ? ` v${d.submittedV}` : "") + " for review", url: "./#review", tag: "item-" + rec.id };
       if (d.status === "changes") return { role: "content", body: `${await nameOf(d.changesBy || actor)} asked for changes on ${title}`, url: "./#review", tag: "item-" + rec.id };
       if (d.status === "approved") return { role: "content", body: `${await nameOf(d.approvedBy || actor)} approved ${title}`, url: "./#review", tag: "item-" + rec.id };
-      if (d.status === "posted" && d.postedBy === "auto") return { body: `Posted ${title} automatically` + (plats(d) ? ` on ${plats(d)}` : ""), url: "./#review/" + rec.id, tag: "item-" + rec.id };
+      if (d.status === "posted" && d.postedBy === "auto") return { users: Object.keys(roleOf).filter((id) => roleOf[id] !== "hr"), body: `Posted ${title} automatically` + (plats(d) ? ` on ${plats(d)}` : ""), url: "./#review/" + rec.id, tag: "item-" + rec.id };
       if (d.status === "posted") return { role: "content", body: `${await nameOf(d.postedBy || actor)} posted ${title}` + (plats(d) ? ` on ${plats(d)}` : ""), url: "./#review/" + rec.id, tag: "item-" + rec.id };
       return null;
     }

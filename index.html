@@ -616,6 +616,11 @@ dialog{border-radius:18px}
 .shcard .shscript .spill{font-size:10.5px;color:var(--ink-2);flex:none}
 .shcard .acts{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .shcard .acts input{flex:1 1 180px;min-width:0;border:1px solid var(--line);border-radius:999px;padding:6px 12px;min-height:36px}
+.shcard .what .moved{color:var(--edit);font-weight:600}
+.shcard .shmove{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:var(--surface);border-radius:12px;padding:8px 10px}
+.shcard .shmove[hidden]{display:none}
+.shcard .shmove .hint{flex:1 1 100%;font-size:12.5px;color:var(--ink-2)}
+.shcard .shmove input[type=date],.shcard .shmove input[type=time]{flex:0 1 auto;border:1px solid var(--line);border-radius:10px;padding:6px 8px;min-height:36px;font:inherit}
 .spill{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border-radius:999px;padding:2px 8px;background:var(--surface);color:var(--ink-2)}
 .spill.proposed{background:color-mix(in srgb,var(--review) 22%,var(--surface));color:#7A5300}
 .spill.confirmed{background:var(--green-soft);color:var(--green)}
