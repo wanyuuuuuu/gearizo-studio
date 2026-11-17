@@ -41,7 +41,7 @@ const shortDate=s=>{const d=parse(s);return d.getDate()+" "+MONTHS[d.getMonth()]
 const fmtTime=ms=>{const d=new Date(ms);let h=d.getHours();const ap=h>=12?"pm":"am";h=h%12||12;return d.getDate()+" "+MONTHS[d.getMonth()].slice(0,3)+", "+h+":"+pad(d.getMinutes())+" "+ap};
 const newId=()=>"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
-let edits=new Map(), items=new Map(), versions=[], feedback=[], focus=[], ideas=[], ideaFrom=null, liveIdeas=false;
+let edits=new Map(), scripts=new Map(), items=new Map(), versions=[], feedback=[], focus=[], ideas=[], ideaFrom=null, liveIdeas=false;
 let db=null, assets=null, userNs=null, myId=null, amOwner=false, names={}, myName="";
 let mode="local", readOnly=false, live={items:false,focus:false,team:false};
 let team={}, promptedRole=false, inbox=[], tasks=[], shoots=[], avail=[], busy=[], jobs={}, metaState=null;
@@ -407,6 +407,12 @@ async function connect(){
       team=t; render(); resolveNames(); maybeAskRole();
       if($("roleDlg").open) renderRoleDlg();
     },()=>{});
+    db.collection("scripts").onSnapshot(snap=>{
+      scripts=new Map(snap.docs.filter(x=>x.exists).map(x=>[x.id,x.data()||{}]));
+      if(view==="review"&&!(window.gzScript&&gzScript.isOpen())) render();
+      if(editingId&&$("dlg")&&$("dlg").open) scriptBtn();
+      if(window.gzScript) scripts.forEach((d,id)=>gzScript.remote(id,d));
+    },()=>{});
     db.collection("edits").onSnapshot(snap=>{
       edits=new Map(snap.docs.filter(x=>x.exists).map(x=>[x.id,x.data()||{}]));
       if(view==="review"&&!(window.gzAdjust&&gzAdjust.isOpen())) render();
@@ -466,7 +472,7 @@ function openItem(id,presetDate,presetProduct){
   typeFields(); platVis();
   $("fCode").hidden=!(id&&it.code); $("fCode").textContent=id&&it.code?it.code:"";
   $("fDelete").hidden=!id||readOnly; $("fDelete").textContent="Delete"; $("fDelete").dataset.armed="";
-  $("fSave").hidden=readOnly; $("pubInfo")._h="";
+  $("fSave").hidden=readOnly; $("pubInfo")._h=""; scriptBtn();
   tint();
   setTab(id&&["approved","scheduled"].includes(it.status)?"publish":"plan");
   $("dlg").showModal();
@@ -679,6 +685,26 @@ function adjCardHtml(it){
   const st=r.state==="queued"?"Waiting for the Mac to render":r.state==="rendering"?"Rendering on the Mac…":r.state==="done"?"Rendered v"+r.n+(r.doneAt?" · "+fmtTime(r.doneAt):""):r.state==="failed"?"Last render failed":"";
   return '<div class="adjcard"><span class="ai">🎛</span><div><b>Adjustable project</b><span>'+n+' layers · subtitles, 花字 and stickers'+(st?" · "+esc(st):"")+'</span></div><button class="btn primary sm" type="button" data-adjust="'+esc(it.id)+'">Adjust</button></div>';
 }
+/* Script & storyboard (script.js, loaded on demand): Claude on the studio Mac writes it from the idea */
+function scrCardHtml(it){
+  const d=scripts.get(it.id); if(!d&&!isCr()) return "";
+  const g=(d&&d.gen)||{}, n=d&&Array.isArray(d.shots)?d.shots.length:0, clips=d&&Array.isArray(d.shots)?d.shots.filter(x=>x&&x.clip).length:0;
+  const st=g.state==="queued"||g.state==="writing"?"Claude is writing…":g.state==="failed"?"Last try failed":!d||!n&&!(d.lines||[]).length?"Not written yet":(d.status==="approved"?"Approved":"Draft")+" · "+n+" shots"+(clips?" · "+clips+" clips":"");
+  return '<div class="adjcard scrcard"><span class="ai">📝</span><div><b>Script & storyboard</b><span>'+esc(st)+'</span></div><button class="btn sm" type="button" data-script="'+esc(it.id)+'">Open</button></div>';
+}
+function scriptBtn(){
+  const bar=$("tPub")&&$("tPub").parentNode; if(!bar) return;
+  let b=$("tScript");
+  if(!b){ b=document.createElement("button"); b.type="button"; b.id="tScript"; b.className="jump"; b.textContent="Script →"; bar.insertBefore(b,$("tVideo")||null); b.onclick=()=>{ if(editingId) openScript(editingId) } }
+  const it=editingId&&items.get(editingId);
+  b.hidden=!it||it.type==="design"||!(isCr()||scripts.has(editingId));
+}
+async function openScript(id){
+  const v=(window.GZ_CONFIG&&GZ_CONFIG.version)||"1";
+  try{ if(!window.gzScript) await loadScript("script.js?v="+v) }catch(e){ toast("Couldn’t open the script. Check your connection."); return }
+  gzScript.open(id,{db,assets,items,scripts,myId,readOnly,toast,esc,who,typeFor,patchItem:(iid,patch)=>{ const it=items.get(iid); if(it) persist(iid,{...it,...patch}) },seriesName:sid=>(SERIES.find(x=>x.id===sid)||{name:"No series"}).name,isHub:isCr()});
+}
+document.addEventListener("click",e=>{ const b=e.target.closest("[data-script]"); if(b){ e.preventDefault(); openScript(b.dataset.script) } });
 let adjLoading=null;
 function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement("script"); s.src=src; s.onload=res; s.onerror=()=>rej(new Error("load")); document.head.appendChild(s) }) }
 async function openAdjust(id){
@@ -766,7 +792,7 @@ function renderDesk(){
   setHTML($("vStatus"),'<div class="banner" style="--k:'+k+'"><div><b>'+esc(head)+'</b><span>'+esc(sub)+'</span></div>'+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>');
 
   const isD=it.type==="design";
-  setHTML($("nasBox"),(isD?"":adjCardHtml(it)+nasBoxHtml(it)+deskCoverHtml(it))+(it.refs.length?'<div class="refs"><b>References</b>'+attHtml(it.refs)+'</div>':""));
+  setHTML($("nasBox"),(isD?"":scrCardHtml(it)+adjCardHtml(it)+nasBoxHtml(it)+deskCoverHtml(it))+(it.refs.length?'<div class="refs"><b>References</b>'+attHtml(it.refs)+'</div>':""));
   setHTML($("vLatest"),latest?verCard(latest,true,it):'<p class="empty">'+(isD?"No design yet.":"No video yet.")+(can?" Add the first "+(isD?"version":"cut")+" below.":" The content team hasn’t added one.")+'</p>');
   setHTML($("vOlder"),vs.length>1?'<details class="older"><summary>Earlier versions ('+(vs.length-1)+')</summary>'+vs.slice(1).map(v=>verCard(v,false,it)).join("")+'</details>':"");
   $("vVideoRows").hidden=isD; $("vAttTxt").textContent=isD?"+ Images":"+ Files";

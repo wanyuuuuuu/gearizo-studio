@@ -18,6 +18,7 @@ import settings as S  # noqa: E402
 import nas_preview as NP  # noqa: E402
 import autopost  # noqa: E402
 import gz_edit  # noqa: E402
+import gz_script  # noqa: E402
 
 URL, KEY = S.URL, S.KEY
 OWNER_ID = S.OWNER_ID  # the content owner: versions found on the NAS are credited to them
@@ -278,6 +279,10 @@ def run():
     status["sync"], status["autopost"] = S.SYNC, S.AUTOPOST
     with open(os.path.join(S.DATA, "status.json"), "w") as f:
         json.dump(status, f)
+    try:                       # scripts don't need the NAS
+        gz_script.handle_scripts(docs, merge, log)
+    except Exception:
+        log("script ERROR " + traceback.format_exc().strip().replace("\n", " | "))
     if not status["nas_mounted"] or "checking_error" in status:
         return
     items, versions = docs("items"), docs("versions")
