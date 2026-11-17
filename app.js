@@ -415,6 +415,8 @@ async function connect(){
     },()=>{});
     db.collection("edits").onSnapshot(snap=>{
       edits=new Map(snap.docs.filter(x=>x.exists).map(x=>[x.id,x.data()||{}]));
+      if(editingId&&$("dlg")&&$("dlg").open) scriptBtn();
+      if(window.gzScript&&gzScript.isOpen()) gzScript.refresh(edits);
       if(view==="review"&&!(window.gzAdjust&&gzAdjust.isOpen())) render();
       if(window.gzAdjust) edits.forEach((d,id)=>gzAdjust.remote(id,d));
     },()=>{});
@@ -683,7 +685,8 @@ function adjCardHtml(it){
   const d=edits.get(it.id); if(!d||!isCr()) return "";
   const r=d.render||{}, n=Array.isArray(d.layers)?d.layers.length:0;
   const st=r.state==="queued"?"Waiting for the Mac to render":r.state==="rendering"?"Rendering on the Mac…":r.state==="done"?"Rendered v"+r.n+(r.doneAt?" · "+fmtTime(r.doneAt):""):r.state==="failed"?"Last render failed":"";
-  return '<div class="adjcard"><span class="ai">🎛</span><div><b>Adjustable project</b><span>'+n+' layers · subtitles, 花字 and stickers'+(st?" · "+esc(st):"")+'</span></div><button class="btn primary sm" type="button" data-adjust="'+esc(it.id)+'">Adjust</button></div>';
+  const film=d.film&&Array.isArray(d.film.scenes)?d.film.scenes.length:0;
+  return '<div class="adjcard"><span class="ai">'+(film?"🎬":"🎛")+'</span><div><b>'+(film?"Animated video":"Adjustable project")+'</b><span>'+(film?film+" scenes":n+" layers · subtitles, 花字 and stickers")+(st?" · "+esc(st):"")+'</span></div><button class="btn primary sm" type="button" data-adjust="'+esc(it.id)+'">'+(film?"Open":"Adjust")+'</button></div>';
 }
 /* Script & storyboard (script.js, loaded on demand): Claude on the studio Mac writes it from the idea */
 function scrCardHtml(it){
@@ -698,20 +701,24 @@ function scriptBtn(){
   if(!b){ b=document.createElement("button"); b.type="button"; b.id="tScript"; b.className="jump"; b.textContent="Script →"; bar.insertBefore(b,$("tVideo")||null); b.onclick=()=>{ if(editingId) openScript(editingId) } }
   const it=editingId&&items.get(editingId);
   b.hidden=!it||it.type==="design"||!(isCr()||scripts.has(editingId));
+  let a=$("tAdjust");
+  if(!a){ a=document.createElement("button"); a.type="button"; a.id="tAdjust"; a.className="jump"; a.textContent="Adjust →"; bar.insertBefore(a,$("tVideo")||null); a.onclick=()=>{ if(editingId) openAdjust(editingId) } }
+  a.hidden=!it||!isCr()||!edits.has(editingId);
 }
 async function openScript(id){
   const v=(window.GZ_CONFIG&&GZ_CONFIG.version)||"1";
   try{ if(!window.gzScript) await loadScript("script.js?v="+v) }catch(e){ toast("Couldn’t open the script. Check your connection."); return }
-  gzScript.open(id,{db,assets,items,scripts,myId,readOnly,toast,esc,who,typeFor,patchItem:(iid,patch)=>{ const it=items.get(iid); if(it) persist(iid,{...it,...patch}) },seriesName:sid=>(SERIES.find(x=>x.id===sid)||{name:"No series"}).name,isHub:isCr()});
+  gzScript.open(id,{db,assets,items,scripts,edits,openAdjust,myId,readOnly,toast,esc,who,typeFor,patchItem:(iid,patch)=>{ const it=items.get(iid); if(it) persist(iid,{...it,...patch}) },seriesName:sid=>(SERIES.find(x=>x.id===sid)||{name:"No series"}).name,isHub:isCr()});
 }
 document.addEventListener("click",e=>{ const b=e.target.closest("[data-script]"); if(b){ e.preventDefault(); openScript(b.dataset.script) } });
 let adjLoading=null;
 function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement("script"); s.src=src; s.onload=res; s.onerror=()=>rej(new Error("load")); document.head.appendChild(s) }) }
 async function openAdjust(id){
   const v=(window.GZ_CONFIG&&GZ_CONFIG.version)||"1";
-  try{ adjLoading=adjLoading||(async()=>{ if(!window.GZL) await loadScript("gzlayers.js?v="+v); if(!window.gzAdjust) await loadScript("adjust.js?v="+v) })(); await adjLoading }
+  try{ adjLoading=adjLoading||(async()=>{ if(!window.GZL) await loadScript("gzlayers.js?v="+v); if(!window.GZS) await loadScript("gzscenes.js?v="+v); if(!window.gzAdjust) await loadScript("adjust.js?v="+v); if(!document.getElementById("gzsFonts")){ const l=document.createElement("link"); l.id="gzsFonts"; l.rel="stylesheet"; l.href=GZS.fontsHref(); document.head.appendChild(l) } })(); await adjLoading }
   catch(e){ adjLoading=null; toast("Couldn’t open the editor. Check your connection."); return }
-  gzAdjust.open(id,{db,items,edits,myId,readOnly,toast,esc,who,fbFor,attHtml});
+  if($("dlg")&&$("dlg").open) $("dlg").close();
+  gzAdjust.open(id,{db,items,edits,myId,readOnly,toast,esc,who,fbFor,attHtml,assets,typeFor});
 }
 document.addEventListener("click",e=>{ const b=e.target.closest("[data-adjust]"); if(b){ e.preventDefault(); openAdjust(b.dataset.adjust) } });
 function verCard(v,latest,it){

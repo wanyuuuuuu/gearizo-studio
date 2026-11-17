@@ -24,6 +24,107 @@ PROJECTS = os.path.join(S.NAS_ROOT, "Content Video", "Projects")
 GZL = next((p for p in (os.path.join(HERE, "gzlayers.js"), os.path.join(HERE, "..", "gzlayers.js")) if os.path.isfile(p)), os.path.join(HERE, "gzlayers.js"))  # the app's copy, so both draw alike
 RENDER_JS = os.path.join(HERE, "gz_render.mjs")
 PREVIEW_MAX_BYTES = 19_000_000
+CUTOUT = os.path.join(HERE, "cutout")
+MUSIC_DIR = os.path.join(S.NAS_ROOT, "Content Video", "Music")
+AUDIO_EXT = (".mp3", ".m4a", ".wav", ".aac")
+EXT = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "audio/x-m4a": ".m4a",
+       "audio/wav": ".wav", "audio/x-wav": ".wav", "audio/aac": ".aac", "video/mp4": ".mp4"}
+
+
+def _storage(method, oid, data=None, ctype=None):
+    import urllib.request
+    h = {"apikey": S.KEY}
+    if ctype:
+        h["Content-Type"] = ctype
+    req = urllib.request.Request(S.URL + "/storage/v1/object/media/" + oid, data=data, method=method, headers=h)
+    with urllib.request.urlopen(req, timeout=300) as r:
+        return r.read(), (r.headers.get("Content-Type") or "").split(";")[0]
+
+
+def fetch_blob(ref, dest_dir):
+    """A file the app uploaded ("/_blob/<id>") -> a local file in dest_dir."""
+    oid = str(ref).rsplit("/", 1)[-1]
+    data, ct = _storage("GET", oid)
+    os.makedirs(dest_dir, exist_ok=True)
+    p = os.path.join(dest_dir, oid + EXT.get(ct, ""))
+    with open(p, "wb") as f:
+        f.write(data)
+    return p
+
+
+def put_blob(path, ctype):
+    import uuid
+    oid = uuid.uuid4().hex
+    with open(path, "rb") as f:
+        _storage("POST", oid, f.read(), ctype)
+    return "/_blob/" + oid
+
+
+def localize(doc, proj):
+    """Copy of an app-made film with every uploaded picture / voice-over downloaded into proj."""
+    d = json.loads(json.dumps(doc))
+    for x in (d.get("film") or {}).get("scenes", []):
+        g = x.get("data") or {}
+        for k in ("image", "logo"):
+            if str(g.get(k, "")).startswith("/_blob/"):
+                g[k] = os.path.relpath(fetch_blob(g[k], os.path.join(proj, "assets")), proj)
+    a = d.get("audio") or {}
+    for k in ("vo", "bgm"):
+        x = a.get(k) or {}
+        if str(x.get("url", "")).startswith("/_blob/") and not x.get("path"):
+            x["path"] = os.path.relpath(fetch_blob(x["url"], os.path.join(proj, "audio")), proj)
+    return d
+
+
+def handle_cutouts(docs, merge, log):
+    """Product photos uploaded with "remove background": Vision cuts them out, the cut-out replaces the photo."""
+    for item_id, d in docs("edits").items():
+        film = d.get("film") or {}
+        changed = False
+        for x in film.get("scenes", []):
+            g = x.get("data") or {}
+            if g.get("imageCut") != "pending" or not str(g.get("image", "")).startswith("/_blob/"):
+                continue
+            tmp = tempfile.mkdtemp(prefix="gz-cut-")
+            try:
+                src = fetch_blob(g["image"], tmp)
+                out = os.path.join(tmp, "cut.png")
+                if not os.path.isfile(CUTOUT):
+                    raise RuntimeError("the cut-out tool isn't built on this Mac")
+                run([CUTOUT, src, out], timeout=180)
+                g["image"], g["imageCut"] = put_blob(out, "image/png"), "done"
+                log(f"cut out the product photo for {item_id}")
+            except Exception as e:
+                g["imageCut"], g["imageCutError"] = "failed", str(e)[:200]
+                log("cutout ERROR " + str(e)[:300])
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+            changed = True
+        if changed:
+            merge("edits", item_id, {"film": film, "updatedAt": int(time.time() * 1000), "updatedBy": "mac"})
+
+
+def list_music(docs, put):
+    """Background music the team keeps in Content Video/Music on the NAS -> settings/music for the app."""
+    os.makedirs(MUSIC_DIR, exist_ok=True)
+    files = sorted(f for f in os.listdir(MUSIC_DIR) if f.lower().endswith(AUDIO_EXT) and not f.startswith("."))
+    cur = docs("settings").get("music") or {}
+    if [x.get("name") for x in cur.get("files", [])] == files:
+        return
+    out = []
+    for f in files[:200]:
+        try:
+            dur = round(probe_audio(os.path.join(MUSIC_DIR, f)), 1)
+        except Exception:
+            dur = 0
+        out.append({"name": f, "path": "nas:Content Video/Music/" + f, "dur": dur})
+    put("settings", "music", {"files": out, "at": int(time.time() * 1000)})
+
+
+def probe_audio(path):
+    r = subprocess.run([FFMPEG, "-hide_banner", "-i", path], capture_output=True, text=True)
+    m = re.search(r"Duration: (\d+):(\d+):([\d.]+)", r.stderr)
+    return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3)) if m else 0
 
 
 def node_path():
@@ -73,7 +174,8 @@ def audio_args(doc, proj_dir, dur, first_input):
     ins, parts, mix, k = [], [], [], first_input
     bgm, vo = a.get("bgm") or {}, a.get("vo") or {}
     for kind, x in (("bgm", bgm), ("vo", vo)):
-        p = os.path.join(proj_dir, x.get("path", "")) if x.get("path") else ""
+        xp = str(x.get("path") or "")
+        p = os.path.join(S.NAS_ROOT, xp[4:]) if xp.startswith("nas:") else os.path.join(proj_dir, xp) if xp else ""
         if p and not os.path.isfile(p):
             here = os.path.join(HERE, x["path"])
             p = here if os.path.isfile(here) else ""
@@ -192,8 +294,13 @@ def handle_renders(api, docs, merge, log, items, versions, add_file):
             continue
         merge("edits", item_id, {"render": dict(r, state="rendering", startedAt=int(time.time() * 1000))})
         t0 = time.time()
+        work = None
         try:
-            proj = os.path.join(S.NAS_ROOT, d["dir"])
+            if d.get("film") and not d.get("dir"):          # made in the app: everything it needs comes from storage
+                work = proj = tempfile.mkdtemp(prefix="gz-film-")
+                d = localize(d, proj)
+            else:
+                proj = os.path.join(S.NAS_ROOT, d["dir"])
             if not os.path.isdir(proj):
                 raise RuntimeError("project folder not found on the NAS: " + d["dir"])
             n = max([v.get("n", 0) for v in versions.values() if v.get("item") == item_id] or [0]) + 1
@@ -214,6 +321,9 @@ def handle_renders(api, docs, merge, log, items, versions, add_file):
         except Exception as e:
             merge("edits", item_id, {"render": dict(r, state="failed", error=str(e)[:300], doneAt=int(time.time() * 1000))})
             log("render ERROR " + traceback.format_exc().strip().replace("\n", " | "))
+        finally:
+            if work:
+                shutil.rmtree(work, ignore_errors=True)
 
 
 # ---------- sending a project to the app ----------

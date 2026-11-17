@@ -4,7 +4,31 @@
 (function () {
   "use strict";
   const A = window.gzAdjust = {};
-  let db, items, edits, myId, readOnly, toast, esc, who, fbFor, attHtml;
+  let db, items, edits, myId, readOnly, toast, esc, who, fbFor, attHtml, assets, typeFor;
+  /* film mode: an animated video made of gzscenes.js templates (doc.film) instead of a filmed base video */
+  let FM = false, ft = 0, playing = false, playT0 = 0, sc = null, music = null;
+  const SDEF = {
+    hook: { kicker: "", title: "New *title*", sub: "", icon: "sparkle" },
+    iconText: { tag: "", icon: "sparkle", title: "Title", text: "Short explanation" },
+    lens: { heading: "", band: "MICHELIN 205/55 R16 91V", word: "91V", label: "*91V* = load & speed", text: "" },
+    compare: { heading: "", left: { icon: "check", title: "Do", text: "", mark: "yes" }, right: { icon: "cross", title: "Don't", text: "", mark: "no" } },
+    steps: { heading: "How to", steps: [{ icon: "", text: "Step one" }, { icon: "", text: "Step two" }, { icon: "", text: "Step three" }] },
+    stop: { heading: "Stop if:", items: ["First sign", "Second sign"] },
+    endcard: { image: "", title: "*Tagline*", sub: "", cta: "SAVE & SHARE", icon: "box" }
+  };
+  const SFIELDS = {
+    hook: [["kicker", "Label"], ["title", "Title (*star* a word)"], ["sub", "Line under"], ["icon", "Icon", "icon"]],
+    iconText: [["tag", "Label"], ["icon", "Icon", "icon"], ["title", "Title"], ["text", "Text", "area"]],
+    lens: [["heading", "Heading"], ["band", "Printed text"], ["word", "Word to zoom on"], ["label", "Meaning"], ["text", "Extra line"]],
+    compare: [["heading", "Heading"], ["left.title", "Left title"], ["left.text", "Left text"], ["left.icon", "Left icon", "icon"], ["left.mark", "Left mark", "mark"],
+      ["right.title", "Right title"], ["right.text", "Right text"], ["right.icon", "Right icon", "icon"], ["right.mark", "Right mark", "mark"]],
+    steps: [["heading", "Heading"], ["steps", "Steps", "steps"]],
+    stop: [["heading", "Heading"], ["items", "Items (one per line)", "lines"]],
+    endcard: [["image", "Product photo", "image"], ["title", "Tagline"], ["sub", "Product name"], ["cta", "Button"], ["icon", "Drawing if no photo", "icon"]]
+  };
+  const sDur = (x) => Math.max(0.6, Number(x.dur) || (GZS.TPL[x.tpl] || {}).dur || 3);
+  const starts = () => { let a = 0; return doc.film.scenes.map((x) => { const b = a; a += sDur(x); return b; }); };
+  const sceneAt = (t) => { let i = 0; starts().forEach((a, j) => { if (t >= a) i = j; }); return i; };
   const $a = (id) => document.getElementById(id);
   let dlg = null, itemId = null, doc = null, sel = null, k = 1, raf = 0, saveT = null, savedAt = 0, saving = false;
   let hist = [], fut = [], pending = null, tab = "layer", pxs = 40, linkSubs = true;
@@ -13,7 +37,7 @@
   const r2 = (n) => Math.round(n * 100) / 100;
   const fmt = (t) => { t = Math.max(0, t || 0); const m = Math.floor(t / 60), s = t - m * 60; return m + ":" + (s < 10 ? "0" : "") + s.toFixed(1); };
   const cur = () => doc && doc.layers.find((L) => L.id === sel);
-  const now = () => { const v = $a("adjVid"); return v ? v.currentTime || 0 : 0; };
+  const now = () => { if (FM) return ft; const v = $a("adjVid"); return v ? v.currentTime || 0 : 0; };
 
   const STYLE = `
 dialog.adj{width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;padding:0;border:0;background:var(--bg);color:var(--ink);overflow:hidden}
@@ -106,18 +130,25 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
 
   /* ---------- open / close / save ---------- */
   A.open = function (id, ctx) {
-    ({ db, items, edits, myId, readOnly, toast, esc, who, fbFor, attHtml } = ctx);
+    ({ db, items, edits, myId, readOnly, toast, esc, who, fbFor, attHtml, assets, typeFor } = ctx);
     const d = edits.get(id);
     if (!d) { toast("This video has no adjustable project."); return; }
     ensureDom();
     itemId = id; doc = JSON.parse(JSON.stringify(d)); doc.layers = Array.isArray(doc.layers) ? doc.layers : [];
     doc.layers.forEach((L, i) => { if (!L.id) L.id = "L" + i + "-" + Math.random().toString(36).slice(2, 6); });
     sel = null; hist = []; fut = []; pending = null; tab = "layer";
+    FM = !!(doc.film && window.GZS); sc = null; ft = 0; playing = false;
+    if (FM) { doc.w = 1080; doc.h = 1920; doc.audio = doc.audio || {}; doc.dur = GZS.filmDur(doc.film); }
     const it = items.get(id);
-    $a("adjTitle").textContent = "Adjust · " + (it ? (it.code ? it.code + " " : "") + it.title : "video");
+    $a("adjTitle").textContent = (FM ? "Animation · " : "Adjust · ") + (it ? (it.code ? it.code + " " : "") + it.title : "video");
     const v = $a("adjVid");
     v.pause(); v.removeAttribute("src"); v.load();
-    v.setAttribute("src", (doc.base && doc.base.url) || "");
+    if (!FM) v.setAttribute("src", (doc.base && doc.base.url) || "");
+    v.style.display = FM ? "none" : "";
+    let fe = $a("adjFilm");
+    if (!fe) { fe = document.createElement("div"); fe.id = "adjFilm"; fe.style.cssText = "position:absolute;inset:0;pointer-events:none"; $a("adjStage").insertBefore(fe, $a("adjLayers")); }
+    fe.innerHTML = ""; fe._gzs = null; fe.style.display = FM ? "" : "none";
+    if (FM && db) db.collection("settings").doc("music").get().then((r) => { music = r.exists ? (r.data() || {}).files || [] : []; if (sel == null) panel(); }).catch(() => { music = []; });
     $a("adjScrub").max = String(doc.dur || 1);
     const stage = $a("adjStage"); stage.style.width = doc.w + "px"; stage.style.height = doc.h + "px";
     const lay = $a("adjLayers"); lay.innerHTML = ""; lay._gzl = null;
@@ -131,10 +162,11 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     doc.render = d.render; renderStatus();
     if (d.updatedBy !== myId && (d.updatedAt || 0) > savedAt && !saveT && !saving && !pending) {
       doc.layers = JSON.parse(JSON.stringify(d.layers || [])); doc.rev = d.rev; savedAt = d.updatedAt || 0;
+      if (FM && d.film) { doc.film = JSON.parse(JSON.stringify(d.film)); doc.audio = JSON.parse(JSON.stringify(d.audio || {})); doc.dur = GZS.filmDur(doc.film); $a("adjScrub").max = String(doc.dur); if (sc != null && sc >= doc.film.scenes.length) sc = null; }
       if (sel && !cur()) sel = null; panel(); timeline(); draw();
     }
   };
-  function close() { flush(); stop(); $a("adjVid").pause(); dlg.close(); }
+  function close() { flush(); playing = false; stop(); $a("adjVid").pause(); dlg.close(); }
   function changed() {
     $a("adjSaved").textContent = "Saving…";
     clearTimeout(saveT); saveT = setTimeout(flush, 900);
@@ -145,19 +177,21 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     saving = true;
     const t = Date.now();
     try {
-      await db.collection("edits").doc(itemId).update({ layers: doc.layers, rev: (doc.rev || 0) + 1, updatedAt: t, updatedBy: myId || "" });
+      await db.collection("edits").doc(itemId).update(Object.assign({ layers: doc.layers, rev: (doc.rev || 0) + 1, updatedAt: t, updatedBy: myId || "" },
+        FM ? { film: doc.film, audio: doc.audio || {}, dur: GZS.filmDur(doc.film) } : {}));
       doc.rev = (doc.rev || 0) + 1; savedAt = t; $a("adjSaved").textContent = "Saved";
     } catch (e) { $a("adjSaved").textContent = "Couldn’t save. Check your connection."; }
     saving = false;
   }
 
   /* ---------- history ---------- */
-  const snap = () => JSON.stringify(doc.layers);
+  const snap = () => JSON.stringify(FM ? { l: doc.layers, f: doc.film, a: doc.audio || {} } : doc.layers);
+  function restore(str) { const o = JSON.parse(str); if (FM && !Array.isArray(o)) { doc.layers = o.l; doc.film = o.f; doc.audio = o.a; doc.dur = GZS.filmDur(doc.film); $a("adjScrub").max = String(doc.dur); if (sc != null && sc >= doc.film.scenes.length) sc = null; } else doc.layers = o; }
   function mark() { hist.push(snap()); if (hist.length > 120) hist.shift(); fut = []; }
   function begin() { if (!pending) pending = snap(); }
   function commit() { if (pending) { hist.push(pending); if (hist.length > 120) hist.shift(); fut = []; pending = null; } }
-  function undo() { commit(); if (!hist.length) return; fut.push(snap()); doc.layers = JSON.parse(hist.pop()); after(); }
-  function redo() { if (!fut.length) return; hist.push(snap()); doc.layers = JSON.parse(fut.pop()); after(); }
+  function undo() { commit(); if (!hist.length) return; fut.push(snap()); restore(hist.pop()); after(); }
+  function redo() { if (!fut.length) return; hist.push(snap()); restore(fut.pop()); after(); }
   function after() { if (sel && !cur()) sel = null; panel(); timeline(); draw(); changed(); }
 
   /* ---------- drawing ---------- */
@@ -172,6 +206,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
   function draw() {
     if (!doc) return;
     const t = now();
+    if (FM) GZS.render($a("adjFilm"), doc.film, t, {});
     GZL.render($a("adjLayers"), doc, t, {});
     $a("adjTime").textContent = fmt(t) + " / " + fmt(doc.dur);
     if (document.activeElement !== $a("adjScrub")) $a("adjScrub").value = String(t);
@@ -188,13 +223,34 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     box.style.width = r.width + 6 + "px"; box.style.height = r.height + 6 + "px";
   }
   function loop() { draw(); raf = requestAnimationFrame(loop); }
-  function play() { const v = $a("adjVid"); if (v.paused) { v.play().catch(() => {}); } else v.pause(); }
+  function play() {
+    if (FM) {
+      if (playing) { playing = false; stop(); $a("adjPlay").textContent = "▶"; draw(); return; }
+      if (ft >= doc.dur - 0.05) ft = 0;
+      playing = true; playT0 = performance.now() - ft * 1000; $a("adjPlay").textContent = "❚❚"; floop(); return;
+    }
+    const v = $a("adjVid"); if (v.paused) { v.play().catch(() => {}); } else v.pause();
+  }
+  function floop() {
+    if (!playing) return;
+    ft = (performance.now() - playT0) / 1000;
+    if (ft >= doc.dur) { ft = doc.dur; playing = false; $a("adjPlay").textContent = "▶"; draw(); return; }
+    draw(); raf = requestAnimationFrame(floop);
+  }
   function stop() { cancelAnimationFrame(raf); raf = 0; }
-  function seek(t) { const v = $a("adjVid"); v.currentTime = Math.max(0, Math.min(doc.dur || 0, t)); draw(); }
+  function seek(t) {
+    if (FM) { ft = Math.max(0, Math.min(doc.dur || 0, t)); if (playing) playT0 = performance.now() - ft * 1000; draw(); if (!cur() && tab === "layer" && sc == null) panel(); return; }
+    const v = $a("adjVid"); v.currentTime = Math.max(0, Math.min(doc.dur || 0, t)); draw();
+  }
+  function selectScene(i, jump) {
+    commit(); sel = null; sc = i; tab = "layer"; panel(); timeline();
+    if (jump) { const a = starts()[i]; if (now() < a || now() >= a + sDur(doc.film.scenes[i])) seek(a + Math.min(1.4, sDur(doc.film.scenes[i]) * 0.6)); }
+    draw();
+  }
 
   /* ---------- selecting and changing layers ---------- */
   function select(id, jump) {
-    commit(); sel = id; tab = "layer"; panel(); timeline();
+    commit(); sel = id; if (id) sc = null; tab = "layer"; panel(); timeline();
     const L = cur();
     if (L && jump) { const t = now(); if (t < L.start || t >= L.end) seek(L.start + Math.min(0.3, (L.end - L.start) / 2)); }
     draw();
@@ -247,6 +303,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       return;
     }
     const L = cur();
+    if (!L && FM) { pan.innerHTML = scenePanel(sc == null ? sceneAt(now()) : sc); pan.querySelectorAll("textarea").forEach((x) => { x.style.height = "auto"; x.style.height = x.scrollHeight + 2 + "px"; }); return; }
     if (!L) {
       const t = now(), vis = doc.layers.filter((x) => t >= x.start && t < x.end);
       const list = (arr) => '<div class="adj-list">' + arr.map((x) => '<button type="button" data-pick="' + esc(x.id) + '"><span class="tm">' + fmt(x.start).replace(/\.\d$/, "") + '</span><span class="nm">' + esc(x.kind === "text" ? x.text : (x.name || x.kind)) + "</span></button>").join("") + "</div>";
@@ -283,6 +340,36 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     h += '<div class="row"><button class="btn sm" type="button" data-a="dup">Duplicate</button><button class="btn sm" type="button" data-a="front">To front</button><button class="btn sm" type="button" data-a="back">To back</button><button class="btn sm ghost danger" type="button" data-a="del">Remove</button><button class="btn sm ghost" type="button" data-a="desel">Done</button></div>';
     pan.innerHTML = h;
   }
+  function scenePanel(i) {
+    const n = doc.film.scenes.length, S = doc.film.scenes[i]; if (!S) return '<p class="hint">No scenes.</p>';
+    const g = S.data || {}, au = doc.audio || {}, bg = (au.bgm || {});
+    const icons = (k, v) => '<select data-sk="' + k + '">' + GZS.ICONS.map((x) => opt(x, v || "sparkle", x)).join("") + "</select>";
+    let h = '<h4>Scene ' + (i + 1) + " of " + n + (sc == null ? " · on screen now" : "") + "</h4>" +
+      field("Template", '<select data-sa="tpl">' + GZS.catalog().map((c) => opt(c.id, S.tpl, c.name)).join("") + "</select>") +
+      field("Length", '<input type="number" data-sa="dur" min="0.6" max="30" step="0.1" value="' + r2(sDur(S)) + '"> s') +
+      (i ? field("Comes in by", '<select data-sa="trans">' + opt("slide", S.trans || "slide", "Slide") + opt("zoom", S.trans, "Zoom") + opt("wipe", S.trans, "Wipe") + "</select>") : "");
+    (SFIELDS[S.tpl] || []).forEach(([k, label, kind]) => {
+      const v = getPath(g, k);
+      if (kind === "icon") h += field(label, icons(k, v));
+      else if (kind === "mark") h += field(label, '<select data-sk="' + k + '">' + opt("", v || "", "None") + opt("yes", v, "✓ Right") + opt("no", v, "✗ Wrong") + "</select>");
+      else if (kind === "area") h += '<label class="hint">' + label + '</label><textarea data-sk="' + k + '" rows="2">' + esc(v || "") + "</textarea>";
+      else if (kind === "lines") h += '<label class="hint">' + label + '</label><textarea data-sk="' + k + '" data-lines="1" rows="4">' + esc((v || []).join("\n")) + "</textarea>";
+      else if (kind === "steps") h += '<label class="hint">' + label + "</label>" + (v || []).map((x, j) => '<div class="row">' + '<select data-sk="steps.' + j + '.icon"><option value="">No icon</option>' + GZS.ICONS.map((y) => opt(y, x.icon || "", y)).join("") + '</select><input type="text" data-sk="steps.' + j + '.text" value="' + esc(x.text || "") + '" style="flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit"><button class="btn sm ghost" type="button" data-a="stepdel" data-i="' + j + '" aria-label="Remove step">×</button></div>').join("") + (readOnly ? "" : '<div class="row"><button class="btn sm ghost" type="button" data-a="stepadd">+ Step</button></div>');
+      else if (kind === "image") {
+        const st = g.imageCut === "pending" ? "The studio Mac is removing the background (within 3 minutes)…" : g.imageCut === "failed" ? "Couldn’t remove the background: " + (g.imageCutError || "") : "";
+        h += '<label class="hint">' + label + '</label><div class="row">' + (g.image ? '<img src="' + esc(g.image.startsWith("/_blob/") || /^https?:/.test(g.image) || g.image.startsWith("brand/") ? g.image : "") + '" alt="" style="width:84px;height:84px;object-fit:contain;background:var(--sunk);border-radius:10px">' : '<span class="hint">No photo: a drawing is used.</span>') + "</div>" +
+          (readOnly || !assets ? "" : '<div class="row"><label class="btn sm">' + (g.image ? "Replace photo" : "Upload photo") + '<input type="file" class="adj-up" accept="image/png,image/jpeg,image/webp" hidden></label>' + (g.image ? '<button class="btn sm ghost" type="button" data-a="nophoto">No photo</button>' : "") + '</div><label class="chk"><input type="checkbox" id="adjCut" checked> Remove the white background (done on the studio Mac)</label>') +
+          (st ? '<p class="hint">' + esc(st) + "</p>" : "");
+      } else h += field(label, '<input type="text" data-sk="' + k + '" value="' + esc(v || "") + '" style="flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit">');
+    });
+    if (!readOnly) h += '<div class="row"><button class="btn sm" type="button" data-a="sadd">+ Scene after</button><button class="btn sm" type="button" data-a="sdup">Duplicate</button><button class="btn sm" type="button" data-a="sup" aria-label="Move earlier">↑</button><button class="btn sm" type="button" data-a="sdown" aria-label="Move later">↓</button><button class="btn sm ghost danger" type="button" data-a="sdel">Remove</button></div>';
+    h += "<h4>Whole video</h4>" + field("Look", '<select data-fa="theme">' + Object.keys(GZS.THEMES).map((t) => opt(t, doc.film.theme || "paper", GZS.THEMES[t].name)).join("") + "</select>") +
+      field("Music", '<select data-fa="bgm"><option value="">None</option>' + (music || []).map((m) => opt(m.path, bg.path || "", m.name + (m.dur ? " (" + Math.round(m.dur) + "s)" : ""))).join("") + "</select>") +
+      (bg.path ? field("Music volume", rng("bgmVol", r2(bg.vol == null ? 0.35 : bg.vol), 0, 1, 0.05).replace(/data-k=/g, "data-fa=")) : "") +
+      '<p class="hint">' + (music && music.length ? "" : music ? "No songs yet. " : "Loading songs… ") + "Put songs in the NAS folder <b>Content Video/Music</b>; the studio Mac lists them every 3 minutes. Music plays in the rendered video, not in this preview.</p>" +
+      '<p class="hint">Tap a scene on the timeline to edit it. “+ Text” adds 花字 on top, like other videos.</p>';
+    return h;
+  }
   function syncFields() { const L = cur(); if (!L) return; $a("adjPan").querySelectorAll('[data-k="x"],[data-k="y"],[data-k="s"],[data-k="start"],[data-k="end"]').forEach((i) => { if (document.activeElement === i) return; const v = getPath(L, i.dataset.k); i.value = i.dataset.k === "x" || i.dataset.k === "y" ? Math.round(v || 0) : r2(v == null ? (i.dataset.k === "s" ? 1 : 0) : v); }); }
 
   /* ---------- timeline ---------- */
@@ -296,6 +383,11 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     const names = $a("adjTlNames"), tin = $a("adjTlin"), W = Math.max(1, doc.dur) * pxs;
     let nh = "", th = "";
     const C = { sub: "#4A6159", text: "#EC4E8E", media: "#E8772E" };
+    if (FM) {
+      const st = starts(), cur2 = sc == null ? sceneAt(now()) : sc;
+      nh += "<div>动画 Scenes</div>";
+      th += '<div class="adj-tlrow" style="width:' + W + 'px">' + doc.film.scenes.map((x, i) => '<div class="adj-blk' + (i === cur2 && sel == null ? " on" : "") + '" data-scn="' + i + '" style="--c:#7C4DFF;left:' + st[i] * pxs + "px;width:" + Math.max(6, sDur(x) * pxs - 2) + 'px" title="' + esc((GZS.TPL[x.tpl] || {}).name || x.tpl) + '">' + (i + 1) + " · " + esc(((GZS.TPL[x.tpl] || {}).name || x.tpl).split(" ")[0]) + "</div>").join("") + "</div>";
+    }
     ROWS.forEach((row) => {
       const list = doc.layers.filter((L) => rowOf(L) === row.id), ln = lanes(list);
       for (let i = 0; i < ln.n; i++) {
@@ -331,6 +423,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       const sk = e.target.closest("[data-seek]"); if (sk) { seek(Number(sk.dataset.seek)); return; }
       if (!b) return;
       const a = b.dataset.a, L = cur();
+      if (FM && /^(sadd|sdup|sdel|sup|sdown|stepadd|stepdel|nophoto)$/.test(a)) { sceneAction(a === "stepdel" ? "stepdel:" + b.dataset.i : a); return; }
       if (a === "close") close();
       else if (a === "play") play();
       else if (a === "undo") undo();
@@ -350,7 +443,8 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
 
     const pan = $a("adjPan");
     pan.addEventListener("input", (e) => {
-      const i = e.target; if (i.id === "adjLink") return;
+      const i = e.target; if (i.id === "adjLink" || i.id === "adjCut") return;
+      if (FM && (i.dataset.sk != null || i.dataset.sa || i.dataset.fa)) { sceneInput(i); return; }
       const key = i.dataset.k; if (!key) return;
       begin();
       let val = i.type === "checkbox" ? i.checked : i.value;
@@ -359,7 +453,10 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       pan.querySelectorAll('[data-k="' + key + '"]').forEach((o) => { if (o !== i && o.type !== "checkbox") o.value = String(val); });
       if (key === "text") timeline();
     });
-    pan.addEventListener("change", (e) => { if (e.target.id === "adjLink") { linkSubs = e.target.checked; return; } commit(); });
+    pan.addEventListener("change", (e) => {
+      if (e.target.classList.contains("adj-up") && e.target.files && e.target.files[0]) { uploadPhoto(e.target.files[0]); return; }
+      if (e.target.id === "adjLink") { linkSubs = e.target.checked; return; } commit();
+    });
     pan.addEventListener("focusout", commit);
 
     // dragging on the video
@@ -368,7 +465,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     const toVideo = (e) => { const b = $a("adjBox").getBoundingClientRect(); return { x: (e.clientX - b.left) / k, y: (e.clientY - b.top) / k }; };
     lay.addEventListener("pointerdown", (e) => {
       const el = e.target.closest(".gzl");
-      if (!el) { if (sel) select(null); return; }
+      if (!el) { if (FM) selectScene(sceneAt(now())); else if (sel) select(null); return; }
       e.preventDefault();
       if (el.dataset.id !== sel) select(el.dataset.id);
       const L = cur(); if (!L) return;
@@ -412,6 +509,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     // timeline: click to seek, drag blocks to move/trim
     const tlx = $a("adjTlx"); let td = null;
     tlx.addEventListener("pointerdown", (e) => {
+      const scn = e.target.closest("[data-scn]"); if (scn) { selectScene(Number(scn.dataset.scn), true); return; }
       const blk = e.target.closest(".adj-blk"), r = $a("adjTlin").getBoundingClientRect(), t = (e.clientX - r.left) / pxs;
       if (!blk) { seek(t); return; }
       e.preventDefault();
@@ -445,6 +543,55 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       const m = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
       if (m) { e.preventDefault(); begin(); const n = e.shiftKey ? 10 : 2; targets(L, "x").forEach((o) => { o.x += m[0] * n; o.y += m[1] * n; }); draw(); syncFields(); changed(); clearTimeout(A._kt); A._kt = setTimeout(commit, 600); }
     });
+  }
+
+  function sceneInput(i) {
+    begin();
+    const idx = sc == null ? sceneAt(now()) : sc, S = doc.film.scenes[idx]; let v = i.value;
+    if (i.dataset.sk != null) {
+      if (i.dataset.lines) v = v.split("\n").map((x) => x.trim()).filter(Boolean);
+      S.data = S.data || {}; setPath(S.data, i.dataset.sk, v);
+    } else if (i.dataset.sa === "dur") {
+      v = Number(v); if (!(v > 0)) return;
+      S.dur = Math.max(0.6, Math.min(30, v)); doc.dur = GZS.filmDur(doc.film); $a("adjScrub").max = String(doc.dur); timeline();
+    } else if (i.dataset.sa === "tpl") {
+      const old = S.data || {}, keep = old.title || old.heading || "";
+      S.tpl = v; S.dur = GZS.TPL[v].dur; S.data = JSON.parse(JSON.stringify(SDEF[v]));
+      if (keep) { if ("title" in S.data) S.data.title = keep; if ("heading" in S.data) S.data.heading = keep; }
+      if (old.image && "image" in S.data) S.data.image = old.image;
+      doc.dur = GZS.filmDur(doc.film); $a("adjScrub").max = String(doc.dur); sc = idx; panel(); timeline();
+    } else if (i.dataset.sa) S[i.dataset.sa] = v;
+    else if (i.dataset.fa === "theme") doc.film.theme = v;
+    else if (i.dataset.fa === "bgm") { doc.audio = doc.audio || {}; doc.audio.bgm = v ? { path: v, vol: (doc.audio.bgm && doc.audio.bgm.vol != null) ? doc.audio.bgm.vol : 0.35 } : null; sc = idx; panel(); }
+    else if (i.dataset.fa === "bgmVol") { if (doc.audio && doc.audio.bgm) doc.audio.bgm.vol = Number(v); }
+    draw(); changed();
+  }
+  function sceneAction(a) {
+    const idx = sc == null ? sceneAt(now()) : sc, list = doc.film.scenes, S = list[idx];
+    if (a === "stepadd") { mark(); (S.data.steps = S.data.steps || []).push({ icon: "", text: "New step" }); }
+    else if (a.startsWith("stepdel:")) { mark(); S.data.steps.splice(Number(a.slice(8)), 1); }
+    else if (a === "nophoto") { mark(); S.data.image = ""; delete S.data.imageCut; }
+    else if (a === "sadd") { mark(); list.splice(idx + 1, 0, { id: "s" + Date.now().toString(36), tpl: "iconText", dur: GZS.TPL.iconText.dur, trans: "slide", data: JSON.parse(JSON.stringify(SDEF.iconText)) }); sc = idx + 1; }
+    else if (a === "sdup") { mark(); const c = JSON.parse(JSON.stringify(S)); c.id = "s" + Date.now().toString(36); list.splice(idx + 1, 0, c); sc = idx + 1; }
+    else if (a === "sdel") { if (list.length < 2) { toast("A video needs at least one scene."); return; } mark(); list.splice(idx, 1); sc = Math.min(idx, list.length - 1); }
+    else if (a === "sup" && idx > 0) { mark(); [list[idx - 1], list[idx]] = [list[idx], list[idx - 1]]; sc = idx - 1; }
+    else if (a === "sdown" && idx < list.length - 1) { mark(); [list[idx + 1], list[idx]] = [list[idx], list[idx + 1]]; sc = idx + 1; }
+    else return;
+    doc.dur = GZS.filmDur(doc.film); $a("adjScrub").max = String(doc.dur);
+    panel(); timeline(); if (a !== "stepadd" && !a.startsWith("stepdel") && a !== "nophoto") seek(starts()[sc] + Math.min(1.4, sDur(list[sc]) * 0.6)); draw(); changed();
+  }
+  async function uploadPhoto(file) {
+    const idx = sc == null ? sceneAt(now()) : sc, S = doc.film.scenes[idx];
+    if (!typeFor(file) || !/^image\//.test(typeFor(file))) { toast("Use a PNG, JPG or WebP photo."); return; }
+    if (file.size > 20 * 1024 * 1024) { toast("Keep the photo under 20 MB."); return; }
+    try {
+      toast("Uploading…");
+      const r = await assets.upload(file, { type: typeFor(file) });
+      mark(); S.data.image = r.url;
+      if ($a("adjCut") && $a("adjCut").checked) S.data.imageCut = "pending"; else delete S.data.imageCut;
+      sc = idx; panel(); draw(); changed(); await flush();
+      toast(S.data.imageCut ? "Uploaded. The studio Mac removes the background within 3 minutes." : "Photo added.");
+    } catch (e) { toast("Upload failed. Try again."); }
   }
 
   /* ---------- render on the Mac ---------- */

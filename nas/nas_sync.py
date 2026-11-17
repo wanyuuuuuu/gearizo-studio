@@ -282,6 +282,7 @@ def run():
         json.dump(status, f)
     try:                       # scripts don't need the NAS
         gz_script.handle_scripts(docs, merge, log)
+        gz_script.handle_films(docs, merge, put, log)
     except Exception:
         log("script ERROR " + traceback.format_exc().strip().replace("\n", " | "))
     if not status["nas_mounted"] or "checking_error" in status:
@@ -298,6 +299,11 @@ def run():
             clean_previews(items, versions)
         except Exception:
             log("cleanup ERROR " + traceback.format_exc().strip().replace("\n", " | "))
+        try:
+            gz_edit.list_music(docs, put)
+            gz_edit.handle_cutouts(docs, merge, log)
+        except Exception:
+            log("music/cutout ERROR " + traceback.format_exc().strip().replace("\n", " | "))
         try:
             gz_edit.handle_renders(api, docs, merge, log, items, versions, add_file)
         except Exception:

@@ -109,9 +109,9 @@ def build_prompt(it, series, req, current):
     return "\n".join(p)
 
 
-def ask_claude(prompt):
+def ask_claude(prompt, system=None):
     cmd = [claude_path(), "-p", "--output-format", "json", "--no-session-persistence", "--tools", "", "--strict-mcp-config",
-           "--setting-sources", "", "--system-prompt", SYSTEM]
+           "--setting-sources", "", "--system-prompt", system or SYSTEM]
     env = dict(os.environ, PATH=os.path.dirname(claude_path()) + ":" + os.environ.get("PATH", "/usr/bin:/bin"))
     r = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=900, cwd=os.path.expanduser("~"), env=env)
     try:
@@ -181,6 +181,114 @@ def handle_scripts(docs, merge, log, items=None):
         except Exception as e:
             merge("scripts", item_id, {"gen": dict(g, state="failed", error=str(e)[:300], doneAt=now())})
             log("script ERROR " + traceback.format_exc().strip().replace("\n", " | ")[-600:])
+
+
+# ---------- the script → an animated film made of the gzscenes.js templates ----------
+TEMPLATES = """hook      Opening hook. data {kicker?: series/label, title: the hook with one *highlight*, sub?: one short line, icon}
+iconText  One point explained. data {tag?: short label, icon, title, text: 1-2 short sentences}
+lens      Magnifier on small print (tyre sidewall, labels). data {heading?, band: the printed text e.g. "MICHELIN 80/90-14 M/C 46P TUBELESS", word: one word from band to zoom on, label: what it means with *highlight*, text?}
+compare   Two things side by side. data {heading?, left:{icon,title,text,mark}, right:{icon,title,text,mark}}  mark = "yes" | "no" | "" (right/wrong)
+steps     How-to, 2-5 steps. data {heading, steps:[{icon?, text}]}
+stop      Don'ts / danger signs, 2-6 items. data {heading, items:[text]}
+endcard   Last scene: product + Gearizo logo + tagline. data {title: tagline with *highlight*, sub?: product name, cta?: e.g. "SAVE & SHARE", icon: fallback drawing if no product photo}"""
+ICON_LIST = "tyre tube nail inflator rimSpoke rimSport car motorbike wiper gauge thermo sticker warning clock check cross box leak patch shop push sparkle phone battery bolt"
+TPL_IDS = {"hook", "iconText", "lens", "compare", "steps", "stop", "endcard"}
+FILM_SYSTEM = """You turn a short-video script into an animated explainer made ONLY of these templates (vertical 1080x1920):
+""" + TEMPLATES + """
+Icons available (use exactly these names): """ + ICON_LIST + """
+Return ONE JSON object, nothing else:
+{"theme": "paper" | "pink", "scenes": [{"tpl": "...", "dur": seconds, "trans": "slide" | "zoom" | "wipe", "data": {...}}]}
+Rules:
+- Follow the script's order and timing; one scene per idea, 3-8 s each; durations add up to the script length (±10%).
+- Start with hook, end with endcard. Use steps/stop/compare/lens where they fit; iconText for everything else.
+- On-screen text is SHORT (titles <= 6 words, lines <= 10 words) in the script's language. Mark one key word per title with *stars*.
+- Vary transitions; "slide" is the default. The first scene's trans is ignored.
+- theme "paper" (workshop paper, green/orange) unless the team asks for pink/brand colours."""
+
+
+def build_film_prompt(it, sc, req):
+    keep = {k: sc.get(k) for k in ("title", "length", "lang", "style", "cover", "summary", "lines", "shots")}
+    for x in keep.get("shots") or []:
+        x.pop("clip", None); x.pop("first", None); x.pop("motion", None)
+    p = ["VIDEO: " + (it.get("code") or "") + " " + (it.get("title") or ""), "SCRIPT:\n" + json.dumps(keep, ensure_ascii=False)[:12000]]
+    if it.get("product"):
+        p.append("Product: " + it["product"])
+    if (req.get("steer") or "").strip():
+        p.append("THE TEAM ASKS: " + req["steer"].strip()[:1500])
+    p.append("Return only the JSON object.")
+    return "\n\n".join(p)
+
+
+def clean_film(d):
+    icons = set(ICON_LIST.split())
+    s = lambda v, n=300: str(v if v is not None else "")[:n]
+    ic = lambda v: v if v in icons else "sparkle"
+    out = []
+    for x in (d.get("scenes") or [])[:20]:
+        tpl = x.get("tpl") if x.get("tpl") in TPL_IDS else "iconText"
+        g = x.get("data") or {}
+        if tpl == "hook":
+            data = {"kicker": s(g.get("kicker"), 40), "title": s(g.get("title"), 120), "sub": s(g.get("sub"), 160), "icon": ic(g.get("icon"))}
+        elif tpl == "iconText":
+            data = {"tag": s(g.get("tag"), 40), "icon": ic(g.get("icon")), "title": s(g.get("title"), 120), "text": s(g.get("text"), 220)}
+        elif tpl == "lens":
+            data = {"heading": s(g.get("heading"), 80), "band": s(g.get("band"), 80), "word": s(g.get("word"), 30), "label": s(g.get("label"), 80), "text": s(g.get("text"), 160)}
+        elif tpl == "compare":
+            side = lambda v: {"icon": ic((v or {}).get("icon")), "title": s((v or {}).get("title"), 40), "text": s((v or {}).get("text"), 90),
+                              "mark": (v or {}).get("mark") if (v or {}).get("mark") in ("yes", "no") else ""}
+            data = {"heading": s(g.get("heading"), 80), "left": side(g.get("left")), "right": side(g.get("right"))}
+        elif tpl == "steps":
+            data = {"heading": s(g.get("heading"), 80), "steps": [{"icon": ic(y.get("icon")) if y.get("icon") else "", "text": s(y.get("text"), 90)}
+                                                                 for y in (g.get("steps") or [])[:5] if isinstance(y, dict)]}
+        elif tpl == "stop":
+            data = {"heading": s(g.get("heading"), 80), "items": [s(y, 70) for y in (g.get("items") or [])[:6]]}
+        else:
+            data = {"title": s(g.get("title"), 120), "sub": s(g.get("sub"), 80), "cta": s(g.get("cta"), 30), "icon": ic(g.get("icon") or "box"), "image": ""}
+        try:
+            dur = max(1.5, min(15, float(x.get("dur") or 4)))
+        except (TypeError, ValueError):
+            dur = 4
+        out.append({"id": f"s{len(out) + 1}", "tpl": tpl, "dur": round(dur, 2), "trans": x.get("trans") if x.get("trans") in ("slide", "zoom", "wipe") else "slide", "data": data})
+    return {"theme": d.get("theme") if d.get("theme") in ("paper", "pink") else "paper", "scenes": out}
+
+
+def handle_films(docs, merge, put, log):
+    rows = docs("scripts")
+    todo = [(k, v) for k, v in rows.items() if (v.get("filmGen") or {}).get("state") == "queued"]
+    if not todo:
+        return
+    items, edits = docs("items"), docs("edits")
+    now = lambda: int(time.time() * 1000)
+    for item_id, sc in todo[:1]:
+        g = sc.get("filmGen") or {}
+        it = items.get(item_id)
+        if not it or not (sc.get("lines") or sc.get("shots")):
+            merge("scripts", item_id, {"filmGen": dict(g, state="failed", error="Write the script first.", doneAt=now())})
+            continue
+        merge("scripts", item_id, {"filmGen": dict(g, state="writing", startedAt=now())})
+        t0 = time.time()
+        try:
+            film = clean_film(ask_claude(build_film_prompt(it, sc, g), FILM_SYSTEM))
+            if not film["scenes"]:
+                raise RuntimeError("Claude returned no scenes")
+            old = edits.get(item_id) or {}
+            if old.get("film"):                       # keep pictures the team already put in
+                imgs = [x.get("data", {}).get("image") for x in old["film"].get("scenes", []) if x.get("tpl") == "endcard" and x.get("data", {}).get("image")]
+                for x in film["scenes"]:
+                    if x["tpl"] == "endcard" and imgs:
+                        x["data"]["image"] = imgs[0]
+            dur = round(sum(x["dur"] for x in film["scenes"]), 2)
+            doc = dict(old if old.get("film") else {}, item=item_id, film=film, w=1080, h=1920, fps=30, dur=dur,
+                       layers=old.get("layers", []) if old.get("film") else [], audio=old.get("audio", {}) if old.get("film") else {},
+                       rev=int(old.get("rev") or 0) + 1, updatedAt=now(), updatedBy="claude", render=old.get("render") or {"state": "idle"})
+            if old and not old.get("film"):
+                raise RuntimeError("This video already has a filmed project (Adjust). Make the animation on another video, or ask to replace it.")
+            put("edits", item_id, doc)
+            merge("scripts", item_id, {"filmGen": dict(g, state="done", scenes=len(film["scenes"]), secs=int(time.time() - t0), doneAt=now(), error="")})
+            log(f"film: {it.get('code', '')} {it.get('title', '')} -> {len(film['scenes'])} scenes in {int(time.time() - t0)} s")
+        except Exception as e:
+            merge("scripts", item_id, {"filmGen": dict(g, state="failed", error=str(e)[:300], doneAt=now())})
+            log("film ERROR " + traceback.format_exc().strip().replace("\n", " | ")[-600:])
 
 
 if __name__ == "__main__":
