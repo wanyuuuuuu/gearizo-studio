@@ -6,7 +6,7 @@
   const A = window.gzAdjust = {};
   let db, items, edits, myId, readOnly, toast, esc, who, fbFor, attHtml, assets, typeFor;
   /* film mode: an animated video made of gzscenes.js templates (doc.film) instead of a filmed base video */
-  let FM = false, ft = 0, playing = false, playT0 = 0, sc = null, music = null, part = null;
+  let FM = false, ft = 0, playing = false, playT0 = 0, sc = null, music = null, part = null, sfxFiles = null, fxSel = null;
   const SDEF = {
     hook: { kicker: "", title: "New *title*", sub: "", icon: "sparkle" },
     iconText: { tag: "", icon: "sparkle", title: "Title", text: "Short explanation" },
@@ -103,6 +103,8 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
 .adj-blk.on{background:var(--c);color:#fff}
 .adj-blk i{position:absolute;top:0;bottom:0;width:7px;cursor:ew-resize}
 .adj-blk i.l{left:0} .adj-blk i.r{right:0}
+.adj-fx{font-size:10.5px;padding:0 3px;text-align:center}
+.adj-fx.off{opacity:.35}
 .adj-ph{position:absolute;top:0;bottom:0;width:2px;background:var(--pink);pointer-events:none;z-index:2}
 @media (max-width:900px){.adj-body{grid-template-columns:1fr;grid-template-rows:minmax(260px,55vh) auto;overflow:auto}.adj-side{border-left:0;border-top:1px solid var(--line)}.adj-tlsc{grid-template-columns:70px minmax(0,1fr)}}
 `;
@@ -149,7 +151,9 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     let fe = $a("adjFilm");
     if (!fe) { fe = document.createElement("div"); fe.id = "adjFilm"; fe.style.cssText = "position:absolute;inset:0;pointer-events:none"; $a("adjStage").insertBefore(fe, $a("adjLayers")); }
     fe.innerHTML = ""; fe._gzs = null; fe.style.display = FM ? "" : "none";
-    if (FM && db) db.collection("settings").doc("music").get().then((r) => { music = r.exists ? (r.data() || {}).files || [] : []; if (sel == null) panel(); }).catch(() => { music = []; });
+    fxSel = null; stopAudio();
+    if (FM && db) db.collection("settings").doc("music").get().then((r) => { music = r.exists ? (r.data() || {}).files || [] : []; if (sel == null) panel(); preloadAudio(); }).catch(() => { music = []; });
+    if (FM && db) db.collection("settings").doc("sfx").get().then((r) => { sfxFiles = r.exists ? (r.data() || {}).files || [] : []; if (sel == null) panel(); timeline(); preloadAudio(); }).catch(() => { sfxFiles = []; });
     $a("adjScrub").max = String(doc.dur || 1);
     const stage = $a("adjStage"); stage.style.width = doc.w + "px"; stage.style.height = doc.h + "px";
     const lay = $a("adjLayers"); lay.innerHTML = ""; lay._gzl = null;
@@ -172,7 +176,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       if (sel && !cur()) sel = null; panel(); timeline(); draw();
     }
   };
-  function close() { flush(); playing = false; stop(); $a("adjVid").pause(); dlg.close(); if (actx && actx.onClose) setTimeout(actx.onClose, 0); }
+  function close() { flush(); playing = false; stop(); stopAudio(); $a("adjVid").pause(); dlg.close(); if (actx && actx.onClose) setTimeout(actx.onClose, 0); }
   function changed() {
     $a("adjSaved").textContent = "Saving…";
     clearTimeout(saveT); saveT = setTimeout(flush, 900);
@@ -242,25 +246,25 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
   function loop() { draw(); raf = requestAnimationFrame(loop); }
   function play() {
     if (FM) {
-      if (playing) { playing = false; stop(); $a("adjPlay").textContent = "▶"; draw(); return; }
+      if (playing) { playing = false; stop(); stopAudio(); $a("adjPlay").textContent = "▶"; draw(); return; }
       if (ft >= doc.dur - 0.05) ft = 0;
-      playing = true; playT0 = performance.now() - ft * 1000; $a("adjPlay").textContent = "❚❚"; floop(); return;
+      playing = true; playT0 = performance.now() - ft * 1000 + 60; $a("adjPlay").textContent = "❚❚"; startAudio(ft); floop(); return;
     }
     const v = $a("adjVid"); if (v.paused) { v.play().catch(() => {}); } else v.pause();
   }
   function floop() {
     if (!playing) return;
     ft = (performance.now() - playT0) / 1000;
-    if (ft >= doc.dur) { ft = doc.dur; playing = false; $a("adjPlay").textContent = "▶"; draw(); return; }
+    if (ft >= doc.dur) { ft = doc.dur; playing = false; stopAudio(); $a("adjPlay").textContent = "▶"; draw(); return; }
     draw(); raf = requestAnimationFrame(floop);
   }
   function stop() { cancelAnimationFrame(raf); raf = 0; }
   function seek(t) {
-    if (FM) { ft = Math.max(0, Math.min(doc.dur || 0, t)); if (playing) playT0 = performance.now() - ft * 1000; draw(); if (!cur() && tab === "layer" && sc == null) panel(); return; }
+    if (FM) { ft = Math.max(0, Math.min(doc.dur || 0, t)); if (playing) { playT0 = performance.now() - ft * 1000 + 60; startAudio(ft); } draw(); if (!cur() && tab === "layer" && sc == null) panel(); return; }
     const v = $a("adjVid"); v.currentTime = Math.max(0, Math.min(doc.dur || 0, t)); draw();
   }
   function selectScene(i, jump, key) {
-    commit(); sel = null; sc = i; tab = "layer";
+    commit(); sel = null; sc = i; tab = "layer"; fxSel = null;
     const S = doc.film.scenes[i], ps = (GZS.TPL[S && S.tpl] || {}).parts || [];
     part = key !== undefined ? key : ps.some((x) => x[0] === part) ? part : null;
     panel(); timeline();
@@ -270,7 +274,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
 
   /* ---------- selecting and changing layers ---------- */
   function select(id, jump) {
-    commit(); sel = id; if (id) sc = null; tab = "layer"; panel(); timeline();
+    commit(); sel = id; if (id) { sc = null; fxSel = null; } tab = "layer"; panel(); timeline();
     const L = cur();
     if (L && jump) { const t = now(); if (t < L.start || t >= L.end) seek(L.start + Math.min(0.3, (L.end - L.start) / 2)); }
     draw();
@@ -323,6 +327,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       return;
     }
     const L = cur();
+    if (!L && FM && fxSel) { const fh = fxPanel(); if (fh) { pan.innerHTML = fh; return; } }
     if (!L && FM) { pan.innerHTML = scenePanel(sc == null ? sceneAt(now()) : sc); pan.querySelectorAll("textarea").forEach((x) => { x.style.height = "auto"; x.style.height = x.scrollHeight + 2 + "px"; }); return; }
     if (!L) {
       const t = now(), vis = doc.layers.filter((x) => t >= x.start && t < x.end);
@@ -398,12 +403,110 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       }
     }
     h += "<h4>Whole video</h4>" + field("Look", '<select data-fa="theme">' + Object.keys(GZS.THEMES).map((t) => opt(t, doc.film.theme || "paper", GZS.THEMES[t].name)).join("") + "</select>") +
-      field("Music", '<select data-fa="bgm"><option value="">None</option>' + (music || []).map((m) => opt(m.path, bg.path || "", m.name + (m.dur ? " (" + Math.round(m.dur) + "s)" : ""))).join("") + "</select>") +
-      (bg.path ? field("Music volume", rng("bgmVol", r2(bg.vol == null ? 0.35 : bg.vol), 0, 1, 0.05).replace(/data-k=/g, "data-fa=")) : "") +
-      '<p class="hint">' + (music && music.length ? "" : music ? "No songs yet. " : "Loading songs… ") + "Put songs in the NAS folder <b>Content Video/Music</b>; the studio Mac lists them every 3 minutes. Music plays in the rendered video, not in this preview.</p>" +
+      soundPanel() +
       '<p class="hint">Tap a scene on the timeline to edit it. “+ Text” adds 花字 on top, like other videos.</p>';
     return h;
   }
+  /* ---------- sound: voice-over, music, sound effects ---------- */
+  function soundPanel() {
+    const au = doc.audio || {}, vo = au.vo || {}, bg = au.bgm || {}, fx = au.sfx || {}, fa = (k, v, a, b, s) => rng(k, v, a, b, s).replace(/data-k=/g, "data-fa=");
+    const vst = !vo.url ? "" : vo.align === "pending" ? "The studio Mac is fitting the scenes to the voice (within 3 minutes)…" : vo.align === "failed" ? "Couldn’t fit it: " + (vo.error || "unknown") :
+      vo.align === "done" ? "Voice " + fmt(vo.dur || 0).replace(/\.\d$/, "") + " · scenes fitted to " + ((vo.lines || []).length) + " lines" : "";
+    let h = "<h4>Voice-over</h4>" + (vo.url ? '<div class="row"><span class="hint" style="flex:1">🎙 ' + esc(vo.name || "Voice-over") + "</span></div>" + (vst ? '<p class="hint">' + esc(vst) + "</p>" : "") +
+      field("Voice volume", fa("voVol", r2(vo.vol == null ? 1 : vo.vol), 0, 2, 0.05)) : '<p class="hint">Record the approved script, then upload it. The studio Mac cleans up the sound and fits every scene to its lines.</p>') +
+      (readOnly ? "" : '<div class="row"><label class="btn sm' + (vo.url ? "" : " primary") + '">' + (vo.url ? "Replace" : "Upload voice-over") + '<input type="file" class="adj-vo" accept="audio/*,.m4a,.mp3,.wav,.aac,video/mp4,video/quicktime,.mov" hidden></label>' +
+        (vo.url ? '<button class="btn sm" type="button" data-a="vofit"' + (vo.align === "pending" ? " disabled" : "") + '>Fit scenes again</button><button class="btn sm ghost danger" type="button" data-a="vodel">Remove</button>' : "") + "</div>");
+    h += "<h4>Music</h4>" + field("Song", '<select data-fa="bgm"><option value="">None</option>' + (music || []).map((m) => opt(m.path, bg.path || "", m.name + (m.dur ? " (" + Math.round(m.dur) + "s)" : ""))).join("") + "</select>") +
+      (bg.path ? field("Volume", fa("bgmVol", r2(bg.vol == null ? 0.35 : bg.vol), 0, 1, 0.05)) + '<label class="chk"><input type="checkbox" data-fa="duck"' + (bg.duck === false ? "" : " checked") + "> Quieter while someone talks</label>" : "") +
+      (music && music.length ? "" : '<p class="hint">' + (music ? "No songs yet. " : "Loading songs… ") + "Put songs in the NAS folder <b>Content Video/Music</b>; the studio Mac lists them every 3 minutes.</p>");
+    const plan = soundList(), on = fx.on !== false;
+    h += "<h4>Sound effects</h4>" + '<label class="chk"><input type="checkbox" data-fa="sfxOn"' + (on ? " checked" : "") + "> Add sound effects (whoosh on transitions, pop, click, ding…)</label>" +
+      (on ? field("Volume", fa("sfxVol", r2(fx.vol == null ? 0.6 : fx.vol), 0, 1.5, 0.05)) : "") +
+      (sfxFiles && sfxFiles.length ? '<p class="hint">' + plan.filter((c) => c.file).length + " sounds placed. Tap one on the timeline to change or mute it.</p>" + (readOnly ? "" : '<div class="row"><button class="btn sm" type="button" data-a="fxadd">+ Sound at the playhead</button></div>')
+        : '<p class="hint">' + (sfxFiles ? "No sound effects yet. " : "Loading… ") + "Put them in the NAS folder <b>Content Video/SFX</b>, with the kind in the file name: whoosh, pop, click, ding, wrong, alert.</p>");
+    return h + '<p class="hint">Press ▶ to hear the voice, music and sound effects together.</p>';
+  }
+  const soundList = () => (FM && window.GZS && GZS.soundPlan ? GZS.soundPlan(doc.film, doc.audio || {}, sfxFiles || []) : []);
+  function fxPanel() {
+    const c = soundList().find((x) => x.id === fxSel); if (!c) { fxSel = null; return null; }
+    const fx = (doc.audio || {}).sfx || {}, set = fx.set || {}, autoPick = c.auto ? GZS.sfxFor(c.kind, sfxFiles || []) : null;
+    let h = "<h4>Sound at " + fmt(c.t) + "</h4>" + (c.auto ? '<p class="hint">Automatic: ' + esc(c.kind) + " · comes with the animation, so it moves when the scene does.</p>" : "") +
+      field("Sound", '<select data-fx="file">' + (c.auto ? opt("@auto", c.id in set ? "" : "@auto", "Automatic" + (autoPick ? " (" + autoPick.name + ")" : "")) : "") + opt("", c.file ? "x" : "", "None (muted)") +
+        (sfxFiles || []).map((f) => opt(f.name, c.auto && !(c.id in set) ? "" : (c.file || {}).name || "", f.name)).join("") + "</select>");
+    if (!c.auto) h += field("Time", '<input type="number" data-fx="t" step="0.05" min="0" value="' + r2(c.t) + '"><button class="btn sm ghost" type="button" data-a="fxnow">Now</button>') +
+      '<div class="row"><button class="btn sm ghost danger" type="button" data-a="fxdel">Remove</button></div>';
+    return h + '<div class="row"><button class="btn sm" type="button" data-a="fxplay">▶ Hear it</button><button class="btn sm ghost" type="button" data-a="fxdone">Done</button></div>';
+  }
+  function fxInput(i) {
+    const fx = doc.audio.sfx = Object.assign({}, (doc.audio = doc.audio || {}).sfx || {}), c = soundList().find((x) => x.id === fxSel); if (!c) return;
+    begin();
+    if (i.dataset.fx === "file") {
+      if (c.auto) { fx.set = Object.assign({}, fx.set || {}); if (i.value === "@auto") delete fx.set[c.id]; else fx.set[c.id] = i.value; }
+      else { fx.add = (fx.add || []).map((a) => (a.id === c.id ? Object.assign({}, a, { name: i.value }) : a)); }
+    } else if (i.dataset.fx === "t" && !c.auto) { const n = Number(i.value); if (!(n >= 0)) return; fx.add = (fx.add || []).map((a) => (a.id === c.id ? Object.assign({}, a, { t: r2(n) }) : a)); }
+    timeline(); changed(); preloadAudio();
+  }
+  async function uploadVO(file) {
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    const type = { mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", wav: "audio/wav", mp4: "video/mp4", mov: "video/quicktime" }[ext] || (/^(audio|video)\//.test(file.type) ? file.type : "");
+    if (!type) { toast("Use an audio file (MP3, M4A, WAV) or a phone video."); return; }
+    if (file.size > 50 * 1024 * 1024) { toast("Keep the voice-over under 50 MB."); return; }
+    try {
+      toast("Uploading the voice-over…");
+      const r = await assets.upload(file, { type });
+      mark(); doc.audio = doc.audio || {};
+      doc.audio.vo = { url: r.url, name: file.name.slice(0, 80), vol: (doc.audio.vo && doc.audio.vo.vol) || 1, at: 0, align: "pending" };
+      if (doc.audio.bgm && doc.audio.bgm.vol == null) doc.audio.bgm.vol = 0.35;
+      panel(); timeline(); changed(); await flush();
+      toast("Uploaded. The studio Mac fits the scenes to it within 3 minutes.");
+    } catch (e) { toast(e && e.code === "too_large" ? "That file is too big." : "Upload failed. Try again."); }
+  }
+
+  function soundAction(a) {
+    const au = doc.audio = doc.audio || {};
+    if (a === "vofit" && au.vo) { mark(); au.vo = Object.assign({}, au.vo, { align: "pending" }); panel(); changed(); flush(); toast("Asked the studio Mac to fit the scenes again."); }
+    else if (a === "vodel" && au.vo) { mark(); delete au.vo; panel(); timeline(); changed(); }
+    else if (a === "fxadd") {
+      const f = (sfxFiles || [])[0]; if (!f) return; mark();
+      const id = "m" + Date.now().toString(36); au.sfx = Object.assign({}, au.sfx || {}); au.sfx.add = (au.sfx.add || []).concat([{ id, t: r2(now()), name: f.name }]);
+      fxSel = id; sc = null; panel(); timeline(); changed(); preloadAudio();
+    } else if (a === "fxdel") { mark(); au.sfx = Object.assign({}, au.sfx || {}); au.sfx.add = (au.sfx.add || []).filter((x) => x.id !== fxSel); fxSel = null; panel(); timeline(); changed(); }
+    else if (a === "fxnow") { const i = $a("adjPan").querySelector('[data-fx="t"]'); if (i) { i.value = String(r2(now())); fxInput(i); commit(); panel(); } }
+    else if (a === "fxplay") { const c = soundList().find((x) => x.id === fxSel); if (c && c.file && c.file.url) loadBuf(c.file.url).then((b) => { const ctx = audioCtx(); if (!b || !ctx) return; ctx.resume().catch(() => {}); const s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(); }); }
+    else if (a === "fxdone") { fxSel = null; panel(); timeline(); }
+  }
+  /* live sound while playing (Web Audio), so timing can be checked here */
+  const AU = { ctx: null, buf: new Map(), nodes: [] };
+  function audioCtx() { if (!AU.ctx) { const C = window.AudioContext || window.webkitAudioContext; if (C) AU.ctx = new C(); } return AU.ctx; }
+  function loadBuf(url) {
+    if (!url) return Promise.resolve(null);
+    if (!AU.buf.has(url)) AU.buf.set(url, fetch(url).then((r) => r.arrayBuffer()).then((b) => new Promise((res, rej) => audioCtx().decodeAudioData(b, res, rej))).catch(() => null));
+    return AU.buf.get(url);
+  }
+  function urls() {
+    const au = (doc && doc.audio) || {}, m = (music || []).find((x) => x.path === (au.bgm || {}).path);
+    return { vo: (au.vo || {}).url || "", bgm: (m && m.url) || "", fx: [...new Set(soundList().map((c) => c.file && c.file.url).filter(Boolean))] };
+  }
+  function preloadAudio() { if (!FM || !audioCtx()) return; const u = urls(); [u.vo, u.bgm].concat(u.fx).forEach(loadBuf); }
+  function stopAudio() { AU.nodes.forEach((n) => { try { n.stop(); } catch (e) {} }); AU.nodes = []; }
+  async function startAudio(from) {
+    stopAudio(); const ctx = audioCtx(); if (!ctx || !doc || !FM) return;
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    const au = doc.audio || {}, u = urls(), t0 = ctx.currentTime + 0.06, end = doc.dur, mine = AU.nodes;
+    const play = (buf, when, off, vol, loop) => { if (!buf || AU.nodes !== mine) return null; const s = ctx.createBufferSource(), g = ctx.createGain(); s.buffer = buf; s.loop = !!loop; g.gain.value = vol; s.connect(g); g.connect(ctx.destination); s.start(Math.max(ctx.currentTime, when), Math.max(0, off)); s.stop(t0 + (end - from) + 0.05); mine.push(s); return g; };
+    const vo = au.vo || {}, at = Number(vo.at) || 0, bg = au.bgm || {}, fx = au.sfx || {};
+    const [vb, bb] = await Promise.all([loadBuf(u.vo), loadBuf(u.bgm)]);
+    if (vb) play(vb, t0 + Math.max(0, at - from), from - at, Number(vo.vol == null ? 1 : vo.vol));
+    if (bb) {
+      const vol = Number(bg.vol == null ? (vb ? 0.35 : 0.8) : bg.vol), g = play(bb, t0, from % bb.duration, vol, true);
+      if (g && vb && bg.duck !== false) (vo.segs || []).forEach(([s, e]) => { const a = t0 + s + at - from, b = t0 + e + at - from; if (b <= t0) return; g.gain.setTargetAtTime(vol * 0.3, Math.max(t0, a - 0.05), 0.04); g.gain.setTargetAtTime(vol, Math.max(t0, b + 0.1), 0.18); });
+    }
+    if (fx.on !== false) {
+      const fv = Number(fx.vol == null ? 0.6 : fx.vol);
+      for (const c of soundList()) { if (!c.file || !c.file.url || c.t < from - 0.02) continue; const b = await loadBuf(c.file.url); play(b, t0 + c.t - from, 0, fv); }
+    }
+  }
+
   function syncFields() { const L = cur(); if (!L) return; $a("adjPan").querySelectorAll('[data-k="x"],[data-k="y"],[data-k="s"],[data-k="start"],[data-k="end"]').forEach((i) => { if (document.activeElement === i) return; const v = getPath(L, i.dataset.k); i.value = i.dataset.k === "x" || i.dataset.k === "y" ? Math.round(v || 0) : r2(v == null ? (i.dataset.k === "s" ? 1 : 0) : v); }); }
 
   /* ---------- timeline ---------- */
@@ -419,6 +522,16 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     const C = { sub: "#4A6159", text: "#EC4E8E", media: "#E8772E" };
     if (FM) {
       const st = starts(), cur2 = sc == null ? sceneAt(now()) : sc;
+      const vo = (doc.audio || {}).vo || {}, at = Number(vo.at) || 0;
+      if (vo.url) {
+        nh += "<div>配音 Voice</div>";
+        th += '<div class="adj-tlrow" style="width:' + W + 'px">' + ((vo.segs && vo.segs.length) ? vo.segs.map(([s, e]) => '<div class="adj-blk" data-seek="' + r2(s + at) + '" style="--c:#1E8C6B;left:' + (s + at) * pxs + "px;width:" + Math.max(3, (e - s) * pxs) + 'px"></div>').join("") : '<span class="hint" style="font-size:11.5px;padding-left:6px;line-height:30px">' + (vo.align === "pending" ? "Waiting for the studio Mac…" : "") + "</span>") + "</div>";
+      }
+      const plan = soundList();
+      if (plan.length) {
+        nh += "<div>音效 Sounds</div>";
+        th += '<div class="adj-tlrow" style="width:' + W + 'px">' + plan.map((c) => '<div class="adj-blk adj-fx' + (c.id === fxSel ? " on" : "") + (c.file ? "" : " off") + '" data-fx-id="' + esc(c.id) + '" style="--c:' + (c.auto ? "#2F80ED" : "#F2994A") + ";left:" + c.t * pxs + 'px;width:' + Math.max(10, 0.3 * pxs) + 'px" title="' + esc(fmt(c.t) + " · " + (c.file ? c.file.name : "muted") + (c.auto ? " · automatic " + c.kind : "")) + '">' + esc(c.file ? (c.kind || c.file.name).slice(0, 8) : "×") + "</div>").join("") + "</div>";
+      }
       nh += "<div>动画 Scenes</div>";
       th += '<div class="adj-tlrow" style="width:' + W + 'px">' + doc.film.scenes.map((x, i) => '<div class="adj-blk' + (i === cur2 && sel == null ? " on" : "") + '" data-scn="' + i + '" style="--c:#7C4DFF;left:' + st[i] * pxs + "px;width:" + Math.max(6, sDur(x) * pxs - 2) + 'px" title="' + esc((GZS.TPL[x.tpl] || {}).name || x.tpl) + '">' + (i + 1) + " · " + esc(((GZS.TPL[x.tpl] || {}).name || x.tpl).split(" ")[0]) + "</div>").join("") + "</div>";
     }
@@ -457,6 +570,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       const sk = e.target.closest("[data-seek]"); if (sk) { seek(Number(sk.dataset.seek)); return; }
       if (!b) return;
       const a = b.dataset.a, L = cur();
+      if (FM && /^(vofit|vodel|fxadd|fxdel|fxnow|fxplay|fxdone)$/.test(a)) { soundAction(a); return; }
       if (FM && (a === "preset" || a === "pcolor")) {
         const idx = sc == null ? sceneAt(now()) : sc, S = doc.film.scenes[idx];
         if (part && S.style && S.style[part]) { mark(); if (a === "preset") delete S.style[part]; else delete S.style[part].color; sc = idx; panel(); draw(); changed(); }
@@ -484,6 +598,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     const pan = $a("adjPan");
     pan.addEventListener("input", (e) => {
       const i = e.target; if (i.id === "adjLink" || i.id === "adjCut") return;
+      if (FM && i.dataset.fx) { fxInput(i); return; }
       if (FM && (i.dataset.sk != null || i.dataset.sa || i.dataset.fa || i.dataset.ps || i.dataset.pst)) { sceneInput(i); return; }
       const key = i.dataset.k; if (!key) return;
       begin();
@@ -495,6 +610,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     });
     pan.addEventListener("change", (e) => {
       if (e.target.classList.contains("adj-up") && e.target.files && e.target.files[0]) { uploadPhoto(e.target.files[0]); return; }
+      if (e.target.classList.contains("adj-vo") && e.target.files && e.target.files[0]) { uploadVO(e.target.files[0]); return; }
       if (e.target.id === "adjLink") { linkSubs = e.target.checked; return; } commit();
     });
     pan.addEventListener("focusout", commit);
@@ -572,6 +688,9 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     const tlx = $a("adjTlx"); let td = null;
     tlx.addEventListener("pointerdown", (e) => {
       const scn = e.target.closest("[data-scn]"); if (scn) { selectScene(Number(scn.dataset.scn), true); return; }
+      const fxb = e.target.closest("[data-fx-id]");
+      if (fxb) { commit(); sel = null; fxSel = fxb.dataset.fxId; const c = soundList().find((x) => x.id === fxSel); if (c) seek(Math.max(0, c.t - 0.3)); panel(); timeline(); return; }
+      const vsk = e.target.closest(".adj-blk[data-seek]"); if (vsk) { seek(Number(vsk.dataset.seek)); return; }
       const blk = e.target.closest(".adj-blk"), r = $a("adjTlin").getBoundingClientRect(), t = (e.clientX - r.left) / pxs;
       if (!blk) { seek(t); return; }
       e.preventDefault();
@@ -633,8 +752,12 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       doc.dur = GZS.filmDur(doc.film); $a("adjScrub").max = String(doc.dur); sc = idx; panel(); timeline();
     } else if (i.dataset.sa) S[i.dataset.sa] = v;
     else if (i.dataset.fa === "theme") doc.film.theme = v;
-    else if (i.dataset.fa === "bgm") { doc.audio = doc.audio || {}; doc.audio.bgm = v ? { path: v, vol: (doc.audio.bgm && doc.audio.bgm.vol != null) ? doc.audio.bgm.vol : 0.35 } : null; sc = idx; panel(); }
+    else if (i.dataset.fa === "bgm") { doc.audio = doc.audio || {}; doc.audio.bgm = v ? { path: v, vol: (doc.audio.bgm && doc.audio.bgm.vol != null) ? doc.audio.bgm.vol : 0.35, duck: !(doc.audio.bgm && doc.audio.bgm.duck === false) } : null; sc = idx; panel(); preloadAudio(); }
     else if (i.dataset.fa === "bgmVol") { if (doc.audio && doc.audio.bgm) doc.audio.bgm.vol = Number(v); }
+    else if (i.dataset.fa === "duck") { if (doc.audio && doc.audio.bgm) doc.audio.bgm.duck = i.checked; }
+    else if (i.dataset.fa === "voVol") { if (doc.audio && doc.audio.vo) doc.audio.vo.vol = Number(v); }
+    else if (i.dataset.fa === "sfxOn") { doc.audio = doc.audio || {}; doc.audio.sfx = Object.assign({}, doc.audio.sfx || {}, { on: i.checked }); sc = idx; panel(); timeline(); }
+    else if (i.dataset.fa === "sfxVol") { doc.audio = doc.audio || {}; doc.audio.sfx = Object.assign({}, doc.audio.sfx || {}, { vol: Number(v) }); }
     draw(); changed();
   }
   function sceneAction(a) {

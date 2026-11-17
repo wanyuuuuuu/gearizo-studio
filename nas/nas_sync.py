@@ -292,6 +292,10 @@ def run():
         gz_script.handle_films(docs, merge, put, log)
     except Exception:
         log("script ERROR " + traceback.format_exc().strip().replace("\n", " | "))
+    try:                       # voice-overs don't need the NAS either
+        gz_edit.handle_vo(docs, merge, log)
+    except Exception:
+        log("vo ERROR " + traceback.format_exc().strip().replace("\n", " | "))
     if not status["nas_mounted"] or "checking_error" in status:
         return
     items, versions = docs("items"), docs("versions")

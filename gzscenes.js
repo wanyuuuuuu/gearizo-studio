@@ -403,7 +403,42 @@
       o.wrap.style.transform = tf; o.wrap.style.opacity = String(op);
     });
   }
+  /* ---------- sound effects: where each template makes a sound (seconds into the scene, as in update()) ---------- */
+  const SFX_KINDS = {
+    whoosh: ["whoosh", "swoosh", "swish", "transition", "转场"], pop: ["pop", "boing", "bubble", "弹"], click: ["click", "tick", "tap", "点"],
+    ding: ["ding", "chime", "bell", "success", "correct", "叮"], wrong: ["wrong", "error", "buzz", "fail", "错"], alert: ["alert", "warning", "alarm", "警"]
+  };
+  const CUES = {
+    hook: (d) => (d.icon === "none" ? [] : [[0.05, "pop"]]),
+    iconText: () => [[0.25, "pop"]],
+    lens: () => [[0.7, "whoosh"], [1.55, "ding"]],
+    compare: (d) => [[0.6, "pop"]].concat(["left", "right"].map((k, i) => { const m = (d[k] || {}).mark; return m === "yes" ? [1.7 + i * 0.35, "ding"] : m === "no" ? [1.7 + i * 0.35, "wrong"] : null; }).filter(Boolean)),
+    steps: (d, dur) => times(Math.min(5, (d.steps || []).length), d.times, 0.7, Math.max(1.2, dur - 1.6)).map((x) => [x, "click"]),
+    stop: (d, dur) => [[0.5, "alert"]].concat(times(Math.min(6, (d.items || []).length), d.times, 0.9, Math.max(1.4, dur - 1.4)).map((x) => [x, "click"])),
+    endcard: (d, dur) => (d.cta ? [[Math.max(1.6, dur - 1.6), "ding"]] : [])
+  };
+  /* every automatic sound of a film: [{id, t, kind}] (id stays the same while the scene keeps its id) */
+  function cues(film) {
+    const out = []; let s0 = 0;
+    ((film && film.scenes) || []).forEach((s, i) => {
+      const dur = Math.max(0.6, Number(s.dur) || (TPL[s.tpl] || {}).dur || 3), base = i > 0 ? s0 - TR : s0, sid = s.id || "s" + i;
+      if (i > 0) out.push({ id: sid + ":in", t: base, kind: "whoosh" });
+      ((CUES[s.tpl] || (() => []))(s.data || {}, dur) || []).forEach((c, j) => { if (c[0] < dur + (i > 0 ? TR : 0)) out.push({ id: sid + ":" + j, t: Math.max(0, base + c[0]), kind: c[1] }); });
+      s0 += dur;
+    });
+    return out;
+  }
+  const sfxFor = (kind, files) => { const keys = SFX_KINDS[kind] || [kind]; return (files || []).find((f) => keys.some((k) => String(f.name || "").toLowerCase().includes(k))) || null; };
+  /* the sounds a film plays: automatic ones (unless switched off or changed per cue) plus ones added by hand.
+     audio.sfx = {on, vol, set:{cueId: fileName|""}, add:[{id, t, name}]}; files = settings/sfx files [{name, ...}] */
+  function soundPlan(film, audio, files) {
+    const fx = (audio && audio.sfx) || {}, on = fx.on !== false, set = fx.set || {}, byName = (n) => (files || []).find((f) => f.name === n) || null;
+    const out = [];
+    if (on) cues(film).forEach((c) => { const pick = c.id in set ? (set[c.id] ? byName(set[c.id]) : null) : sfxFor(c.kind, files); out.push(Object.assign({}, c, { auto: true, file: pick })); });
+    (fx.add || []).forEach((a) => out.push({ id: a.id, t: Number(a.t) || 0, kind: "", auto: false, file: byName(a.name) }));
+    return out.sort((a, b) => a.t - b.t);
+  }
   const catalog = () => Object.keys(TPL).map((k) => ({ id: k, name: TPL[k].name, dur: TPL[k].dur, use: TPL[k].use, fields: TPL[k].fields }));
 
-  root.GZS = { W, H, TR, THEMES, ICONS: ICON_NAMES, TPL, fontsHref, filmDur, render, catalog };
+  root.GZS = { W, H, TR, THEMES, ICONS: ICON_NAMES, TPL, fontsHref, filmDur, render, catalog, cues, soundPlan, sfxFor, SFX_KINDS };
 })(typeof window !== "undefined" ? window : globalThis);

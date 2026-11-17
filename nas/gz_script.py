@@ -197,11 +197,12 @@ FILM_SYSTEM = """You turn a short-video script into an animated explainer made O
 """ + TEMPLATES + """
 Icons available (use exactly these names): """ + ICON_LIST + """
 Return ONE JSON object, nothing else:
-{"theme": "paper" | "pink", "scenes": [{"tpl": "...", "dur": seconds, "trans": "slide" | "zoom" | "wipe", "data": {...}}]}
+{"theme": "paper" | "pink", "scenes": [{"tpl": "...", "dur": seconds, "trans": "slide" | "zoom" | "wipe", "lines": [0, 1], "data": {...}}]}
 Rules:
 - Follow the script's order and timing; one scene per idea, 3-8 s each; durations add up to the script length (±10%).
 - Start with hook, end with endcard. Use steps/stop/compare/lens where they fit; iconText for everything else.
 - On-screen text is SHORT (titles <= 6 words, lines <= 10 words) in the script's language. Mark one key word per title with *stars*.
+- "lines": the 0-based indexes of the script's spoken lines heard during this scene (every line in exactly one scene, in order; [] if none). The voice-over is fitted to scenes with these.
 - Vary transitions; "slide" is the default. The first scene's trans is ignored.
 - theme "paper" (workshop paper, green/orange) unless the team asks for pink/brand colours."""
 
@@ -210,6 +211,7 @@ def build_film_prompt(it, sc, req):
     keep = {k: sc.get(k) for k in ("title", "length", "lang", "style", "cover", "summary", "lines", "shots")}
     for x in keep.get("shots") or []:
         x.pop("clip", None); x.pop("first", None); x.pop("motion", None)
+    keep["lines"] = [dict(l, i=i) for i, l in enumerate(keep.get("lines") or [])]   # "i" = the index scenes refer to
     p = ["VIDEO: " + (it.get("code") or "") + " " + (it.get("title") or ""), "SCRIPT:\n" + json.dumps(keep, ensure_ascii=False)[:12000]]
     if it.get("product"):
         p.append("Product: " + it["product"])
@@ -248,7 +250,8 @@ def clean_film(d):
             dur = max(1.5, min(15, float(x.get("dur") or 4)))
         except (TypeError, ValueError):
             dur = 4
-        out.append({"id": f"s{len(out) + 1}", "tpl": tpl, "dur": round(dur, 2), "trans": x.get("trans") if x.get("trans") in ("slide", "zoom", "wipe") else "slide", "data": data})
+        ln = [i for i in (x.get("lines") or []) if isinstance(i, int) and 0 <= i < 200] if isinstance(x.get("lines"), list) else []
+        out.append({"id": f"s{len(out) + 1}", "tpl": tpl, "dur": round(dur, 2), "trans": x.get("trans") if x.get("trans") in ("slide", "zoom", "wipe") else "slide", "lines": ln, "data": data})
     return {"theme": d.get("theme") if d.get("theme") in ("paper", "pink") else "paper", "scenes": out}
 
 

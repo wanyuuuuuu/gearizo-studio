@@ -713,6 +713,7 @@ function editRow(it){
   const chip=(x,pre)=>'<span class="edchip '+x.k+'">'+pre+esc(x.t)+'</span>';
   let chips=chip(s,"① ");
   if(film||hasScript) chips+='<span class="edarr">›</span>'+chip(b,"② ");
+  if(film){ const vo=(d.audio||{}).vo; if(vo&&vo.url) chips+='<span class="edchip '+(vo.align==="done"?"ok":vo.align==="failed"?"fail":"busy")+'">🎙 '+(vo.align==="done"?"VO fitted":vo.align==="failed"?"VO failed":"Fitting VO…")+'</span>'; }
   if(film) chips+='<span class="edarr">›</span>'+chip({k:a.busy?"busy":a.fail?"fail":(d.render||{}).state==="done"?"ok":"none",t:(d.render||{}).state==="done"?"v"+d.render.n+" in Review":a.busy?"Exporting…":a.fail?"Export failed":"Not exported"},"③ ");
   else if(a) chips+=chip({k:a.busy?"busy":a.fail?"fail":"ok",t:"🎛 "+a.t},"");
   // the next step gets the pink button
