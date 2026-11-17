@@ -219,13 +219,15 @@ def add_file(f, items, versions, note=None, by=None):
 
 def handle_covers(items):
     listing = [{"id": k, "title": v.get("title", ""), "status": v.get("status", ""), "code": v.get("code", "")} for k, v in items.items()]
-    new = NP.find_new_covers(listing)[:MAX_COVERS_PER_RUN]
-    if not new:
-        return
     try:
         skipped = json.load(open(COVER_SKIPPED))
     except Exception:
         skipped = {}
+    # pictures with no GZ code that were already reported don't take a turn, so they can't block real covers
+    new = [f for f in NP.find_new_covers(listing) if f["item"] or "%s|%d|%d" % (f["path"], f["size"], f["mtime"]) not in skipped]
+    new = sorted(new, key=lambda f: not f["item"])[:MAX_COVERS_PER_RUN]
+    if not new:
+        return
     noted = False
     for f in new:
         if not f["item"]:
@@ -234,6 +236,11 @@ def handle_covers(items):
                 skipped[k] = int(time.time())
                 noted = True
                 log(f"picture {f['name']} in Checking did not match any item: put its GZ code in the name to use it as a cover")
+            continue
+        cur = items[f["item"]].get("cover") or {}
+        if cur.get("id") and cur.get("from") != "nas" and int(cur.get("at") or 0) > f["mtime"] * 1000:
+            log(f"kept the newer cover set in the app for {items[f['item']].get('title')}; not using {f['name']}")
+            NP.do_mark(f["path"])
             continue
         cv = NP.make_cover(f["path"])
         if "error" in cv:
