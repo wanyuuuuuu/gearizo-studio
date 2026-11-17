@@ -163,6 +163,16 @@
       location.href = r.url;
     },
   };
+  /* TikTok accounts (TT Main, TT CN, TT SG): videos go to each account's TikTok drafts */
+  window.gzTT = {
+    call(action, extra) { return window.gzMeta.call(action, extra); },
+    status() { return this.call("tt_status"); },
+    disconnect(slot) { return this.call("tt_disconnect", { slot }); },
+    async start(slot, key, secret) {
+      const r = await this.call("tt_start", { slot, client_key: key || "", client_secret: secret || "", return_url: location.origin + location.pathname });
+      location.href = r.url;
+    },
+  };
   /* Caption writing. The Anthropic key lives on the server; this only asks. */
   window.gzAI = {
     async caption(input) {

@@ -44,7 +44,7 @@ const newId=()=>"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6
 let edits=new Map(), scripts=new Map(), items=new Map(), versions=[], feedback=[], focus=[], ideas=[], ideaFrom=null, liveIdeas=false;
 let db=null, assets=null, userNs=null, myId=null, amOwner=false, names={}, myName="";
 let mode="local", readOnly=false, live={items:false,focus:false,team:false};
-let team={}, promptedRole=false, inbox=[], tasks=[], shoots=[], avail=[], busy=[], jobs={}, metaState=null;
+let team={}, promptedRole=false, inbox=[], tasks=[], shoots=[], avail=[], busy=[], jobs={}, metaState=null, ttState=null;
 const AUTO_P=["reel","fb"];
 const PLAT_G=[{id:"ig",name:"Instagram"},{id:"tt",name:"TikTok"},{id:"fb",name:"Facebook Page"}];
 const TT_P=["tiktok","tt_gz","tt_my","tt_sg"];                // the old single "tiktok" plus one per account
@@ -422,7 +422,7 @@ async function connect(){
       const j={}; snap.docs.forEach(x=>{ if(x.exists) j[x.id]=x.data()||{} }); jobs=j;
       if(view==="home") renderHome(); if($("dlg").open&&editingId) renderPublish();
     },()=>{});
-    loadMeta();
+    loadMeta(); loadTT();
     db.collection("ideas").onSnapshot(snap=>{
       liveIdeas=true;
       ideas=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,title:String(v.title||"").slice(0,200),notes:String(v.notes||"").slice(0,20000),by:String(v.by||""),at:Number(v.at)||0}}).filter(x=>x.title).sort((a,b)=>b.at-a.at);
@@ -977,6 +977,12 @@ function renderPublish(){
   const autoOn=!!(metaState&&metaState.connected), job=jobs[it.id]||{};
   if(it.platforms.length) html+='<div class="aplrow">'+it.platforms.map(p=>{
     const nm=pMap[p].s;
+    if(TT_P.includes(p)&&ttOn(p)){
+      const t=job[p]||{}, s=t.state, err=t.error==="nofile"?"Final video not found on the NAS.":(t.error||"");
+      const lab=s==="posted"?"Posted ✓":s==="inbox"?"In drafts ✓":s==="sent"?"Sending…":s==="failed"?"Failed":"Drafts";
+      const tip=s==="failed"||err?err:s==="inbox"?"In the account's TikTok drafts: open the TikTok notification, paste the caption and post":s==="sent"?"Sent, TikTok is processing it":"Goes to this account's TikTok drafts at the time; you add the caption and post it in TikTok";
+      return '<span class="apl '+(s==="inbox"?"uploaded":s||"auto")+'" title="'+esc(tip)+'">'+esc(nm)+' · '+lab+'</span>';
+    }
     if(!autoOn||!AUTO_P.includes(p)) return '<span class="apl man" title="Post this one yourself">'+esc(nm)+' · You</span>';
     const j=(p==="reel"?job.ig:job.fb)||{}, st=j.state;
     const lab=st==="posted"?"Posted ✓":st==="uploaded"||st==="scheduled"?"Ready ✓":st==="failed"?"Failed":"Auto";
@@ -1319,6 +1325,7 @@ function renderSocial(){
     '<li>Facebook Login for Business → Settings → <b>Valid OAuth Redirect URIs</b>: paste this, then Save.<div class="row"><code>'+esc(m.callback||"")+'</code><button class="btn ghost sm" type="button" data-copy="'+esc(m.callback||"")+'">Copy</button></div></li>'+
     '<li>App settings → <b>Basic</b>: copy the <b>App ID</b> and <b>App Secret</b> into the boxes above.</li>'+
     '<li>Press <b>Connect</b>, sign in, tick the Gearizo Page and Instagram account, and allow everything.</li>';
+  renderTT();
   $("socialActs").innerHTML=on?'<button class="btn sm" type="button" data-meta="check">Check</button><button class="btn ghost sm danger" type="button" data-meta="off">Disconnect</button>'
     :'<button class="btn primary sm" type="button" data-meta="go">Connect Facebook &amp; Instagram</button>';
 }
@@ -1333,6 +1340,49 @@ $("socialBox").addEventListener("click",async e=>{
   }catch(err){ toast("Couldn’t do that: "+err.message); b.disabled=false }
   metaState=null; loadMeta();
 });
+/* TikTok: each Gearizo account is connected on its own, so its videos land in its own drafts */
+const TT_NAMES={tt_gz:"@gearizo",tt_my:"@gearizomy",tt_sg:"@gearizo.sg"};
+const ttOn=slot=>!!(ttState&&ttState.accounts&&ttState.accounts[slot]&&ttState.accounts[slot].connected);
+async function loadTT(){
+  if(!window.gzTT||mode!=="db") return;
+  try{ ttState=await window.gzTT.status() }catch(e){ ttState={hasApp:false,accounts:{},error:e.message} }
+  if($("roleDlg").open) renderSocial(); if($("dlg").open&&editingId) renderPublish();
+}
+function renderTT(){
+  const t=ttState, box=$("ttBox"); if(!box) return;
+  if(!t){ $("ttLine").textContent="Checking…"; $("ttRows").innerHTML=""; $("ttSetup").hidden=true; loadTT(); return }
+  const keys=!t.hasApp||box.dataset.keys==="1";
+  $("ttSetup").hidden=!keys;
+  $("ttLine").innerHTML=t.error?'<span class="err">'+esc(t.error)+'</span>':(t.hasApp?"Videos go to each account’s TikTok drafts at the scheduled time. You add the caption and post in TikTok.":"Add the TikTok app’s Client key and Client secret, then connect each account.");
+  $("ttSteps").innerHTML='<li>On <b>developers.tiktok.com</b>: the <b>Gearizo Studio</b> app → <b>Sandbox</b> (until TikTok approves the app).</li>'+
+    '<li>Login Kit → <b>Redirect URI</b> (Web): paste this.<div class="row"><code>'+esc(t.callback||"")+'</code><button class="btn ghost sm" type="button" data-copy="'+esc(t.callback||"")+'">Copy</button></div></li>'+
+    '<li>Copy the <b>Client key</b> and <b>Client secret</b> into the boxes above.</li>'+
+    '<li>Press <b>Connect</b> next to each account and sign in to <b>that</b> account. If TikTok shows “HTTP ERROR 431”, do it in a private (incognito) window.</li>';
+  $("ttRows").innerHTML=Object.keys(TT_NAMES).map(slot=>{
+    const a=(t.accounts||{})[slot]||{}, nm=TT_NAMES[slot];
+    return '<div class="ttrow"><span class="tt-l"><b>'+esc(pMap[slot].s)+'</b> <span class="hint">'+esc(nm)+'</span></span>'+
+      (a.connected?'<span class="tt-a">'+(a.avatar?'<img src="'+esc(a.avatar)+'" alt="" referrerpolicy="no-referrer">':"")+'<b class="ok">✓</b> '+esc(a.name||"Connected")+(a.error?' <span class="err">'+esc(a.error)+'</span>':"")+'</span>'+
+        '<span class="tt-b"><button class="btn ghost sm" type="button" data-tt="go:'+slot+'">Reconnect</button><button class="btn ghost sm danger" type="button" data-tt="off:'+slot+'">Disconnect</button></span>'
+      :'<span class="tt-b"><button class="btn primary sm" type="button" data-tt="go:'+slot+'"'+(t.hasApp||keys?"":" disabled")+'>Connect</button></span>')+'</div>';
+  }).join("")+(t.hasApp&&!keys?'<button class="btn ghost sm" type="button" data-tt="keys">Change app keys</button>':"");
+}
+$("ttBox").addEventListener("click",async e=>{
+  const cp=e.target.closest("[data-copy]"); if(cp){ copyText(cp.dataset.copy); return }
+  const b=e.target.closest("[data-tt]"); if(!b||!window.gzTT) return;
+  const [act,slot]=b.dataset.tt.split(":");
+  if(act==="keys"){ $("ttBox").dataset.keys="1"; renderTT(); return }
+  try{
+    if(act==="go"){ b.disabled=true; b.textContent="Opening TikTok…"; await window.gzTT.start(slot,$("ttKey").value.trim(),$("ttSecret").value.trim()); return }
+    if(act==="off"){ if(!b.dataset.armed){ b.dataset.armed="1"; b.textContent="Tap again to disconnect"; return } await window.gzTT.disconnect(slot); toast(pMap[slot].s+" disconnected.") }
+  }catch(err){ toast("Couldn’t do that: "+err.message); b.disabled=false; b.textContent=act==="go"?"Connect":"Disconnect" }
+  ttState=null; loadTT();
+});
+/* Back from TikTok sign-in */
+(function(){ const q=new URLSearchParams(location.search); if(!q.has("tiktok")) return;
+  const ok=q.get("tiktok")==="ok", why=q.get("why")||"", slot=q.get("slot")||"";
+  history.replaceState(null,"",location.pathname+location.hash);
+  setTimeout(()=>{ toast(ok?((pMap[slot]?pMap[slot].s:"TikTok")+" connected."):"Couldn’t connect TikTok: "+why); if(ok) openRole() },1500);
+})();
 /* Back from Facebook sign-in */
 (function(){ const q=new URLSearchParams(location.search); if(!q.has("meta")) return;
   const ok=q.get("meta")==="ok", why=q.get("why")||"";

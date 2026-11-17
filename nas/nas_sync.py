@@ -17,6 +17,7 @@ sys.path.insert(0, HERE)
 import settings as S  # noqa: E402
 import nas_preview as NP  # noqa: E402
 import autopost  # noqa: E402
+import tiktok  # noqa: E402
 import gz_edit  # noqa: E402
 import gz_script  # noqa: E402
 
@@ -307,6 +308,10 @@ def run():
         autopost.run(api, docs, put, log, items, docs("versions"))
     except Exception:
         log("autopost ERROR " + traceback.format_exc().strip().replace("\n", " | "))
+    try:
+        tiktok.run(api, docs, put, merge, log, items, docs("versions"))
+    except Exception:
+        log("tiktok ERROR " + traceback.format_exc().strip().replace("\n", " | "))
 
 
 if __name__ == "__main__":

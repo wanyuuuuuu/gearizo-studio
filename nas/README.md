@@ -16,6 +16,10 @@ Runs every 3 minutes next to the "Marketing Content" NAS share and talks to Supa
   If the item has a cover photo it goes along: Instagram `cover_url`, Facebook the video's preferred thumbnail
   (needs the pages_manage_engagement permission; without it the Reel still posts with Meta's own thumbnail).
   Status goes to the `postjobs` collection. Needs the Meta connection made in the app (Team > Social).
+- **tiktok** (`tiktok.py`): a few minutes before a scheduled post, sends the same re-encoded video to the TikTok
+  drafts of each connected account it is going to (TT Main @gearizo, TT CN @gearizomy, TT SG @gearizo.sg). TikTok
+  notifies the account; you add the caption and post it there. Connect the accounts in the app (Team > Social) after
+  running `supabase/tiktok.sql`. Runs whenever `"autopost"` is on.
 
 Settings live in a private JSON file on the computer that runs the job (see `settings.py`,
 `config.example.json`). Turn each part on or off with `"sync"` and `"autopost"`.

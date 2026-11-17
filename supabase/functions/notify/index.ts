@@ -4,6 +4,8 @@
 //     plus scheduled posts (pg_cron calls action "postdue" every minute): publish what was uploaded to
 //     Instagram, mark auto-posted videos as posted, and remind marketing about anything left to post by hand.
 //  5. Facebook & Instagram connection for auto-posting (actions meta_*, and GET /notify/meta-callback).
+//  7. TikTok accounts for sending videos to TikTok drafts (actions tt_*, and GET /notify/tiktok-callback);
+//     postdue also keeps their sign-ins fresh and follows each draft until it is posted.
 //  2. Calendar sync: read each linked Google Calendar (private iCal link) and store only busy times.
 //  3. Shoot feed: an iCal feed of a person's shoots that Google Calendar can subscribe to.
 import webpush from "npm:web-push@3.6.7";
@@ -34,7 +36,8 @@ const mmss = (s: number) => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const shortDate = (d: string) => { const [, m, day] = d.split("-").map(Number); return day + " " + MONTHS[m - 1]; };
 const TZ = "Asia/Kuala_Lumpur";
-const PLAT: Record<string, string> = { reel: "Reel", carousel: "Carousel", story: "Story", tiktok: "TikTok", fb: "FB", shop: "Shop", shopee: "Shopee", lazada: "Lazada", web: "Website" };
+const PLAT: Record<string, string> = { reel: "IG Reels", carousel: "IG Carousel", story: "IG Story", tiktok: "TikTok", tt_gz: "TT Main", tt_my: "TT CN", tt_sg: "TT SG",
+  fb: "FB Page", fbstory: "FB Story", shop: "Shop", shopee: "Shopee", lazada: "Lazada", web: "Website" };
 const plats = (d: Record<string, any>) => (Array.isArray(d.platforms) ? d.platforms : []).map((p: string) => PLAT[p] || p).join(", ");
 const when = (ms: number) => new Intl.DateTimeFormat("en-GB", { timeZone: TZ, weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(ms));
 
@@ -235,13 +238,143 @@ async function metaDisconnect() {
   return { ok: true };
 }
 
+/* ---------- 7. TikTok: three Gearizo accounts, videos sent to their drafts ---------- */
+// The NAS job uploads the video to the account's TikTok inbox at the scheduled time (nas/tiktok.py);
+// the person then opens the TikTok notification, adds the caption and posts. Until the app passes
+// TikTok's review this only works for the accounts added as Sandbox target users.
+const TT_API = "https://open.tiktokapis.com/v2";
+const TT_CALLBACK = (Deno.env.get("SUPABASE_URL") || "") + "/functions/v1/notify/tiktok-callback";
+const TT_SCOPES = "user.info.basic,video.upload";
+const TT_SLOTS: Record<string, string> = { tt_gz: "TT Main", tt_my: "TT CN", tt_sg: "TT SG" };
+const RETURN_OK = /^https:\/\/[a-z0-9.-]+\.github\.io\/|^https:\/\/([a-z0-9-]+\.)*gearizo\.com\/|^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i;
+async function ttApp(): Promise<any> {
+  const { data } = await sb.from("social_tiktok_app").select("*").eq("id", 1).maybeSingle();
+  return data || null;
+}
+const ttAppSet = (patch: Record<string, unknown>) => sb.from("social_tiktok_app").upsert({ id: 1, ...patch, updated_at: new Date().toISOString() });
+const ttSet = (slot: string, patch: Record<string, unknown>) => sb.from("social_tiktok").update({ ...patch, updated_at: new Date().toISOString() }).eq("slot", slot);
+async function ttToken(app: any, params: Record<string, string>) {
+  const r = await fetch(TT_API + "/oauth/token/", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_key: app.client_key, client_secret: app.client_secret, ...params }), signal: AbortSignal.timeout(30000) });
+  const j: any = await r.json().catch(() => ({}));
+  if (!r.ok || j.error || !j.access_token) throw new Error(j.error_description || j.error || ("TikTok answered " + r.status));
+  return j;
+}
+async function ttGet(path: string, token: string, body?: unknown) {
+  const r = await fetch(TT_API + path, { method: body === undefined ? "GET" : "POST", signal: AbortSignal.timeout(30000),
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json; charset=UTF-8" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const j: any = await r.json().catch(() => ({}));
+  if (j.error && j.error.code && j.error.code !== "ok") throw new Error(j.error.code + (j.error.message ? ": " + j.error.message : ""));
+  if (!r.ok) throw new Error("TikTok answered " + r.status);
+  return j.data || {};
+}
+const iso = (secs: unknown) => new Date(Date.now() + Number(secs || 0) * 1000).toISOString();
+async function ttStatus() {
+  const app = await ttApp();
+  const { data: rows } = await sb.from("social_tiktok").select("slot,display_name,avatar_url,connected_at,refresh_expires_at,last_error");
+  const accounts: Record<string, unknown> = {};
+  for (const slot of Object.keys(TT_SLOTS)) {
+    const r: any = (rows || []).find((x: any) => x.slot === slot);
+    accounts[slot] = r ? { connected: true, name: r.display_name || "", avatar: r.avatar_url || "", connectedAt: r.connected_at, expires: r.refresh_expires_at, error: r.last_error || "" }
+      : { connected: false };
+  }
+  return { hasApp: !!(app?.client_key && app?.client_secret), callback: TT_CALLBACK, error: app?.last_error || "", accounts };
+}
+async function ttStart(body: any, me: string) {
+  const slot = String(body.slot || "");
+  if (!TT_SLOTS[slot]) return { error: "Pick TT Main, TT CN or TT SG." };
+  const ret = String(body.return_url || "");
+  if (!RETURN_OK.test(ret)) return { error: "bad return address" };
+  const patch: Record<string, unknown> = {};
+  if (body.client_key) patch.client_key = String(body.client_key).trim().slice(0, 64);
+  if (body.client_secret) patch.client_secret = String(body.client_secret).trim().slice(0, 128);
+  const state = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+  await ttAppSet({ ...patch, oauth_state: state, oauth_slot: slot, oauth_user: me, oauth_return: ret, oauth_at: new Date().toISOString() });
+  const app = await ttApp();
+  if (!app?.client_key || !app?.client_secret) return { error: "Add the TikTok Client key and Client secret first." };
+  // disable_auto_auth=1 always shows TikTok's consent page, so whoever connects sees which account
+  // they are signed in as before it is linked to this slot.
+  const q = new URLSearchParams({ client_key: app.client_key, scope: TT_SCOPES, response_type: "code", redirect_uri: TT_CALLBACK, state, disable_auto_auth: "1" });
+  return { url: "https://www.tiktok.com/v2/auth/authorize/?" + q };
+}
+async function ttCallback(url: URL) {
+  const app = await ttApp();
+  const slot = app?.oauth_slot || "";
+  const back = (ok: boolean, why = "") => Response.redirect((app?.oauth_return || "https://wanyuuuuuu.github.io/gearizo-studio/") + "?tiktok=" + (ok ? "ok" : "err") +
+    "&slot=" + encodeURIComponent(slot) + (why ? "&why=" + encodeURIComponent(why.slice(0, 160)) : "") + "#home", 302);
+  const state = url.searchParams.get("state") || "", code = url.searchParams.get("code") || "";
+  if (!app || !app.oauth_state || state !== app.oauth_state || Date.now() - Date.parse(app.oauth_at || "0") > 20 * 60000) return back(false, "The sign-in link expired. Press Connect again.");
+  await ttAppSet({ oauth_state: null });
+  if (!code) return back(false, url.searchParams.get("error_description") || "TikTok sign-in was cancelled.");
+  try {
+    const t = await ttToken(app, { code, grant_type: "authorization_code", redirect_uri: TT_CALLBACK });
+    if (!String(t.scope || "").split(",").includes("video.upload")) return back(false, "TikTok didn't allow sending videos. Press Connect again and allow everything.");
+    let user: any = {};
+    try { user = (await ttGet("/user/info/?fields=open_id,display_name,avatar_url", t.access_token)).user || {}; } catch (_) { /* the name is only for show */ }
+    // One TikTok account, one slot: connecting @gearizomy as TT SG would send Singapore videos to Malaysia.
+    const { data: other } = await sb.from("social_tiktok").select("slot").eq("open_id", t.open_id).neq("slot", slot).maybeSingle();
+    if (other) return back(false, "That TikTok account (" + (user.display_name || "same account") + ") is already connected as " + TT_SLOTS[other.slot] +
+      ". Sign out of TikTok, then connect " + TT_SLOTS[slot] + " with its own account.");
+    const { error } = await sb.from("social_tiktok").upsert({ slot, open_id: t.open_id, display_name: user.display_name || null, avatar_url: user.avatar_url || null,
+      scope: t.scope || "", access_token: t.access_token, access_expires_at: iso(t.expires_in), refresh_token: t.refresh_token, refresh_expires_at: iso(t.refresh_expires_in),
+      connected_by: app.oauth_user, connected_at: new Date().toISOString(), last_error: null, updated_at: new Date().toISOString() });
+    if (error) throw new Error(error.message);
+    await ttAppSet({ last_error: null });
+    return back(true);
+  } catch (e) { await ttAppSet({ last_error: errText(e) }); return back(false, errText(e)); }
+}
+async function ttDisconnect(slot: string) {
+  if (!TT_SLOTS[slot]) return { error: "unknown account" };
+  await sb.from("social_tiktok").delete().eq("slot", slot);
+  return { ok: true };
+}
+/* Access tokens last 24 h. postdue runs every minute and renews any that end within two hours. */
+async function ttRefresh() {
+  const soon = new Date(Date.now() + 2 * 3600000).toISOString();
+  const { data: rows } = await sb.from("social_tiktok").select("slot,refresh_token,refresh_expires_at,last_error").lt("access_expires_at", soon);
+  if (!rows?.length) return 0;
+  const app = await ttApp();
+  if (!app?.client_key || !app?.client_secret) return 0;
+  let n = 0;
+  for (const r of rows as any[]) {
+    if (!r.refresh_token || Date.parse(r.refresh_expires_at || "0") < Date.now()) {
+      if (!r.last_error) await ttSet(r.slot, { last_error: "TikTok sign-in ended. Connect " + TT_SLOTS[r.slot] + " again." });
+      continue;
+    }
+    try {
+      const t = await ttToken(app, { grant_type: "refresh_token", refresh_token: r.refresh_token });
+      await ttSet(r.slot, { access_token: t.access_token, access_expires_at: iso(t.expires_in), refresh_token: t.refresh_token || r.refresh_token,
+        refresh_expires_at: t.refresh_expires_in ? iso(t.refresh_expires_in) : r.refresh_expires_at, last_error: null });
+      n++;
+    } catch (e) { await ttSet(r.slot, { last_error: "Couldn't renew the TikTok sign-in: " + errText(e) }); }
+  }
+  return n;
+}
+/* Follow a draft after the NAS has sent it: SEND_TO_USER_INBOX → in drafts, PUBLISH_COMPLETE → posted. */
+async function ttFollow(itemId: string, job: any, slots: string[]) {
+  const live = slots.filter((s) => ["sent", "inbox"].includes(job[s]?.state) && job[s]?.publish_id && Date.now() - Number(job[s].at || 0) < 7 * 86400000);
+  if (!live.length) return;
+  const { data: rows } = await sb.from("social_tiktok").select("slot,access_token").in("slot", live);
+  for (const s of live) {
+    const tok = (rows || []).find((x: any) => x.slot === s)?.access_token;
+    if (!tok) continue;
+    try {
+      const d = await ttGet("/post/publish/status/fetch/", tok, { publish_id: job[s].publish_id });
+      const next = d.status === "PUBLISH_COMPLETE" ? "posted" : d.status === "SEND_TO_USER_INBOX" ? "inbox" : d.status === "FAILED" ? "failed" : job[s].state;
+      if (next === job[s].state) continue;
+      job[s] = { ...job[s], state: next, ...(next === "failed" ? { error: "TikTok: " + (d.fail_reason || "failed"), tries: 99 } : {}), checked: Date.now() };
+      await sb.rpc("doc_merge", { c: "postjobs", i: itemId, patch: { [s]: job[s] } });
+    } catch (_) { /* try again next minute */ }
+  }
+}
+
 /* ---------- 6. Writing the caption (action "caption") ---------- */
 // The caption field feeds straight into Instagram and Facebook: nas/autopost.py sends it as the
 // Reel caption and the Page video description. So this only writes text back to the person's
 // screen — it saves nothing and posts nothing. They read it, edit it, and the Publish tab saves
 // it the way it always has.
 
-const CAP_LIMIT: Record<string, number> = { reel: 2200, carousel: 2200, story: 1000, fb: 2000, tiktok: 2200, shop: 500 };
+const CAP_LIMIT: Record<string, number> = { reel: 2200, carousel: 2200, story: 1000, fb: 2000, fbstory: 1000, tiktok: 2200, tt_gz: 2200, tt_my: 2200, tt_sg: 2200, shop: 500 };
 const CAP_LANG: Record<string, string> = { en: "English", manglish: "Manglish", bm: "Bahasa Malaysia", zh: "中文" };
 
 // Fallbacks. To change the voice without redeploying, put a row in docs with
@@ -339,6 +472,7 @@ async function writeCaption(body: any) {
 /* Scheduled posts that are due: publish what was uploaded, then remind about anything left, once */
 async function postDue() {
   const now = Date.now();
+  try { await ttRefresh(); } catch (_) { /* never let TikTok hold up Instagram */ }
   const { data: rows } = await sb.from("docs").select("id,data").eq("collection", "items").eq("data->>status", "scheduled");
   const due = (rows || []).filter((r: any) => Number(r.data?.postAt) > 0 && Number(r.data.postAt) <= now + 60000);
   if (!due.length) return { due: 0 };
@@ -370,8 +504,10 @@ async function postDue() {
       job.fb = { ...job.fb, state: "posted", permalink: link, at: now }; changed = true;
     }
     if (changed) await sb.from("docs").upsert({ collection: "postjobs", id: r.id, data: job });
+    const tts = pl.filter((p) => TT_SLOTS[p]);
+    if (tts.length && jr) await ttFollow(r.id, job, tts);
     if (job.ig?.state === "uploaded") continue;                  // Instagram still processing: try again next minute
-    const done = (p: string) => (p === "reel" && job.ig?.state === "posted") || (p === "fb" && job.fb?.state === "posted");
+    const done = (p: string) => (p === "reel" && job.ig?.state === "posted") || (p === "fb" && job.fb?.state === "posted") || (!!TT_SLOTS[p] && job[p]?.state === "posted");
     const left = pl.filter((p) => !done(p));
     if (pl.length && !left.length) {
       const link = job.ig?.permalink || job.fb?.permalink || "";
@@ -384,10 +520,12 @@ async function postDue() {
     const fails: string[] = [];
     if (job.ig?.state === "failed") fails.push("Instagram: " + job.ig.error);
     if (job.fb?.state === "failed") fails.push("Facebook: " + job.fb.error);
+    for (const s of tts) if (job[s]?.state === "failed") fails.push(TT_SLOTS[s] + ": " + job[s].error);
     if (linked && !fails.length && left.some((p) => AUTO.includes(p))) fails.push("the video wasn't uploaded in time (is the Mac on and the NAS connected?)");
     const auto = pl.filter(done).map((p) => PLAT[p] || p);
     const title = (d.code ? d.code + " " : "") + (d.title || "a video");
-    const body = `Time to post ${title} on ${left.map((p) => PLAT[p] || p).join(", ")}` + (auto.length ? ` (${auto.join(", ")} went out automatically)` : "") +
+    const where = (p: string) => (PLAT[p] || p) + (TT_SLOTS[p] && ["sent", "inbox"].includes(job[p]?.state) ? " (it's in your TikTok drafts)" : "");
+    const body = `Time to post ${title} on ${left.map(where).join(", ")}` + (auto.length ? ` (${auto.join(", ")} went out automatically)` : "") +
       (fails.length ? `. Auto-post didn't work: ${fails.join("; ")}` : ". The caption is ready in the app.");
     sent += (await send({ role: d.team === "ecomm" ? "ecomm" : "marketing", body, url: "./#review/" + r.id, tag: "post-" + r.id }, null, roleOf)).sent;
   }
@@ -501,6 +639,7 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   if (req.method === "GET" && url.searchParams.get("feed")) return feed(url.searchParams.get("feed")!);
   if (req.method === "GET" && url.pathname.endsWith("/meta-callback")) return metaCallback(url);
+  if (req.method === "GET" && url.pathname.endsWith("/tiktok-callback")) return ttCallback(url);
   const fromDb = req.headers.get("x-gz-secret") === Deno.env.get("GZ_HOOK_SECRET");
   const body = await req.json().catch(() => ({}));
   if (body.action === "calsync") {
@@ -517,6 +656,15 @@ Deno.serve(async (req) => {
     if (!(me.owner || ["marketing", "ecomm"].includes(me.role))) return json({ error: "Only marketing or the studio owner can change this." }, 403);
     if (body.action === "meta_start") return json(await metaStart(body, me.id));
     if (body.action === "meta_disconnect") return json(await metaDisconnect());
+    return json({ error: "unknown action" }, 400);
+  }
+  if (String(body.action || "").startsWith("tt_")) {
+    const me = await caller(req);
+    if (!me) return json({ error: "sign in first" }, 401);
+    if (body.action === "tt_status") return json(await ttStatus());
+    if (!(me.owner || ["marketing", "ecomm"].includes(me.role))) return json({ error: "Only marketing or the studio owner can change this." }, 403);
+    if (body.action === "tt_start") return json(await ttStart(body, me.id));
+    if (body.action === "tt_disconnect") return json(await ttDisconnect(String(body.slot || "")));
     return json({ error: "unknown action" }, 400);
   }
   if (body.action === "caption") {

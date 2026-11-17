@@ -1316,6 +1316,12 @@ dialog::backdrop{background:rgba(60,48,70,.18);-webkit-backdrop-filter:blur(8px)
 .socline{margin:0 0 8px}
 .socline .ok{color:var(--green)} .socline .err{color:var(--danger)}
 .socacts{display:flex;flex-wrap:wrap;gap:6px}
+.tt-h{margin:16px 0 6px;font-size:14px;font-weight:700;color:var(--ink)}
+#ttRows{display:grid;gap:6px}
+.ttrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.55)}
+.ttrow .tt-l{min-width:130px} .ttrow .tt-a{display:flex;align-items:center;gap:6px;flex:1;min-width:0;font-size:13px}
+.ttrow .tt-a img{width:22px;height:22px;border-radius:50%;object-fit:cover} .ttrow .ok{color:var(--green)} .ttrow .err{color:var(--danger);font-size:12px}
+.ttrow .tt-b{display:flex;gap:6px;margin-left:auto}
 .metasteps{margin:6px 0 4px;padding-left:20px;display:grid;gap:6px;font-size:12.5px;color:var(--ink-2)}
 .metasteps code{font-size:11.5px;word-break:break-all;background:rgba(255,255,255,.6);border-radius:8px;padding:3px 6px}
 .metasteps .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px}
@@ -1935,6 +1941,15 @@ dialog#temple::backdrop{background:#2A0A0B}
         <details class="role-help"><summary class="hint">How?</summary><ol class="metasteps" id="metaSteps"></ol></details>
       </div>
       <div class="socacts" id="socialActs"></div>
+      <div id="ttBox">
+        <h4 class="tt-h">TikTok</h4>
+        <p class="hint socline" id="ttLine">Checking…</p>
+        <div id="ttSetup" hidden>
+          <div class="team-add"><input id="ttKey" placeholder="TikTok Client key" autocomplete="off" aria-label="TikTok Client key"><input id="ttSecret" type="password" placeholder="Client secret" autocomplete="off" aria-label="TikTok Client secret"></div>
+          <details class="role-help"><summary class="hint">How?</summary><ol class="metasteps" id="ttSteps"></ol></details>
+        </div>
+        <div id="ttRows"></div>
+      </div>
     </div>
     <div class="row" style="display:flex;justify-content:space-between;gap:8px"><button class="btn ghost" id="gzSignOutBtn" type="button" onclick="window.gzSignOut&&window.gzSignOut()">Sign out</button><button class="btn" id="roleClose" type="button">Close</button></div>
   </div>
