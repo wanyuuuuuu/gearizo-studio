@@ -728,14 +728,16 @@ function editRow(it){
 }
 function renderEdit(){
   const box=$("editView"), q=edQ.trim().toLowerCase();
-  const all=[...items.values()].filter(i=>i.type!=="design"&&i.kind==="ai"&&(!q||((i.code||"")+" "+(i.title||"")).toLowerCase().includes(q)));
+  const talk=i=>{ const d=edits.get(i.id); return !!(d&&!d.film) };
+  const all=[...items.values()].filter(i=>i.type!=="design"&&(i.kind==="ai"||talk(i))&&(!q||((i.code||"")+" "+(i.title||"")).toLowerCase().includes(q)));
   const busy=i=>{ const s=scrState(i), a=adjState(i); return s.k==="busy"||boardState(i).k==="busy"||!!(a&&a.busy) };
   const list=all, open=["idea","script","shoot","edit","changes"];
   const byDate=(a,b)=>String(a.due||a.date||"9999").localeCompare(String(b.due||b.date||"9999"));
   const working=list.filter(i=>open.includes(i.status)).sort((a,b)=>busy(b)-busy(a)||byDate(a,b));
   const later=list.filter(i=>!open.includes(i.status)&&(scripts.has(i.id)||edits.has(i.id))).sort((a,b)=>byDate(b,a));
-  const html='<div class="edhead"><input type="search" id="edQ" placeholder="Search code or title" aria-label="Search videos" value="'+esc(edQ)+'"></div>'+
-    '<div class="shsec"><h2>Working on</h2>'+(working.length?working.map(editRow).join(""):'<p class="empty">'+(q?"No AI video matches.":"No AI videos in progress. Videos show here when their type on the Plan tab is AI video.")+'</p>')+'</div>'+
+  const html='<div class="edhead"><input type="search" id="edQ" placeholder="Search code or title" aria-label="Search videos" value="'+esc(edQ)+'">'+
+    '<p class="edtip">🎙 <b>口播:</b> put the cut video (no subtitles yet) in the NAS folder <b>Content Video/口播</b>, with the GZ code at the start of the file name. Within about 5 minutes it shows here with subtitles to adjust.</p></div>'+
+    '<div class="shsec"><h2>Working on</h2>'+(working.length?working.map(editRow).join(""):'<p class="empty">'+(q?"Nothing matches.":"Nothing in progress. AI videos (type AI video on the Plan tab) and 口播 videos from the NAS show here.")+'</p>')+'</div>'+
     (later.length?'<details class="shsec edlater"><summary><h2>In review and posted <span class="ncount">'+later.length+'</span></h2></summary>'+later.map(editRow).join("")+'</details>':"");
   const qEl=$("edQ"), had=qEl&&document.activeElement===qEl, pos=had?qEl.selectionStart:0, wasOpen=box.querySelector(".edlater")&&box.querySelector(".edlater").open;
   setHTML(box,html);

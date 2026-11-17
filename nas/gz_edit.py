@@ -28,7 +28,7 @@ CUTOUT = os.path.join(HERE, "cutout")
 MUSIC_DIR = os.path.join(S.NAS_ROOT, "Content Video", "Music")
 SFX_DIR = os.path.join(S.NAS_ROOT, "Content Video", "SFX")
 GZS_JS = os.path.join(os.path.dirname(GZL), "gzscenes.js")
-SPEECH_APP = os.path.join(HERE, "GearizoSpeech.app")   # built from speech.swift (see its header); asks for Speech Recognition once
+SPEECH_APP = next((p for p in (os.path.join(HERE, "GearizoSpeech.app"), os.path.expanduser("~/.claude/gearizo-nas/GearizoSpeech.app")) if os.path.isdir(p)), os.path.join(HERE, "GearizoSpeech.app"))   # built from speech.swift (see its header); asks for Speech Recognition once
 AUDIO_EXT = (".mp3", ".m4a", ".wav", ".aac")
 EXT = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "audio/x-m4a": ".m4a",
        "audio/wav": ".wav", "audio/x-wav": ".wav", "audio/aac": ".aac", "video/mp4": ".mp4"}
@@ -366,22 +366,44 @@ def align_lines(segs, texts):
 
 
 def recognise(path, lang=""):
-    """Word timings from the Mac's speech recognition: [(word, start, end)], or None if it isn't available."""
+    """Word timings from the Mac's speech recognition: [(word, start, end)], or None if it isn't available.
+    The recording is cut at pauses into pieces of about 10-15 s (the recogniser drops all but the last sentence
+    of a long file), and each piece's words are shifted back to the recording's clock."""
     if not os.path.isdir(SPEECH_APP):
         return None
     l = str(lang or "").lower()
     loc = "zh-CN" if ("chinese" in l or "中文" in l or "华" in l) else "ms-MY" if ("melayu" in l or "malay" in l or l.strip() == "bm") else "en-US"
-    out = os.path.join(tempfile.mkdtemp(prefix="gz-asr-"), "words.json")
+    tmp = tempfile.mkdtemp(prefix="gz-asr-")
     try:
-        subprocess.run(["open", "-W", "-n", "-a", SPEECH_APP, "--args", os.path.abspath(path), out, loc], timeout=600, capture_output=True)
+        db = _levels(path)
+        total = len(db) * 0.02
+        cuts, start = [], 0.0
+        while total - start > 15:                    # cut at the quietest moment 9-13 s after the last cut
+            lo, hi = int((start + 9) / 0.02), int((start + 13) / 0.02)
+            win = db[lo:hi]
+            if not win:
+                break
+            k = min(range(len(win)), key=lambda j: sum(win[max(0, j - 5):j + 6]))   # quietest ~0.2 s stretch
+            start = (lo + k) * 0.02
+            cuts.append(start)
+        edges = [0.0] + cuts + [total]
+        pieces = []
+        for k in range(len(edges) - 1):
+            a, b = edges[k], edges[k + 1]
+            q = os.path.join(tmp, "p%03d.wav" % k)
+            run([FFMPEG, "-hide_banner", "-loglevel", "error", "-y", "-ss", "%.3f" % a, "-to", "%.3f" % b, "-i", path, "-ac", "1", "-ar", "16000", q], timeout=120)
+            pieces.append("%s@%.3f" % (q, a))
+        out = os.path.join(tmp, "words.json")
+        subprocess.run(["open", "-W", "-n", "-a", SPEECH_APP, "--args", out, loc] + pieces, timeout=1500, capture_output=True)
         d = json.load(open(out))
-    except Exception:
+    except Exception as er:
+        print("recognise:", er, file=sys.stderr)
         return None
     finally:
-        pass
+        shutil.rmtree(tmp, ignore_errors=True)
     if not d.get("ok"):
         raise RuntimeError("speech recognition: " + str(d.get("error"))[:150])
-    return [(str(w["w"]), float(w["s"]), float(w["e"])) for w in d.get("words", [])]
+    return sorted([(str(w["w"]), float(w["s"]), float(w["e"])) for w in d.get("words", [])], key=lambda x: x[1])
 
 
 def _toks(text):
@@ -394,8 +416,8 @@ def _toks(text):
     return out
 
 
-def align_words(words, texts):
-    """Script lines -> [start, end] from recognised words (fuzzy word-by-word match). None if too little matches."""
+def _match(words, texts):
+    """Fuzzy word-by-word match of script text to recognised words: (script tokens [(tok, line)], rec [(tok, s, e)], {script idx: rec idx})."""
     import difflib
     rec = []                                          # (token, start, end), splitting "carbon black" into two
     for w, s, e in words:
@@ -405,7 +427,7 @@ def align_words(words, texts):
     scr = [(x, k) for k, tx in enumerate(texts) for x in _toks(tx)]
     n, m = len(scr), len(rec)
     if not n or not m:
-        return None
+        return scr, rec, {}
     sim = lambda a, b: 1.0 if a == b else (difflib.SequenceMatcher(None, a, b).ratio() if min(len(a), len(b)) > 2 else 0.0)
     # Needleman-Wunsch: score 2*sim for a match worth taking, -0.4 for skipping a word on either side
     S = [[0.0] * (m + 1) for _ in range(n + 1)]
@@ -428,7 +450,14 @@ def align_words(words, texts):
             i -= 1
         else:
             j -= 1
-    if len(pairs) < max(2, 0.3 * n):
+    return scr, rec, pairs
+
+
+def align_words(words, texts):
+    """Script lines -> [start, end] from recognised words (fuzzy word-by-word match). None if too little matches."""
+    scr, rec, pairs = _match(words, texts)
+    n = len(scr)
+    if not n or not rec or len(pairs) < max(2, 0.3 * n):
         return None
     spans = []
     for k in range(len(texts)):
@@ -636,6 +665,187 @@ def handle_vo(docs, merge, log):
             log("vo ERROR " + traceback.format_exc().strip().replace("\n", " | ")[-500:])
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+# ---------- 口播: a cut talking video dropped on the NAS -> subtitles you can adjust in the app ----------
+TALK_DIR = os.path.join(S.NAS_ROOT, "Content Video", "口播")
+VIDEO_EXT = (".mp4", ".mov", ".m4v")
+CJK = re.compile(r"[⺀-鿿]")
+
+
+def _units(text):
+    """Display pieces of a line: a word with its punctuation, or one Chinese character (with punctuation after it)."""
+    return re.findall(r"[⺀-鿿][^\s⺀-鿿\w]*|[^\s⺀-鿿]+", str(text or ""))
+
+
+def timed_units(words, lines):
+    """[(text, start, end, line)] — the script's wording timed by the recognised words, or the recognised words themselves."""
+    texts = [str(l.get("line") or "") for l in (lines or []) if str(l.get("line") or "").strip()]
+    if texts:
+        scr, rec, pairs = _match(words, texts)
+        if len(pairs) >= max(2, 0.4 * len(scr)):
+            tok_t = [None] * len(scr)
+            for i, j in pairs.items():
+                tok_t[i] = (rec[j][1], rec[j][2])
+            known = [i for i, x in enumerate(tok_t) if x]
+            for i in range(len(scr)):                     # fill the words nobody matched from their neighbours
+                if tok_t[i]:
+                    continue
+                a = max([k for k in known if k < i], default=None)
+                b = min([k for k in known if k > i], default=None)
+                if a is not None and b is not None:
+                    f = (i - a) / (b - a)
+                    s = tok_t[a][1] + (tok_t[b][0] - tok_t[a][1]) * f
+                elif a is not None:
+                    s = tok_t[a][1] + 0.3 * (i - a)
+                else:
+                    s = max(0.0, tok_t[b][0] - 0.3 * (b - i))
+                tok_t[i] = (s, s + 0.25)
+            out, ti = [], 0
+            for k, tx in enumerate(texts):
+                for u in _units(tx):
+                    n = len(_toks(u))
+                    if n == 0:
+                        if out:
+                            out[-1] = (out[-1][0] + u, out[-1][1], out[-1][2], out[-1][3])
+                        continue
+                    s, e = tok_t[ti][0], tok_t[ti + n - 1][1]
+                    out.append((u, s, e, k))
+                    ti += n
+            return out, "script"
+    return [(w, s, e, 0) for w, s, e in words if str(w).strip()], "speech"
+
+
+def _join(us):
+    s = ""
+    for u in us:
+        x = u[0]
+        glue = not s or (CJK.match(x[0]) and CJK.search(s[-1:])) or re.match(r"^['’%°/.,!?，。！？、]", x) or s.endswith(("/", "'", "’"))
+        s += x if glue else " " + x
+    return s.strip()
+
+
+def chunk_subs(units):
+    """Short, even subtitle lines: a new line at each pause, sentence end or script line; long stretches are split
+    into equal parts at word boundaries (so no line is left with one lonely word)."""
+    phrases, cur = [], []
+    for u in units:
+        if cur and (u[1] - cur[-1][2] > 0.45 or u[3] != cur[-1][3] or re.search(r"[.!?。！？]$", cur[-1][0])):
+            phrases.append(cur)
+            cur = []
+        cur.append(u)
+    if cur:
+        phrases.append(cur)
+    def split(ph):                                    # halve a long stretch where it reads best (after a comma, near the middle)
+        txt = _join(ph)
+        lim = 13 if CJK.search(txt) else 30
+        if len(txt) <= lim or len(ph) < 2:
+            return [ph]
+        best, bk = None, None
+        for k in range(1, len(ph)):
+            a, b = len(_join(ph[:k])), len(_join(ph[k:]))
+            score = abs(a - b) - (lim * 0.6 if re.search(r"[,，、;；:：]$", ph[k - 1][0]) else 0) + (lim if min(a, b) < 4 else 0)
+            if best is None or score < best:
+                best, bk = score, k
+        return split(ph[:bk]) + split(ph[bk:])
+    subs = [p for ph in phrases for p in split(ph)]
+    out = []
+    for i, c in enumerate(subs):
+        text = re.sub(r"[,，。.、;；:：]+$", "", _join(c))
+        s = c[0][1]
+        nxt = subs[i + 1][0][1] if i + 1 < len(subs) else None
+        e = c[-1][2] + 0.3
+        if nxt is not None:
+            e = min(e, nxt - 0.02)
+        out.append((text, round(s, 2), round(max(s + 0.5, e), 2)))
+    return out
+
+
+def sub_layers(subs, w, h):
+    k = w / 1080
+    return [{"id": "sub%d" % (i + 1), "kind": "text", "group": "sub", "text": t, "x": round(w / 2), "y": round(h * 0.74), "start": s, "end": e,
+             "anim": {"in": "none", "out": "none"},
+             "style": {"font": "heiti", "size": round(72 * k), "weight": 900, "color": "#FFFFFF", "stroke": "#000000", "strokeW": max(2, round(6 * k)),
+                       "maxW": round(w * 0.84), "lh": 1.2}} for i, (t, s, e) in enumerate(subs)]
+
+
+def _lang_of(it, sc):
+    langs = " ".join(it.get("langs") or []) + " " + str(sc.get("lang") or "")
+    return "Simplified Chinese" if re.search(r"\bzh\b|chinese|中文", langs, re.I) else "Bahasa Melayu" if re.search(r"\bbm\b|melayu|malay", langs, re.I) else "English"
+
+
+def handle_talking(docs, put, log, items):
+    """Videos in Content Video/口播 named "GZ012 ...": move into a project folder, write timed subtitles, send to the app."""
+    import nas_sync as NS
+    os.makedirs(TALK_DIR, exist_ok=True)
+    seen_p = os.path.join(S.DATA, "talk_seen.json")
+    try:
+        seen = json.load(open(seen_p))
+    except Exception:
+        seen = {}
+    edits = None
+    for f in sorted(os.listdir(TALK_DIR)):
+        p = os.path.join(TALK_DIR, f)
+        if f.startswith(".") or not f.lower().endswith(VIDEO_EXT) or not os.path.isfile(p):
+            continue
+        st = os.stat(p)
+        key = "%s|%d" % (f, st.st_size)
+        if seen.get(key, {}).get("n", 0) >= 3 or time.time() - st.st_mtime < 60:     # gave up, or still copying
+            continue
+        m = re.match(r"\s*(GZ\s*\d+)", f, re.I)
+        code = m.group(1).replace(" ", "").upper() if m else ""
+        hit = [(k, v) for k, v in items.items() if code and (v.get("code") or "").upper() == code]
+        if not hit:
+            if key not in seen:
+                log(f"口播: {f} has no GZ code of a video in the app; skipped")
+            seen[key] = {"n": 3, "why": "no code"}
+            continue
+        item_id, it = hit[0]
+        edits = edits or docs("edits")
+        if edits.get(item_id):
+            if key not in seen:
+                log(f"口播: {code} already has a project in the app; {f} left in 口播")
+            seen[key] = {"n": 3, "why": "has project"}
+            continue
+        tmp = tempfile.mkdtemp(prefix="gz-talk-")
+        try:
+            rel = os.path.join("Content Video", "Projects", safe_name(code + " " + (it.get("title") or "")))
+            dest = os.path.join(S.NAS_ROOT, rel)
+            os.makedirs(dest, exist_ok=True)
+            base_name = "base" + os.path.splitext(f)[1].lower()
+            base = os.path.join(dest, base_name)
+            shutil.move(p, base)
+            info = probe(base)
+            aud = os.path.join(tmp, "voice.m4a")
+            run([FFMPEG, "-hide_banner", "-loglevel", "error", "-y", "-i", base, "-vn", "-ac", "1", "-ar", "48000", "-c:a", "aac", "-b:a", "128k", aud], timeout=600)
+            sc = docs("scripts").get(item_id) or {}
+            words = recognise(aud, _lang_of(it, sc)) or []
+            units, how = timed_units(words, sc.get("lines"))
+            subs = chunk_subs(units)
+            pv = os.path.join(tmp, "preview.mp4")
+            for hh in (960, 720, 540):
+                ff_preview(base, pv, hh)
+                if os.path.getsize(pv) <= PREVIEW_MAX_BYTES:
+                    break
+            else:
+                raise RuntimeError("the video is too long for a preview under 19 MB")
+            now = int(time.time() * 1000)
+            doc = {"base": {"path": base_name, "url": "/_blob/" + NS.upload(pv, "video/mp4")}, "layers": sub_layers(subs, info["w"], info["h"]),
+                   "w": info["w"], "h": info["h"], "fps": info["fps"], "dur": info["dur"], "item": item_id, "dir": rel, "rev": 1,
+                   "createdAt": now, "updatedAt": now, "updatedBy": NS.OWNER_ID, "render": {"state": "idle"},
+                   "talk": {"from": f, "how": how, "words": len(words), "at": now}}
+            with open(os.path.join(dest, "project.json"), "w") as fh:
+                json.dump({k: v for k, v in doc.items() if k not in ("item", "rev", "createdAt", "updatedAt", "updatedBy", "render")}, fh, ensure_ascii=False, indent=1)
+            put("edits", item_id, doc)
+            seen[key] = {"n": 3, "why": "done", "item": item_id}
+            log(f"口播: {code} {it.get('title')} -> {len(subs)} subtitles ({'script wording' if how == 'script' else 'from speech'}), ready in Edit")
+        except Exception as e:
+            seen[key] = {"n": seen.get(key, {}).get("n", 0) + 1, "why": str(e)[:200]}
+            log("口播 ERROR " + traceback.format_exc().strip().replace("\n", " | ")[-500:])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    with open(seen_p, "w") as fh:
+        json.dump(seen, fh, ensure_ascii=False)
 
 
 def sound_plan(doc, files):

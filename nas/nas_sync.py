@@ -316,6 +316,10 @@ def run():
         except Exception:
             log("music/cutout ERROR " + traceback.format_exc().strip().replace("\n", " | "))
         try:
+            gz_edit.handle_talking(docs, put, log, items)
+        except Exception:
+            log("口播 ERROR " + traceback.format_exc().strip().replace("\n", " | "))
+        try:
             gz_edit.handle_renders(api, docs, merge, log, items, versions, add_file)
         except Exception:
             log("render ERROR " + traceback.format_exc().strip().replace("\n", " | "))
