@@ -28,6 +28,7 @@ CUTOUT = os.path.join(HERE, "cutout")
 MUSIC_DIR = os.path.join(S.NAS_ROOT, "Content Video", "Music")
 SFX_DIR = os.path.join(S.NAS_ROOT, "Content Video", "SFX")
 GZS_JS = os.path.join(os.path.dirname(GZL), "gzscenes.js")
+SPEECH_APP = os.path.join(HERE, "GearizoSpeech.app")   # built from speech.swift (see its header); asks for Speech Recognition once
 AUDIO_EXT = (".mp3", ".m4a", ".wav", ".aac")
 EXT = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "audio/x-m4a": ".m4a",
        "audio/wav": ".wav", "audio/x-wav": ".wav", "audio/aac": ".aac", "video/mp4": ".mp4"}
@@ -364,6 +365,93 @@ def align_lines(segs, texts):
     return out
 
 
+def recognise(path, lang=""):
+    """Word timings from the Mac's speech recognition: [(word, start, end)], or None if it isn't available."""
+    if not os.path.isdir(SPEECH_APP):
+        return None
+    l = str(lang or "").lower()
+    loc = "zh-CN" if ("chinese" in l or "中文" in l or "华" in l) else "ms-MY" if ("melayu" in l or "malay" in l or l.strip() == "bm") else "en-US"
+    out = os.path.join(tempfile.mkdtemp(prefix="gz-asr-"), "words.json")
+    try:
+        subprocess.run(["open", "-W", "-n", "-a", SPEECH_APP, "--args", os.path.abspath(path), out, loc], timeout=600, capture_output=True)
+        d = json.load(open(out))
+    except Exception:
+        return None
+    finally:
+        pass
+    if not d.get("ok"):
+        raise RuntimeError("speech recognition: " + str(d.get("error"))[:150])
+    return [(str(w["w"]), float(w["s"]), float(w["e"])) for w in d.get("words", [])]
+
+
+def _toks(text):
+    """Words to compare: lower case, no punctuation; Chinese split per character."""
+    out = []
+    for w in re.findall(r"[⺀-鿿]|[^\s⺀-鿿]+", str(text or "").lower()):
+        w = re.sub(r"[^\w⺀-鿿]+", "", w)
+        if w:
+            out.append(w)
+    return out
+
+
+def align_words(words, texts):
+    """Script lines -> [start, end] from recognised words (fuzzy word-by-word match). None if too little matches."""
+    import difflib
+    rec = []                                          # (token, start, end), splitting "carbon black" into two
+    for w, s, e in words:
+        tk = _toks(w)
+        for i, x in enumerate(tk):
+            rec.append((x, s + (e - s) * i / len(tk), s + (e - s) * (i + 1) / len(tk)))
+    scr = [(x, k) for k, tx in enumerate(texts) for x in _toks(tx)]
+    n, m = len(scr), len(rec)
+    if not n or not m:
+        return None
+    sim = lambda a, b: 1.0 if a == b else (difflib.SequenceMatcher(None, a, b).ratio() if min(len(a), len(b)) > 2 else 0.0)
+    # Needleman-Wunsch: score 2*sim for a match worth taking, -0.4 for skipping a word on either side
+    S = [[0.0] * (m + 1) for _ in range(n + 1)]
+    for i in range(1, n + 1):
+        S[i][0] = -0.4 * i
+    for j in range(1, m + 1):
+        S[0][j] = -0.4 * j
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            q = sim(scr[i - 1][0], rec[j - 1][0])
+            S[i][j] = max(S[i - 1][j - 1] + (2 * q if q >= 0.6 else -1.0), S[i - 1][j] - 0.4, S[i][j - 1] - 0.4)
+    pairs, i, j = {}, n, m
+    while i > 0 and j > 0:
+        q = sim(scr[i - 1][0], rec[j - 1][0])
+        if S[i][j] == S[i - 1][j - 1] + (2 * q if q >= 0.6 else -1.0):
+            if q >= 0.6:
+                pairs[i - 1] = j - 1
+            i, j = i - 1, j - 1
+        elif S[i][j] == S[i - 1][j] - 0.4:
+            i -= 1
+        else:
+            j -= 1
+    if len(pairs) < max(2, 0.3 * n):
+        return None
+    spans = []
+    for k in range(len(texts)):
+        idx = [i for i, (x, kk) in enumerate(scr) if kk == k]
+        hit = [pairs[i] for i in idx if i in pairs]
+        if hit:
+            first = next(i for i in idx if i in pairs)
+            # words before the first match: step back roughly a word each
+            lead = (first - idx[0]) * 0.28
+            spans.append([max(0.0, rec[min(hit)][1] - lead), rec[max(hit)][2]])
+        else:
+            spans.append(None)
+    for k, sp in enumerate(spans):                  # lines nobody heard: squeeze between their neighbours
+        if sp is None:
+            a = next((spans[x][1] for x in range(k - 1, -1, -1) if spans[x]), rec[0][1])
+            b = next((spans[x][0] for x in range(k + 1, len(spans)) if spans[x]), rec[-1][2])
+            spans[k] = [a, max(a + 0.3, b)]
+    for k in range(1, len(spans)):                  # keep them in order
+        spans[k][0] = max(spans[k][0], spans[k - 1][0] + 0.2)
+        spans[k - 1][1] = min(spans[k - 1][1], spans[k][0])
+    return [[round(s, 3), round(max(s + 0.2, e), 3)] for s, e in spans]
+
+
 def _line_range(s):
     m = re.search(r"(\d+(?:\.\d+)?)\s*[–\-~to]+\s*(\d+(?:\.\d+)?)", str(s or ""))
     return (float(m.group(1)), float(m.group(2))) if m else None
@@ -375,6 +463,8 @@ def scene_lines(film, lines):
     n = len(lines)
     if any(isinstance(x.get("lines"), list) and x["lines"] for x in sc):
         return [[i for i in (x.get("lines") or []) if isinstance(i, int) and 0 <= i < n] for x in sc]
+    if len(sc) == n:                                  # one scene per line
+        return [[i] for i in range(n)]
     dur = [max(0.6, float(x.get("dur") or TPL_DUR.get(x.get("tpl"), 3))) for x in sc]
     tot = sum(dur) or 1
     rng = [_line_range(l.get("t")) for l in lines]
@@ -394,7 +484,7 @@ def scene_lines(film, lines):
     return out
 
 
-def fit_to_vo(film, spans, groups, tr=0.5, segs=None):
+def fit_to_vo(film, spans, groups, tr=0.5, segs=None, words=None):
     """New scene lengths so each scene sits on its lines; steps/stop items appear with their lines.
     Returns (film, vo_at): vo_at delays the voice when scenes without lines come first."""
     sc = film["scenes"]
@@ -443,7 +533,24 @@ def fit_to_vo(film, spans, groups, tr=0.5, segs=None):
         if key and g and d.get(key):
             m = len(d[key][:5 if key == "steps" else 6])
             base = s0 - tr if i > 0 else s0
-            if len(g) >= m:
+            at_ = None
+            if words:                        # when the item's own words are said
+                import difflib
+                a0, b0 = spans[min(g)][0] - 0.2, spans[max(g)][1] + 0.2
+                pool = [(_toks(w), s) for w, s, e in words if a0 <= s <= b0]
+                cur, got = 0, []
+                for it in d[key][:m]:
+                    keys = [x for x in _toks(it.get("text") if isinstance(it, dict) else it) if len(x) > 2 and x not in ("the", "and", "for", "your", "with", "from", "that", "this")]
+                    hit = next((j for j in range(cur, len(pool)) if any(difflib.SequenceMatcher(None, k, w).ratio() >= 0.75 for k in keys for w in pool[j][0])), None)
+                    if hit is None:
+                        break
+                    got.append(pool[hit][1])
+                    cur = hit + 1
+                if len(got) == m:
+                    at_ = got
+            if at_:
+                pass
+            elif len(g) >= m:
                 at_ = [spans[k][0] for k in g[-m:]]
             else:                            # fewer lines than items: use the pauses inside those lines
                 a0, b0 = spans[min(g)][0], spans[max(g)][1]
@@ -489,8 +596,17 @@ def handle_vo(docs, merge, log):
             if not any(str(l.get("line") or "").strip() for l in lines):
                 lines = []
             film = json.loads(json.dumps(d["film"]))
+            words, how = None, "pauses"
             if lines:
-                spans = align_lines(segs, [l.get("line") for l in lines])
+                try:
+                    words = recognise(src, sc.get("lang") or "")
+                except Exception as er:
+                    log("vo: " + str(er))
+                spans = align_words(words, [l.get("line") for l in lines]) if words else None
+                if spans:
+                    how = "words"
+                else:
+                    spans = align_lines(segs, [l.get("line") for l in lines])
                 groups = scene_lines(film, lines)
             else:                                 # no script: spread the talking over the scenes by their lengths
                 spans = [[s, e] for s, e in segs]
@@ -505,12 +621,15 @@ def handle_vo(docs, merge, log):
                             j = i
                         acc += x
                     groups[j].append(k)
-            film, at = fit_to_vo(film, spans, groups, segs=segs)
+            for x, g in zip(film["scenes"], groups):         # remember which lines each scene speaks, for next time
+                x["lines"] = g
+            film, at = fit_to_vo(film, spans, groups, segs=segs, words=words)
             fdur = round(sum(float(x["dur"]) for x in film["scenes"]), 3)
-            nvo = dict(vo, url=url, clean=True, align="done", at=at, dur=round(total, 2), segs=merge_short(segs), lines=spans, error="", doneAt=now())
+            nvo = dict(vo, url=url, clean=True, align="done", at=at, dur=round(total, 2), segs=merge_short(segs), lines=spans, how=how, error="", doneAt=now(),
+                       words=[[w, round(s, 2), round(e, 2)] for w, s, e in (words or [])][:2000])
             audio = dict(d.get("audio") or {}, vo=nvo)
             merge("edits", item_id, {"film": film, "audio": audio, "dur": fdur, "rev": int(d.get("rev") or 0) + 1, "updatedAt": now(), "updatedBy": "mac"})
-            log(f"vo: fitted {len(film['scenes'])} scenes of {item_id} to {len(spans)} lines ({total:.1f} s of voice)")
+            log(f"vo: fitted {len(film['scenes'])} scenes of {item_id} to {len(spans)} lines by {how} ({total:.1f} s of voice)")
         except Exception as e:
             audio = dict(d.get("audio") or {}, vo=dict(vo, align="failed", error=str(e)[:200]))
             merge("edits", item_id, {"audio": audio})

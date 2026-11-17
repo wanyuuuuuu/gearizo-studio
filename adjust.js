@@ -258,7 +258,8 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
   }
   function floop() {
     if (!playing) return;
-    ft = (performance.now() - playT0) / 1000;
+    const ck = AU.clock, ax = AU.ctx;
+    ft = ck && ax && ax.state === "running" ? Math.max(ck.from, ck.from + ax.currentTime - ck.t0) : (performance.now() - playT0) / 1000;
     if (ft >= doc.dur) { ft = doc.dur; playing = false; stopAudio(); $a("adjPlay").textContent = "▶"; draw(); return; }
     draw(); raf = requestAnimationFrame(floop);
   }
@@ -492,11 +493,12 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     return { vo: (au.vo || {}).url || "", bgm: (m && m.url) || "", fx: [...new Set(soundList().map((c) => c.file && c.file.url).filter(Boolean))] };
   }
   function preloadAudio() { if (!FM || !audioCtx()) return; const u = urls(); [u.vo, u.bgm].concat(u.fx).forEach(loadBuf); }
-  function stopAudio() { AU.nodes.forEach((n) => { try { n.stop(); } catch (e) {} }); AU.nodes = []; }
+  function stopAudio() { AU.nodes.forEach((n) => { try { n.stop(); } catch (e) {} }); AU.nodes = []; AU.clock = null; }
   async function startAudio(from) {
     stopAudio(); const ctx = audioCtx(); if (!ctx || !doc || !FM) return;
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
     const au = doc.audio || {}, u = urls(), t0 = ctx.currentTime + 0.06, end = doc.dur, mine = AU.nodes;
+    AU.clock = { t0, from };                           // the picture follows this clock while playing
     const play = (buf, when, off, vol, loop, short) => {
       if (!buf || AU.nodes !== mine) return null;
       const late = Math.max(0, ctx.currentTime + 0.02 - when);
