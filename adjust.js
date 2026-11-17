@@ -68,20 +68,61 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
 .adj-ctl .btn{min-height:32px}
 .adj-side{border-left:1px solid var(--line);background:var(--surface);overflow:auto;min-height:0}
 .adj-tabs{display:flex;gap:4px;padding:10px 12px 0;position:sticky;top:0;background:var(--surface);z-index:1}
-.adj-tabs button{border:0;background:none;padding:8px 10px;border-radius:8px 8px 0 0;font-weight:600;color:var(--ink-3);cursor:pointer}
+.adj-tabs button{white-space:nowrap;font-size:13.5px;border:0;background:none;padding:8px 10px;border-radius:8px 8px 0 0;font-weight:600;color:var(--ink-3);cursor:pointer}
 .adj-tabs button[aria-selected=true]{color:var(--ink);box-shadow:inset 0 -2px 0 var(--pink)}
+#adjFbN:not(:empty){display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:var(--pink);color:#fff;font-size:11px;line-height:18px;text-align:center}
 .adj-pan{padding:12px 14px 20px;display:flex;flex-direction:column;gap:12px}
 .adj-pan h4{margin:6px 0 0;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
-.adj-f{display:grid;grid-template-columns:96px minmax(0,1fr);align-items:center;gap:6px 10px;font-size:13px}
+.adj-f{display:grid;grid-template-columns:76px minmax(0,1fr);align-items:center;gap:6px 10px;font-size:13px}
 .adj-f>span{color:var(--ink-2)}
 .adj-f .in{display:flex;align-items:center;gap:6px;min-width:0}
 .adj-f input[type=range]{flex:1;min-width:0;accent-color:var(--pink)}
-.adj-f input[type=number]{width:72px;border:1px solid var(--line);border-radius:8px;padding:4px 6px;font:inherit}
+.adj-f input[type=number]{width:56px;border:1px solid var(--line);border-radius:8px;padding:4px 6px;font:inherit}
 .adj-f input[type=color]{width:34px;height:28px;border:1px solid var(--line);border-radius:8px;padding:1px;background:#fff}
 .adj-f select{border:1px solid var(--line);border-radius:8px;padding:5px 6px;font:inherit;min-width:0;flex:1}
 .adj-pan textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-size:15px;min-height:64px;resize:vertical}
 .adj-pan .row{display:flex;gap:6px;flex-wrap:wrap}
 .adj-pan .hint{font-size:12.5px;color:var(--ink-3);margin:0}
+.adj-nav{display:flex;align-items:center;gap:8px;background:var(--sunk);border-radius:14px;padding:8px}
+.adj-nav button{flex:none;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface);font-size:18px;line-height:1;cursor:pointer;color:var(--ink)}
+.adj-nav button:disabled{opacity:.35;cursor:default}
+.adj-nav .mid{flex:1;min-width:0;text-align:center;display:flex;flex-direction:column;gap:2px}
+.adj-nav .mid b{font-size:14px} .adj-nav .mid span{font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.adj-said{font-size:12.5px;color:var(--ink-2);border-left:3px solid #1E8C6B;padding:2px 0 2px 8px;margin:0}
+.adj-card{border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+.adj-card>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:11px 12px;font-weight:700;font-size:13.5px}
+.adj-card>summary::-webkit-details-marker{display:none}
+.adj-card>summary::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);transform:rotate(45deg);transition:transform .15s}
+.adj-card[open]>summary::after{transform:rotate(-135deg)}
+.adj-card>summary small{font-weight:500;color:var(--ink-3);font-size:12px}
+.adj-card .body{padding:0 12px 12px;display:flex;flex-direction:column;gap:10px}
+.adj-fs{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ink-2)}
+.adj-fs>span{font-weight:600}
+.adj-fs input[type=text],.adj-fs select,.adj-fs textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-size:14px;color:var(--ink);background:var(--surface)}
+.adj-fs textarea{min-height:44px}
+.adj-two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.adj-two>*{min-width:0}
+.adj-chips{display:flex;flex-wrap:wrap;gap:6px}
+.adj-chips button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 11px;font:inherit;font-size:12.5px;cursor:pointer;color:var(--ink-2)}
+.adj-chips button[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.adj-chips button.set::after{content:" •";color:var(--pink)}
+.adj-step{display:flex;gap:6px;align-items:center}
+.adj-step select{flex:0 0 96px;border:1px solid var(--line);border-radius:10px;padding:7px 6px;font:inherit;font-size:13px}
+.adj-step input{flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-size:14px}
+.adj-tool{display:grid;grid-template-columns:1fr 1fr;gap:6px;border-top:1px solid var(--line);padding-top:10px}
+.adj-tool .btn{justify-content:center;white-space:nowrap}
+.adj-tool .danger{grid-column:1/-1}
+.adj-rng{display:flex;align-items:center;gap:8px}
+.adj-rng input[type=range]{flex:1;min-width:0;accent-color:var(--pink)}
+.adj-rng input[type=number]{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 6px;font:inherit}
+.adj-rng em{font-style:normal;color:var(--ink-3)}
+.adj-xy{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.adj-xy label{display:flex;align-items:center;gap:6px;color:var(--ink-3);min-width:0}
+.adj-xy input{flex:1;min-width:0;width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit}
+.adj-looks{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.adj-looks button{border:2px solid var(--line);border-radius:12px;padding:8px;background:var(--surface);cursor:pointer;font:inherit;font-size:12.5px;display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.adj-looks button[aria-pressed=true]{border-color:var(--pink)}
+.adj-looks i{display:block;height:34px;border-radius:8px}
 .adj-pan label.chk{display:flex;gap:8px;align-items:center;font-size:13px;background:var(--sunk);padding:8px 10px;border-radius:10px}
 .adj-list button{display:flex;gap:8px;align-items:center;width:100%;text-align:left;border:0;background:none;padding:6px 8px;border-radius:8px;cursor:pointer;font:inherit;font-size:13px}
 .adj-list button:hover{background:var(--sunk)}
@@ -127,7 +168,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       '<div class="adj-sel" id="adjSel" hidden><i id="adjHandle" title="Drag to resize"></i></div></div></div>' +
       '<div class="adj-ctl"><button class="btn sm" type="button" data-a="play" id="adjPlay" aria-label="Play">▶</button><span class="t" id="adjTime">0:00.0</span>' +
       '<input type="range" id="adjScrub" min="0" step="0.01" value="0" aria-label="Time"><button class="btn sm" type="button" data-a="addtext">+ Text</button></div></div>' +
-      '<aside class="adj-side"><div class="adj-tabs" role="tablist"><button type="button" role="tab" data-tab="layer">Layer</button><button type="button" role="tab" data-tab="fb">Feedback <span id="adjFbN"></span></button></div><div class="adj-pan" id="adjPan"></div></aside></div>' +
+      '<aside class="adj-side"><div class="adj-tabs" role="tablist"><button type="button" role="tab" data-tab="layer" id="adjTab1">Layer</button><button type="button" role="tab" data-tab="video" id="adjTabV" hidden>Sound</button><button type="button" role="tab" data-tab="fb">Feedback <span id="adjFbN"></span></button></div><div class="adj-pan" id="adjPan"></div></aside></div>' +
       '<div class="adj-tl"><div class="adj-tlbar"><span id="adjTlHint">Timeline · drag a block to move it, its edges to trim</span><span style="flex:1"></span><button class="btn sm" type="button" data-a="zout" aria-label="Zoom out">−</button><button class="btn sm" type="button" data-a="zin" aria-label="Zoom in">+</button></div>' +
       '<div class="adj-tlsc"><div class="adj-tlnames" id="adjTlNames"></div><div class="adj-tlx" id="adjTlx"><div class="adj-tlin" id="adjTlin"></div></div></div></div></div>';
     document.body.appendChild(dlg);
@@ -162,7 +203,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     const lay = $a("adjLayers"); lay.innerHTML = ""; lay._gzl = null;
     if (!dlg.open) dlg.showModal();
     fit(); pxs = Math.max(8, ($a("adjTlx").clientWidth - 20) / Math.max(1, doc.dur || 1));
-    $a("adjBoard").hidden = !FM;
+    $a("adjBoard").hidden = !FM; $a("adjTabV").hidden = !FM; $a("adjTab1").textContent = FM ? "Scene" : "Layer";
     $a("adjTlHint").textContent = FM ? "Timeline · drag a scene’s right edge to change where it ends · drag the voice to move it" : "Timeline · drag a block to move it, its edges to trim";
     $a("adjRender").textContent = FM ? "Export → Review" : "Render new version";
     $a("adjRender").title = FM ? "The Mac renders the MP4 and sends it to Review as the next version" : "";
@@ -323,7 +364,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     const pan = $a("adjPan"); if (!pan) return;
     dlg.querySelectorAll(".adj-tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
     const fbs = (typeof fbFor === "function" ? fbFor(itemId) : []), open = fbs.filter((f) => !f.done).length;
-    $a("adjFbN").textContent = open ? "(" + open + ")" : "";
+    $a("adjFbN").textContent = open ? String(open) : "";
     if (tab === "fb") {
       pan.innerHTML = fbs.length ? fbs.map((f) => '<div class="adj-fb' + (f.done ? " done" : "") + '">' +
         (f.t != null ? '<button type="button" class="tc" data-seek="' + f.t + '">' + fmt(f.t).replace(/\.\d$/, "") + (f.t2 != null ? "–" + fmt(f.t2).replace(/\.\d$/, "") : "") + "</button>" : "") +
@@ -333,6 +374,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     }
     const L = cur();
     if (!L && FM && fxSel) { const fh = fxPanel(); if (fh) { pan.innerHTML = fh; return; } }
+    if (!L && FM && tab === "video") { pan.innerHTML = videoPanel(); return; }
     if (!L && FM) { pan.innerHTML = scenePanel(sc == null ? sceneAt(now()) : sc); pan.querySelectorAll("textarea").forEach((x) => { x.style.height = "auto"; x.style.height = x.scrollHeight + 2 + "px"; }); return; }
     if (!L) {
       const t = now(), vis = doc.layers.filter((x) => t >= x.start && t < x.end);
@@ -370,65 +412,84 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     h += '<div class="row"><button class="btn sm" type="button" data-a="dup">Duplicate</button><button class="btn sm" type="button" data-a="front">To front</button><button class="btn sm" type="button" data-a="back">To back</button><button class="btn sm ghost danger" type="button" data-a="del">Remove</button><button class="btn sm ghost" type="button" data-a="desel">Done</button></div>';
     pan.innerHTML = h;
   }
+  const secOpen = { look: true, words: true, style: true, layout: false, voice: true, music: true, sfx: true };
+  const card = (id, title, inner, note) => '<details class="adj-card" data-sec="' + id + '"' + (secOpen[id] ? " open" : "") + "><summary>" + title + (note ? " <small>" + note + "</small>" : "") + '</summary><div class="body">' + inner + "</div></details>";
+  const fs = (label, inner) => '<label class="adj-fs"><span>' + label + "</span>" + inner + "</label>";
   function scenePanel(i) {
     const n = doc.film.scenes.length, S = doc.film.scenes[i]; if (!S) return '<p class="hint">No scenes.</p>';
-    const g = S.data || {}, au = doc.audio || {}, bg = (au.bgm || {});
+    const g = S.data || {}, T = GZS.TPL[S.tpl] || {}, st0 = starts()[i] || 0;
     const icons = (k, v) => '<select data-sk="' + k + '">' + GZS.ICONS.map((x) => opt(x, v || "sparkle", x)).join("") + "</select>";
-    let h = '<h4>Scene ' + (i + 1) + " of " + n + (sc == null ? " · on screen now" : "") + "</h4>" +
-      field("Template", '<select data-sa="tpl">' + GZS.catalog().map((c) => opt(c.id, S.tpl, c.name)).join("") + "</select>") +
-      field("Length", '<input type="number" data-sa="dur" min="0.6" max="30" step="0.1" value="' + r2(sDur(S)) + '"> s') +
-      (i ? field("Comes in by", '<select data-sa="trans">' + opt("slide", S.trans || "slide", "Slide") + opt("zoom", S.trans, "Zoom") + opt("wipe", S.trans, "Wipe") + "</select>") : "");
+    const txt = (k, v) => '<input type="text" data-sk="' + k + '" value="' + esc(v || "") + '">';
+    // which script lines this scene speaks
+    const sl = ((actx && actx.getScript && actx.getScript(itemId)) || {}).lines || [];
+    const said = (S.lines || []).map((k) => (sl[k] || {}).line).filter(Boolean);
+    let h = '<div class="adj-nav"><button type="button" data-a="sprev" aria-label="Previous scene"' + (i ? "" : " disabled") + '>‹</button><div class="mid"><b>Scene ' + (i + 1) + " of " + n + "</b><span>" + esc((T.name || S.tpl)) + " · " + fmt(st0).replace(/\.\d$/, "") + "–" + fmt(st0 + sDur(S)).replace(/\.\d$/, "") + '</span></div><button type="button" data-a="snext" aria-label="Next scene"' + (i < n - 1 ? "" : " disabled") + ">›</button></div>" +
+      said.map((x) => '<p class="adj-said">🎙 ' + esc(x) + "</p>").join("");
+    // words
+    let w = "";
     (SFIELDS[S.tpl] || []).forEach(([k, label, kind]) => {
       const v = getPath(g, k);
-      if (kind === "icon") h += field(label, icons(k, v));
-      else if (kind === "mark") h += field(label, '<select data-sk="' + k + '">' + opt("", v || "", "None") + opt("yes", v, "✓ Right") + opt("no", v, "✗ Wrong") + "</select>");
-      else if (kind === "area") h += '<label class="hint">' + label + '</label><textarea data-sk="' + k + '" rows="2">' + esc(v || "") + "</textarea>";
-      else if (kind === "lines") h += '<label class="hint">' + label + '</label><textarea data-sk="' + k + '" data-lines="1" rows="4">' + esc((v || []).join("\n")) + "</textarea>";
-      else if (kind === "steps") h += '<label class="hint">' + label + "</label>" + (v || []).map((x, j) => '<div class="row">' + '<select data-sk="steps.' + j + '.icon"><option value="">No icon</option>' + GZS.ICONS.map((y) => opt(y, x.icon || "", y)).join("") + '</select><input type="text" data-sk="steps.' + j + '.text" value="' + esc(x.text || "") + '" style="flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit"><button class="btn sm ghost" type="button" data-a="stepdel" data-i="' + j + '" aria-label="Remove step">×</button></div>').join("") + (readOnly ? "" : '<div class="row"><button class="btn sm ghost" type="button" data-a="stepadd">+ Step</button></div>');
+      if (kind === "icon") w += fs(label, icons(k, v));
+      else if (kind === "mark") w += fs(label, '<select data-sk="' + k + '">' + opt("", v || "", "None") + opt("yes", v, "✓ Right") + opt("no", v, "✗ Wrong") + "</select>");
+      else if (kind === "area") w += fs(label, '<textarea data-sk="' + k + '" rows="2">' + esc(v || "") + "</textarea>");
+      else if (kind === "lines") w += fs(label, '<textarea data-sk="' + k + '" data-lines="1" rows="4">' + esc((v || []).join("\n")) + "</textarea>");
+      else if (kind === "steps") w += '<div class="adj-fs"><span>' + label + "</span>" + (v || []).map((x, j) => '<div class="adj-step"><select data-sk="steps.' + j + '.icon" aria-label="Icon"><option value="">No icon</option>' + GZS.ICONS.map((y) => opt(y, x.icon || "", y)).join("") + '</select><input type="text" data-sk="steps.' + j + '.text" value="' + esc(x.text || "") + '"><button class="btn sm ghost" type="button" data-a="stepdel" data-i="' + j + '" aria-label="Remove step">×</button></div>').join("") + (readOnly ? "" : '<div><button class="btn sm ghost" type="button" data-a="stepadd">+ Step</button></div>') + "</div>";
       else if (kind === "image") {
-        const st = g.imageCut === "pending" ? "The studio Mac is removing the background (within 3 minutes)…" : g.imageCut === "failed" ? "Couldn’t remove the background: " + (g.imageCutError || "") : "";
-        h += '<label class="hint">' + label + '</label><div class="row">' + (g.image ? '<img src="' + esc(g.image.startsWith("/_blob/") || /^https?:/.test(g.image) || g.image.startsWith("brand/") ? g.image : "") + '" alt="" style="width:84px;height:84px;object-fit:contain;background:var(--sunk);border-radius:10px">' : '<span class="hint">No photo: a drawing is used.</span>') + "</div>" +
-          (readOnly || !assets ? "" : '<div class="row"><label class="btn sm">' + (g.image ? "Replace photo" : "Upload photo") + '<input type="file" class="adj-up" accept="image/png,image/jpeg,image/webp" hidden></label>' + (g.image ? '<button class="btn sm ghost" type="button" data-a="nophoto">No photo</button>' : "") + '</div><label class="chk"><input type="checkbox" id="adjCut" checked> Remove the white background (done on the studio Mac)</label>') +
-          (st ? '<p class="hint">' + esc(st) + "</p>" : "");
-      } else h += field(label, '<input type="text" data-sk="' + k + '" value="' + esc(v || "") + '" style="flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit">');
+        const stt = g.imageCut === "pending" ? "The studio Mac is removing the background (within 3 minutes)…" : g.imageCut === "failed" ? "Couldn’t remove the background: " + (g.imageCutError || "") : "";
+        w += '<div class="adj-fs"><span>' + label + '</span><div class="row" style="align-items:center">' + (g.image ? '<img src="' + esc(g.image.startsWith("/_blob/") || /^https?:/.test(g.image) || g.image.startsWith("brand/") ? g.image : "") + '" alt="" style="width:72px;height:72px;object-fit:contain;background:var(--sunk);border-radius:10px">' : '<span class="hint">No photo: a drawing is used.</span>') +
+          (readOnly || !assets ? "" : '<label class="btn sm">' + (g.image ? "Replace" : "Upload photo") + '<input type="file" class="adj-up" accept="image/png,image/jpeg,image/webp" hidden></label>' + (g.image ? '<button class="btn sm ghost" type="button" data-a="nophoto">Remove</button>' : "")) + "</div>" +
+          (readOnly || !assets ? "" : '<label class="chk"><input type="checkbox" id="adjCut" checked> Remove the white background</label>') + (stt ? '<p class="hint">' + esc(stt) + "</p>" : "") + "</div>";
+      } else w += fs(label.replace(" (*star* a word)", ""), txt(k, v));
     });
-    if (!readOnly) h += '<div class="row"><button class="btn sm" type="button" data-a="sadd">+ Scene after</button><button class="btn sm" type="button" data-a="sdup">Duplicate</button><button class="btn sm" type="button" data-a="sup" aria-label="Move earlier">↑</button><button class="btn sm" type="button" data-a="sdown" aria-label="Move later">↓</button><button class="btn sm ghost danger" type="button" data-a="sdel">Remove</button></div>';
-    const parts = (GZS.TPL[S.tpl] || {}).parts || [];
+    if (/\*/.test(JSON.stringify(SFIELDS[S.tpl] || []))) w += '<p class="hint">Put *stars* around a word to colour it.</p>';
+    h += card("words", "Words", w);
+    // move & style
+    const parts = T.parts || [];
     if (parts.length) {
-      const pk = parts.some((x) => x[0] === part) ? part : null, st = (S.style || {})[pk] || {}, scaleOnly = pk && /^(icon|product|logo|card)$/.test(pk) || pk === "card";
-      h += "<h4>Move & style</h4><p class=\"hint\">Drag the words on the video to move them, or pick one here.</p>" +
-        field("Change", '<select data-ps="part"><option value="">Pick text…</option>' + parts.map(([k2, l2]) => opt(k2, pk || "", l2)).join("") + "</select>");
-      if (pk) {
+      const pk = parts.some((x) => x[0] === part) ? part : null, st = (S.style || {})[pk] || {}, noText = pk && /^(icon|product|logo|card)$/.test(pk);
+      let y = '<div class="adj-chips">' + parts.map(([k2, l2]) => '<button type="button" data-pchip="' + esc(k2) + '" aria-pressed="' + (k2 === pk) + '"' + ((S.style || {})[k2] ? ' class="set"' : "") + ">" + esc(l2) + "</button>").join("") + "</div>";
+      if (!pk) y += '<p class="hint">Pick one, or tap it on the video. Drag it there to move it.</p>';
+      else {
         const fonts = window.GZL ? GZL.FONTS : [];
-        if (!scaleOnly) h += field("Font", '<select data-pst="font"><option value="">Template font</option>' + fonts.map((f) => opt(f.id, st.font || "", f.name)).join("") + "</select>") +
-          field("Colour", '<input type="color" data-pst="color" value="' + esc(st.color || "#262A28") + '">' + (st.color ? '<button class="btn sm ghost" type="button" data-a="pcolor">Template colour</button>' : ""));
-        if (pk !== "card") h += field("Size", '<input type="range" data-pst="size" min="40" max="250" step="5" value="' + Math.round((Number(st.size) || 1) * 100) + '"><input type="number" data-pst="size" min="40" max="250" step="5" value="' + Math.round((Number(st.size) || 1) * 100) + '"> %');
-        h += field("Move", 'x <input type="number" data-pst="x" step="5" value="' + Math.round(st.x || 0) + '"> y <input type="number" data-pst="y" step="5" value="' + Math.round(st.y || 0) + '">') +
-          '<div class="row"><button class="btn sm ghost" type="button" data-a="preset"' + (S.style && S.style[pk] ? "" : " disabled") + ">Back to template look</button></div>";
+        if (!noText) y += '<div class="adj-two">' + fs("Font", '<select data-pst="font"><option value="">Template font</option>' + fonts.map((f) => opt(f.id, st.font || "", f.name)).join("") + "</select>") +
+          fs("Colour", '<span class="row" style="align-items:center"><input type="color" data-pst="color" value="' + esc(st.color || "#262A28") + '">' + (st.color ? '<button class="btn sm ghost" type="button" data-a="pcolor">Reset</button>' : "") + "</span>") + "</div>";
+        const sz = Math.round((Number(st.size) || 1) * 100);
+        if (pk !== "card") y += '<div class="adj-fs"><span>Size</span><div class="adj-rng"><input type="range" data-pst="size" min="40" max="250" step="5" value="' + sz + '"><input type="number" data-pst="size" min="40" max="250" step="5" value="' + sz + '"><em>%</em></div></div>';
+        y += '<div class="adj-fs"><span>Position <em style="font-weight:400;font-style:normal;color:var(--ink-3)">· or drag it on the video</em></span><div class="adj-xy"><label>↔<input type="number" data-pst="x" step="5" value="' + Math.round(st.x || 0) + '"></label><label>↕<input type="number" data-pst="y" step="5" value="' + Math.round(st.y || 0) + '"></label></div></div>' +
+          '<div><button class="btn sm ghost" type="button" data-a="preset"' + (S.style && S.style[pk] ? "" : " disabled") + ">Back to template look</button></div>";
       }
+      h += card("style", "Move & style", y, Object.keys(S.style || {}).length ? Object.keys(S.style).length + " changed" : "");
     }
-    h += "<h4>Whole video</h4>" + field("Look", '<select data-fa="theme">' + Object.keys(GZS.THEMES).map((t) => opt(t, doc.film.theme || "paper", GZS.THEMES[t].name)).join("") + "</select>") +
-      soundPanel() +
-      '<p class="hint">Tap a scene on the timeline to edit it. “+ Text” adds 花字 on top, like other videos.</p>';
+    // layout & timing
+    h += card("layout", "Template & timing",
+      fs("Template", '<select data-sa="tpl">' + GZS.catalog().map((c) => opt(c.id, S.tpl, c.name)).join("") + "</select>") +
+      '<div class="adj-two">' + fs("Length (s)", '<input type="text" inputmode="decimal" data-sa="dur" value="' + r2(sDur(S)) + '">') +
+      (i ? fs("Comes in by", '<select data-sa="trans">' + opt("slide", S.trans || "slide", "Slide") + opt("zoom", S.trans, "Zoom") + opt("wipe", S.trans, "Wipe") + "</select>") : "<span></span>") + "</div>" +
+      '<p class="hint">Tip: drag a scene’s right edge on the timeline to change its length.</p>', esc((T.name || "").split(" ")[0]) + " · " + r2(sDur(S)) + " s");
+    if (!readOnly) h += '<div class="adj-tool"><button class="btn sm" type="button" data-a="sadd">＋ Add scene</button><button class="btn sm" type="button" data-a="sdup">Duplicate</button><button class="btn sm" type="button" data-a="sup" aria-label="Move earlier" title="Move earlier">↑ Earlier</button><button class="btn sm" type="button" data-a="sdown" aria-label="Move later" title="Move later">↓ Later</button><button class="btn sm ghost danger" type="button" data-a="sdel">Remove scene</button></div>';
     return h;
+  }
+  function videoPanel() {
+    const th = doc.film.theme || "paper";
+    return card("look", "Look <small>whole video</small>", '<div class="adj-looks">' + Object.keys(GZS.THEMES).map((k2) => { const T2 = GZS.THEMES[k2]; return '<button type="button" data-look="' + k2 + '" aria-pressed="' + (k2 === th) + '"><i style="background:' + T2.bg + ";box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);background-image:linear-gradient(90deg," + T2.ink + " 0 30%," + T2.accent + " 30% 45%,transparent 45%)" + '"></i>' + esc(T2.name) + "</button>"; }).join("") + "</div>") + soundPanel();
   }
   /* ---------- sound: voice-over, music, sound effects ---------- */
   function soundPanel() {
     const au = doc.audio || {}, vo = au.vo || {}, bg = au.bgm || {}, fx = au.sfx || {}, fa = (k, v, a, b, s) => rng(k, v, a, b, s).replace(/data-k=/g, "data-fa=");
     const vst = !vo.url ? "" : vo.align === "pending" ? "The studio Mac is fitting the scenes to the voice (within 3 minutes)…" : vo.align === "failed" ? "Couldn’t fit it: " + (vo.error || "unknown") :
       vo.align === "done" ? "Voice " + fmt(vo.dur || 0).replace(/\.\d$/, "") + " · scenes fitted to " + ((vo.lines || []).length) + " lines" : "";
-    let h = "<h4>Voice-over</h4>" + (vo.url ? '<div class="row"><span class="hint" style="flex:1">🎙 ' + esc(vo.name || "Voice-over") + "</span></div>" + (vst ? '<p class="hint">' + esc(vst) + "</p>" : "") +
-      field("Voice volume", fa("voVol", r2(vo.vol == null ? 1 : vo.vol), 0, 2, 0.05)) : '<p class="hint">Record the approved script, then upload it. The studio Mac cleans up the sound and fits every scene to its lines.</p>') +
+    let h = card("voice", "Voice-over", (vo.url ? '<div class="row"><span class="hint" style="flex:1">🎙 ' + esc(vo.name || "Voice-over") + "</span></div>" + (vst ? '<p class="hint">' + esc(vst) + "</p>" : "") +
+      field("Volume", fa("voVol", r2(vo.vol == null ? 1 : vo.vol), 0, 2, 0.05)) : '<p class="hint">Record the approved script, then upload it. The studio Mac cleans up the sound and fits every scene to its lines.</p>') +
       (readOnly ? "" : '<div class="row"><label class="btn sm' + (vo.url ? "" : " primary") + '">' + (vo.url ? "Replace" : "Upload voice-over") + '<input type="file" class="adj-vo" accept="audio/*,.m4a,.mp3,.wav,.aac,video/mp4,video/quicktime,.mov" hidden></label>' +
-        (vo.url ? '<button class="btn sm" type="button" data-a="vofit"' + (vo.align === "pending" ? " disabled" : "") + '>Fit scenes again</button><button class="btn sm ghost danger" type="button" data-a="vodel">Remove</button>' : "") + "</div>");
-    h += "<h4>Music</h4>" + field("Song", '<select data-fa="bgm"><option value="">None</option>' + (music || []).map((m) => opt(m.path, bg.path || "", m.name + (m.dur ? " (" + Math.round(m.dur) + "s)" : ""))).join("") + "</select>") +
+        (vo.url ? '<button class="btn sm" type="button" data-a="vofit"' + (vo.align === "pending" ? " disabled" : "") + '>Fit scenes again</button><button class="btn sm ghost danger" type="button" data-a="vodel">Remove</button>' : "") + "</div>"), vo.url ? (vo.align === "done" ? "✓ fitted" : vo.align === "pending" ? "fitting…" : "") : "");
+    h += card("music", "Music", field("Song", '<select data-fa="bgm"><option value="">None</option>' + (music || []).map((m) => opt(m.path, bg.path || "", m.name + (m.dur ? " (" + Math.round(m.dur) + "s)" : ""))).join("") + "</select>") +
       (bg.path ? field("Volume", fa("bgmVol", r2(bg.vol == null ? 0.35 : bg.vol), 0, 1, 0.05)) + '<label class="chk"><input type="checkbox" data-fa="duck"' + (bg.duck === false ? "" : " checked") + "> Quieter while someone talks</label>" : "") +
-      (music && music.length ? "" : '<p class="hint">' + (music ? "No songs yet. " : "Loading songs… ") + "Put songs in the NAS folder <b>Content Video/Music</b>; the studio Mac lists them every 3 minutes.</p>");
+      (music && music.length ? "" : '<p class="hint">' + (music ? "No songs yet. " : "Loading songs… ") + "Put songs in the NAS folder <b>Content Video/Music</b>; the studio Mac lists them every 3 minutes.</p>"), bg.path ? "" : "none");
     const plan = soundList(), on = fx.on !== false;
-    h += "<h4>Sound effects</h4>" + '<label class="chk"><input type="checkbox" data-fa="sfxOn"' + (on ? " checked" : "") + "> Add sound effects (whoosh on transitions, pop, click, ding…)</label>" +
+    h += card("sfx", "Sound effects", '<label class="chk"><input type="checkbox" data-fa="sfxOn"' + (on ? " checked" : "") + "> Add sound effects (whoosh on transitions, pop, click, ding…)</label>" +
       (on ? field("Volume", fa("sfxVol", r2(fx.vol == null ? 0.6 : fx.vol), 0, 1.5, 0.05)) : "") +
       (sfxFiles && sfxFiles.length ? '<p class="hint">' + plan.filter((c) => c.file).length + " sounds placed. Tap one on the timeline to change or mute it.</p>" + (readOnly ? "" : '<div class="row"><button class="btn sm" type="button" data-a="fxadd">+ Sound at the playhead</button></div>')
-        : '<p class="hint">' + (sfxFiles ? "No sound effects yet. " : "Loading… ") + "Put them in the NAS folder <b>Content Video/SFX</b>, with the kind in the file name: whoosh, pop, click, ding, wrong, alert.</p>");
+        : '<p class="hint">' + (sfxFiles ? "No sound effects yet. " : "Loading… ") + "Put them in the NAS folder <b>Content Video/SFX</b>, with the kind in the file name: whoosh, pop, click, ding, wrong, alert.</p>"), on ? "" : "off");
     return h + '<p class="hint">Press ▶ to hear the voice, music and sound effects together.</p>';
   }
   const soundList = () => (FM && window.GZS && GZS.soundPlan ? GZS.soundPlan(doc.film, doc.audio || {}, sfxFiles || []) : []);
@@ -478,7 +539,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     } else if (a === "fxdel") { mark(); au.sfx = Object.assign({}, au.sfx || {}); au.sfx.add = (au.sfx.add || []).filter((x) => x.id !== fxSel); fxSel = null; panel(); timeline(); changed(); }
     else if (a === "fxnow") { const i = $a("adjPan").querySelector('[data-fx="t"]'); if (i) { i.value = String(r2(now())); fxInput(i); commit(); panel(); } }
     else if (a === "fxplay") { const c = soundList().find((x) => x.id === fxSel); if (c && c.file && c.file.url) loadBuf(c.file.url).then((b) => { const ctx = audioCtx(); if (!b || !ctx) return; ctx.resume().catch(() => {}); const s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(); }); }
-    else if (a === "fxdone") { fxSel = null; panel(); timeline(); }
+    else if (a === "fxdone") { fxSel = null; tab = "video"; panel(); timeline(); }
   }
   /* live sound while playing (Web Audio), so timing can be checked here */
   const AU = { ctx: null, buf: new Map(), nodes: [] };
@@ -582,10 +643,17 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       const tb = e.target.closest("[data-tab]");
       if (tb) { commit(); tab = tb.dataset.tab; panel(); return; }
       const pk = e.target.closest("[data-pick]"); if (pk) { select(pk.dataset.pick, true); return; }
+      const pc = e.target.closest("[data-pchip]");
+      if (pc && FM) { const idx = sc == null ? sceneAt(now()) : sc; part = part === pc.dataset.pchip ? null : pc.dataset.pchip; sc = idx; secOpen.style = true; panel(); draw(); return; }
+      const lk = e.target.closest("[data-look]");
+      if (lk && FM && !readOnly) { if ((doc.film.theme || "paper") !== lk.dataset.look) { mark(); doc.film.theme = lk.dataset.look; draw(); changed(); } panel(); return; }
+      const sm = e.target.closest(".adj-card>summary");
+      if (sm) { const dd = sm.parentNode; setTimeout(() => { secOpen[dd.dataset.sec] = dd.open; }, 0); }
       const sk = e.target.closest("[data-seek]"); if (sk) { seek(Number(sk.dataset.seek)); return; }
       if (!b) return;
       const a = b.dataset.a, L = cur();
       if (FM && /^(vofit|vodel|fxadd|fxdel|fxnow|fxplay|fxdone)$/.test(a)) { soundAction(a); return; }
+      if (FM && (a === "sprev" || a === "snext")) { const i0 = sc == null ? sceneAt(now()) : sc; selectScene(Math.max(0, Math.min(doc.film.scenes.length - 1, i0 + (a === "snext" ? 1 : -1))), true); return; }
       if (FM && (a === "preset" || a === "pcolor")) {
         const idx = sc == null ? sceneAt(now()) : sc, S = doc.film.scenes[idx];
         if (part && S.style && S.style[part]) { mark(); if (a === "preset") delete S.style[part]; else delete S.style[part].color; sc = idx; panel(); draw(); changed(); }
@@ -714,7 +782,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       if (vob && !readOnly) { e.preventDefault(); commit(); td = { mode: "vo", t0: tt, at0: Number(((doc.audio || {}).vo || {}).at) || 0, snap: snap(), moved: false }; tlx.setPointerCapture(e.pointerId); return; }
       const fxb = e.target.closest("[data-fx-id]");
       if (fxb) {
-        commit(); sel = null; fxSel = fxb.dataset.fxId; const c = soundList().find((x) => x.id === fxSel); panel(); timeline();
+        commit(); sel = null; fxSel = fxb.dataset.fxId; tab = "video"; const c = soundList().find((x) => x.id === fxSel); panel(); timeline();
         if (c && !c.auto && !readOnly) { e.preventDefault(); td = { mode: "fx", id: c.id, t0: tt, s0: c.t, snap: snap(), moved: false }; tlx.setPointerCapture(e.pointerId); }
         else if (c) seek(Math.max(0, c.t - 0.3));
         return;
