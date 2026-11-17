@@ -103,6 +103,9 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
 .adj-blk.on{background:var(--c);color:#fff}
 .adj-blk i{position:absolute;top:0;bottom:0;width:7px;cursor:ew-resize}
 .adj-blk i.l{left:0} .adj-blk i.r{right:0}
+.adj-blk[data-scn] i.r{right:-2px;width:10px;cursor:col-resize;background:linear-gradient(90deg,transparent 3px,rgba(255,255,255,.9) 3px,rgba(255,255,255,.9) 6px,transparent 6px)}
+.adj-blk[data-scn]{overflow:visible}
+.adj-vo{cursor:ew-resize;font-size:10.5px;color:#0d4436;padding:0 4px}
 .adj-fx{font-size:10.5px;padding:0 3px;text-align:center}
 .adj-fx.off{opacity:.35}
 .adj-ph{position:absolute;top:0;bottom:0;width:2px;background:var(--pink);pointer-events:none;z-index:2}
@@ -125,7 +128,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       '<div class="adj-ctl"><button class="btn sm" type="button" data-a="play" id="adjPlay" aria-label="Play">▶</button><span class="t" id="adjTime">0:00.0</span>' +
       '<input type="range" id="adjScrub" min="0" step="0.01" value="0" aria-label="Time"><button class="btn sm" type="button" data-a="addtext">+ Text</button></div></div>' +
       '<aside class="adj-side"><div class="adj-tabs" role="tablist"><button type="button" role="tab" data-tab="layer">Layer</button><button type="button" role="tab" data-tab="fb">Feedback <span id="adjFbN"></span></button></div><div class="adj-pan" id="adjPan"></div></aside></div>' +
-      '<div class="adj-tl"><div class="adj-tlbar"><span>Timeline · drag a block to move it, its edges to trim</span><span style="flex:1"></span><button class="btn sm" type="button" data-a="zout" aria-label="Zoom out">−</button><button class="btn sm" type="button" data-a="zin" aria-label="Zoom in">+</button></div>' +
+      '<div class="adj-tl"><div class="adj-tlbar"><span id="adjTlHint">Timeline · drag a block to move it, its edges to trim</span><span style="flex:1"></span><button class="btn sm" type="button" data-a="zout" aria-label="Zoom out">−</button><button class="btn sm" type="button" data-a="zin" aria-label="Zoom in">+</button></div>' +
       '<div class="adj-tlsc"><div class="adj-tlnames" id="adjTlNames"></div><div class="adj-tlx" id="adjTlx"><div class="adj-tlin" id="adjTlin"></div></div></div></div></div>';
     document.body.appendChild(dlg);
     wire();
@@ -160,6 +163,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     if (!dlg.open) dlg.showModal();
     fit(); pxs = Math.max(8, ($a("adjTlx").clientWidth - 20) / Math.max(1, doc.dur || 1));
     $a("adjBoard").hidden = !FM;
+    $a("adjTlHint").textContent = FM ? "Timeline · drag a scene’s right edge to change where it ends · drag the voice to move it" : "Timeline · drag a block to move it, its edges to trim";
     $a("adjRender").textContent = FM ? "Export → Review" : "Render new version";
     $a("adjRender").title = FM ? "The Mac renders the MP4 and sends it to Review as the next version" : "";
     renderStatus(); panel(); timeline(); draw();
@@ -493,7 +497,15 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     stopAudio(); const ctx = audioCtx(); if (!ctx || !doc || !FM) return;
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
     const au = doc.audio || {}, u = urls(), t0 = ctx.currentTime + 0.06, end = doc.dur, mine = AU.nodes;
-    const play = (buf, when, off, vol, loop) => { if (!buf || AU.nodes !== mine) return null; const s = ctx.createBufferSource(), g = ctx.createGain(); s.buffer = buf; s.loop = !!loop; g.gain.value = vol; s.connect(g); g.connect(ctx.destination); s.start(Math.max(ctx.currentTime, when), Math.max(0, off)); s.stop(t0 + (end - from) + 0.05); mine.push(s); return g; };
+    const play = (buf, when, off, vol, loop, short) => {
+      if (!buf || AU.nodes !== mine) return null;
+      const late = Math.max(0, ctx.currentTime + 0.02 - when);
+      if (short && late > 0.08) return null;            // a sound effect whose moment has passed
+      const s = ctx.createBufferSource(), g = ctx.createGain(); s.buffer = buf; s.loop = !!loop; g.gain.value = vol; s.connect(g); g.connect(ctx.destination);
+      let o = Math.max(0, off) + late; if (loop) o = o % buf.duration;
+      if (!loop && o >= buf.duration) return null;
+      s.start(when + late, o); s.stop(t0 + (end - from) + 0.05); mine.push(s); return g;
+    };
     const vo = au.vo || {}, at = Number(vo.at) || 0, bg = au.bgm || {}, fx = au.sfx || {};
     const [vb, bb] = await Promise.all([loadBuf(u.vo), loadBuf(u.bgm)]);
     if (vb) play(vb, t0 + Math.max(0, at - from), from - at, Number(vo.vol == null ? 1 : vo.vol));
@@ -503,7 +515,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     }
     if (fx.on !== false) {
       const fv = Number(fx.vol == null ? 0.6 : fx.vol);
-      for (const c of soundList()) { if (!c.file || !c.file.url || c.t < from - 0.02) continue; const b = await loadBuf(c.file.url); play(b, t0 + c.t - from, 0, fv); }
+      for (const c of soundList()) { if (!c.file || !c.file.url || c.t < from - 0.02) continue; const b = await loadBuf(c.file.url); play(b, t0 + c.t - from, 0, fv, false, true); }
     }
   }
 
@@ -525,7 +537,8 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       const vo = (doc.audio || {}).vo || {}, at = Number(vo.at) || 0;
       if (vo.url) {
         nh += "<div>配音 Voice</div>";
-        th += '<div class="adj-tlrow" style="width:' + W + 'px">' + ((vo.segs && vo.segs.length) ? vo.segs.map(([s, e]) => '<div class="adj-blk" data-seek="' + r2(s + at) + '" style="--c:#1E8C6B;left:' + (s + at) * pxs + "px;width:" + Math.max(3, (e - s) * pxs) + 'px"></div>').join("") : '<span class="hint" style="font-size:11.5px;padding-left:6px;line-height:30px">' + (vo.align === "pending" ? "Waiting for the studio Mac…" : "") + "</span>") + "</div>";
+        const sl = ((actx && actx.getScript && actx.getScript(itemId)) || {}).lines || [], useL = vo.lines && vo.lines.length;
+        th += '<div class="adj-tlrow" style="width:' + W + 'px">' + ((useL || (vo.segs && vo.segs.length)) ? (useL ? vo.lines : vo.segs).map(([s, e], k) => '<div class="adj-blk adj-vo" data-vo="' + k + '" style="--c:#1E8C6B;left:' + (s + at) * pxs + "px;width:" + Math.max(3, (e - s) * pxs - 1) + 'px" title="' + esc((useL ? (k + 1) + ". " + ((sl[k] || {}).line || "") + " · " : "") + fmt(s + at) + "–" + fmt(e + at) + " · drag to move the whole voice") + '">' + (useL ? esc((k + 1) + " " + ((sl[k] || {}).line || "")) : "") + "</div>").join("") : '<span class="hint" style="font-size:11.5px;padding-left:6px;line-height:30px">' + (vo.align === "pending" ? "Waiting for the studio Mac…" : "") + "</span>") + "</div>";
       }
       const plan = soundList();
       if (plan.length) {
@@ -533,7 +546,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
         th += '<div class="adj-tlrow" style="width:' + W + 'px">' + plan.map((c) => '<div class="adj-blk adj-fx' + (c.id === fxSel ? " on" : "") + (c.file ? "" : " off") + '" data-fx-id="' + esc(c.id) + '" style="--c:' + (c.auto ? "#2F80ED" : "#F2994A") + ";left:" + c.t * pxs + 'px;width:' + Math.max(10, 0.3 * pxs) + 'px" title="' + esc(fmt(c.t) + " · " + (c.file ? c.file.name : "muted") + (c.auto ? " · automatic " + c.kind : "")) + '">' + esc(c.file ? (c.kind || c.file.name).slice(0, 8) : "×") + "</div>").join("") + "</div>";
       }
       nh += "<div>动画 Scenes</div>";
-      th += '<div class="adj-tlrow" style="width:' + W + 'px">' + doc.film.scenes.map((x, i) => '<div class="adj-blk' + (i === cur2 && sel == null ? " on" : "") + '" data-scn="' + i + '" style="--c:#7C4DFF;left:' + st[i] * pxs + "px;width:" + Math.max(6, sDur(x) * pxs - 2) + 'px" title="' + esc((GZS.TPL[x.tpl] || {}).name || x.tpl) + '">' + (i + 1) + " · " + esc(((GZS.TPL[x.tpl] || {}).name || x.tpl).split(" ")[0]) + "</div>").join("") + "</div>";
+      th += '<div class="adj-tlrow" style="width:' + W + 'px">' + doc.film.scenes.map((x, i) => '<div class="adj-blk' + (i === cur2 && sel == null ? " on" : "") + '" data-scn="' + i + '" style="--c:#7C4DFF;left:' + st[i] * pxs + "px;width:" + Math.max(6, sDur(x) * pxs - 2) + 'px" title="' + esc((GZS.TPL[x.tpl] || {}).name || x.tpl) + '">' + (i + 1) + " · " + esc(((GZS.TPL[x.tpl] || {}).name || x.tpl).split(" ")[0]) + '<i class="r" title="Drag to change where this scene ends"></i></div>').join("") + "</div>";
     }
     ROWS.forEach((row) => {
       const list = doc.layers.filter((L) => rowOf(L) === row.id), ln = lanes(list);
@@ -687,9 +700,23 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     // timeline: click to seek, drag blocks to move/trim
     const tlx = $a("adjTlx"); let td = null;
     tlx.addEventListener("pointerdown", (e) => {
-      const scn = e.target.closest("[data-scn]"); if (scn) { selectScene(Number(scn.dataset.scn), true); return; }
+      const scn = e.target.closest("[data-scn]"), rr = $a("adjTlin").getBoundingClientRect(), tt = (e.clientX - rr.left) / pxs;
+      if (scn && e.target.classList.contains("r") && !readOnly) {           // move the end of a scene (the next one gives or takes the time)
+        e.preventDefault(); commit();
+        const i = Number(scn.dataset.scn), S = doc.film.scenes, b = S[i + 1];
+        td = { mode: "scene", i, t0: tt, a0: sDur(S[i]), b0: b ? sDur(b) : 0, times: b && b.data && Array.isArray(b.data.times) ? b.data.times.slice() : null, snap: snap(), moved: false };
+        tlx.setPointerCapture(e.pointerId); return;
+      }
+      if (scn) { selectScene(Number(scn.dataset.scn), true); return; }
+      const vob = e.target.closest("[data-vo]");
+      if (vob && !readOnly) { e.preventDefault(); commit(); td = { mode: "vo", t0: tt, at0: Number(((doc.audio || {}).vo || {}).at) || 0, snap: snap(), moved: false }; tlx.setPointerCapture(e.pointerId); return; }
       const fxb = e.target.closest("[data-fx-id]");
-      if (fxb) { commit(); sel = null; fxSel = fxb.dataset.fxId; const c = soundList().find((x) => x.id === fxSel); if (c) seek(Math.max(0, c.t - 0.3)); panel(); timeline(); return; }
+      if (fxb) {
+        commit(); sel = null; fxSel = fxb.dataset.fxId; const c = soundList().find((x) => x.id === fxSel); panel(); timeline();
+        if (c && !c.auto && !readOnly) { e.preventDefault(); td = { mode: "fx", id: c.id, t0: tt, s0: c.t, snap: snap(), moved: false }; tlx.setPointerCapture(e.pointerId); }
+        else if (c) seek(Math.max(0, c.t - 0.3));
+        return;
+      }
       const vsk = e.target.closest(".adj-blk[data-seek]"); if (vsk) { seek(Number(vsk.dataset.seek)); return; }
       const blk = e.target.closest(".adj-blk"), r = $a("adjTlin").getBoundingClientRect(), t = (e.clientX - r.left) / pxs;
       if (!blk) { seek(t); return; }
@@ -702,6 +729,19 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     tlx.addEventListener("pointermove", (e) => {
       if (!td) return;
       const r = $a("adjTlin").getBoundingClientRect(), d = Math.round(((e.clientX - r.left) / pxs - td.t0) * 20) / 20, L = td.L, len = td.e0 - td.s0;
+      if (td.mode === "scene") {
+        const S = doc.film.scenes, a = S[td.i], b = S[td.i + 1];
+        const na = b ? Math.max(0.6, Math.min(td.a0 + td.b0 - 0.6, td.a0 + d)) : Math.max(0.6, td.a0 + d), moved = na - td.a0;
+        a.dur = r2(na); if (b) { b.dur = r2(td.a0 + td.b0 - na); if (td.times) b.data.times = td.times.map((x) => r2(Math.max(0.3, x - moved))); }
+        doc.dur = GZS.filmDur(doc.film); $a("adjScrub").max = String(doc.dur); td.moved = true;
+        timeline(); seek(starts()[td.i] + na - 0.05); return;
+      }
+      if (td.mode === "vo") {
+        const vo = doc.audio.vo; vo.at = r2(Math.max(0, td.at0 + d)); td.moved = true; timeline(); return;
+      }
+      if (td.mode === "fx") {
+        const fx = doc.audio.sfx; fx.add = (fx.add || []).map((x) => (x.id === td.id ? Object.assign({}, x, { t: r2(Math.max(0, Math.min(doc.dur, td.s0 + d))) }) : x)); td.moved = true; timeline(); seek(Math.max(0, td.s0 + d)); return;
+      }
       if (td.mode === "m") { L.start = r2(Math.max(0, Math.min(doc.dur - len, td.s0 + d))); L.end = r2(L.start + len); }
       else if (td.mode === "l") L.start = r2(Math.max(0, Math.min(td.e0 - 0.1, td.s0 + d)));
       else L.end = r2(Math.max(td.s0 + 0.1, Math.min(doc.dur, td.e0 + d)));
@@ -709,7 +749,11 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       td.blk.style.left = L.start * pxs + "px"; td.blk.style.width = Math.max(6, (L.end - L.start) * pxs) + "px";
       seek(td.mode === "r" ? L.end - 0.04 : L.start + Math.min(0.3, (L.end - L.start) / 2)); syncFields();
     });
-    const tUp = () => { if (!td) return; if (td.moved) { hist.push(td.snap); fut = []; changed(); timeline(); } td = null; };
+    const tUp = () => {
+      if (!td) return;
+      if (td.moved) { hist.push(td.snap); fut = []; changed(); timeline(); if (/^(scene|vo|fx)$/.test(td.mode)) panel(); if (playing) startAudio(ft); }
+      td = null;
+    };
     tlx.addEventListener("pointerup", tUp); tlx.addEventListener("pointercancel", tUp);
 
     dlg.addEventListener("keydown", (e) => {
