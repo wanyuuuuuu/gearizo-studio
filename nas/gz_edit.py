@@ -60,13 +60,55 @@ def file_url(p):
     return "file://" + urllib.parse.quote(os.path.abspath(p))
 
 
+TPL_DUR = {"hook": 3.2, "iconText": 4, "lens": 5, "compare": 5, "steps": 6, "stop": 6, "endcard": 5}   # as in gzscenes.js
+
+
+def film_dur(film):
+    return round(sum(max(0.6, float(s.get("dur") or TPL_DUR.get(s.get("tpl"), 3))) for s in film.get("scenes") or []), 3)
+
+
+def audio_args(doc, proj_dir, dur, first_input):
+    """ffmpeg inputs + filter for the background music and voice-over (doc.audio), or a silent track."""
+    a = doc.get("audio") or {}
+    ins, parts, mix, k = [], [], [], first_input
+    bgm, vo = a.get("bgm") or {}, a.get("vo") or {}
+    for kind, x in (("bgm", bgm), ("vo", vo)):
+        p = os.path.join(proj_dir, x.get("path", "")) if x.get("path") else ""
+        if p and not os.path.isfile(p):
+            here = os.path.join(HERE, x["path"])
+            p = here if os.path.isfile(here) else ""
+        if not p:
+            continue
+        ins += (["-stream_loop", "-1"] if kind == "bgm" else []) + ["-i", p]
+        if kind == "bgm":
+            vol = float(x.get("vol", 0.35 if vo.get("path") else 0.8))
+            parts.append(f"[{k}:a]atrim=0:{dur:.3f},asetpts=PTS-STARTPTS,volume={vol},afade=t=in:d=0.6,afade=t=out:st={max(0, dur - 1.5):.3f}:d=1.5[bgm]")
+            mix.append("[bgm]")
+        else:
+            at = int(float(x.get("at", 0)) * 1000)
+            parts.append(f"[{k}:a]volume={float(x.get('vol', 1))},adelay={at}|{at},apad,atrim=0:{dur:.3f}[vo]")
+            mix.append("[vo]")
+        k += 1
+    if not mix:
+        return ["-f", "lavfi", "-t", f"{dur:.3f}", "-i", "anullsrc=r=48000:cl=stereo"], [], f"{k}:a"
+    parts.append("".join(mix) + f"amix=inputs={len(mix)}:normalize=0:duration=longest,atrim=0:{dur:.3f}[aout]" if len(mix) > 1 else parts.pop().rsplit("[", 1)[0] + "[aout]")
+    return ins, parts, "[aout]"
+
+
 def render_project(doc, proj_dir, out_mp4, log=print):
-    """Draw the layers over the base video into out_mp4."""
-    base = os.path.join(proj_dir, doc["base"]["path"])
-    if not os.path.isfile(base):
-        raise RuntimeError("base video missing: " + doc["base"]["path"])
-    info = probe(base)
-    job = dict(doc, w=doc.get("w") or info["w"], h=doc.get("h") or info["h"], fps=doc.get("fps") or info["fps"], dur=info["dur"])
+    """Draw the layers over the base video (or the animated scenes of doc.film) into out_mp4."""
+    film = doc.get("film")
+    if film:
+        dur = float(doc.get("dur") or 0) or film_dur(film)
+        info = {"w": 1080, "h": 1920, "fps": 30, "dur": dur}
+        base = None
+    else:
+        base = os.path.join(proj_dir, doc["base"]["path"])
+        if not os.path.isfile(base):
+            raise RuntimeError("base video missing: " + doc["base"]["path"])
+        info = probe(base)
+    job = dict(doc, w=doc.get("w") or info["w"], h=doc.get("h") or info["h"], fps=doc.get("fps") or info["fps"], dur=info["dur"],
+               projUrl=file_url(proj_dir) + "/")
     layers = []
     for L in doc.get("layers", []):
         L = dict(L)
@@ -85,12 +127,14 @@ def render_project(doc, proj_dir, out_mp4, log=print):
             json.dump(job, f, ensure_ascii=False)
         out = run([node_path(), RENDER_JS, os.path.join(tmp, "job.json"), frames, GZL] + ([S.CFG["chrome"]] if S.CFG.get("chrome") else []), timeout=1800)
         log("render: captured " + out.strip())
-        # ffmpeg: base, then each sticker clip, then the captured text/image frames on top
-        cmd = [FFMPEG, "-hide_banner", "-loglevel", "error", "-y", "-i", base]
+        # ffmpeg: base (the video, or the captured animation), then each sticker clip, then the text/image frames on top
+        fps = job["fps"]
+        cmd = [FFMPEG, "-hide_banner", "-loglevel", "error", "-y"] + (["-framerate", str(fps), "-i", os.path.join(frames, "f%05d.jpg")] if film else ["-i", base])
         stickers = [L for L in layers if L.get("kind") == "sticker"]
         for L in stickers:
             cmd += (["-stream_loop", str(int(L["loop"]))] if L.get("loop") else []) + ["-i", L["src"]["abs"]]
-        cmd += ["-f", "concat", "-safe", "0", "-i", os.path.join(frames, "layers.ffconcat")]
+        if not film:
+            cmd += ["-f", "concat", "-safe", "0", "-i", os.path.join(frames, "layers.ffconcat")]
         parts, cur = [], "[0:v]"
         for i, L in enumerate(stickers, start=1):
             st, en = float(L.get("start", 0)), float(L.get("end", 0))
@@ -112,10 +156,18 @@ def render_project(doc, proj_dir, out_mp4, log=print):
                          f"enable='between(t,{st:.3f},{en:.3f})':eof_action=pass[b{i}]")
             cur = f"[b{i}]"
         n = len(stickers) + 1
-        parts.append(f"[{n}:v]format=rgba,setpts=PTS-STARTPTS[top]")
-        parts.append(f"{cur}[top]overlay=0:0:eof_action=pass:format=auto,format=yuv420p[v]")
-        cmd += ["-filter_complex", ";".join(parts), "-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-crf", "18",
-                "-preset", "medium", "-c:a", "copy", "-movflags", "+faststart", out_mp4]
+        if film:
+            parts.append(f"{cur}scale=in_range=pc:out_range=tv,format=yuv420p[v]")
+            ains, aparts, amap = audio_args(doc, proj_dir, info["dur"], n)
+            cmd += ains
+            parts += aparts
+            cmd += ["-filter_complex", ";".join(parts), "-map", "[v]", "-map", amap, "-c:v", "libx264", "-crf", "18", "-preset", "medium",
+                    "-r", str(fps), "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-t", f"{info['dur']:.3f}", "-movflags", "+faststart", out_mp4]
+        else:
+            parts.append(f"[{n}:v]format=rgba,setpts=PTS-STARTPTS[top]")
+            parts.append(f"{cur}[top]overlay=0:0:eof_action=pass:format=auto,format=yuv420p[v]")
+            cmd += ["-filter_complex", ";".join(parts), "-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-crf", "18",
+                    "-preset", "medium", "-c:a", "copy", "-movflags", "+faststart", out_mp4]
         run(cmd, timeout=3600)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
