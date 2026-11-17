@@ -4,7 +4,7 @@
 (function () {
   "use strict";
   const S = window.gzScript = {};
-  let db, assets, items, scripts, edits, openAdjust, myId, readOnly, toast, esc, who, typeFor, patchItem, seriesName, isHub;
+  let db, assets, items, scripts, edits, openAdjust, openBoard, myId, readOnly, toast, esc, who, typeFor, patchItem, seriesName, isHub;
   const $s = (id) => document.getElementById(id);
   let dlg = null, itemId = null, doc = null, series = null, seriesId = "", saveT = null, serT = null, lastLocal = 0;
   const KINDS = { AI: "AI video", REAL: "Film it", PRODUCT: "Product shot", DIAGRAM: "Diagram", CARD: "Card" };
@@ -82,7 +82,7 @@ dialog.scr{width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;pad
 
   /* ---------- open / data ---------- */
   S.open = async function (id, ctx) {
-    ({ db, assets, items, scripts, edits, openAdjust, myId, readOnly, toast, esc, who, typeFor, patchItem, seriesName, isHub } = ctx);
+    ({ db, assets, items, scripts, edits, openAdjust, openBoard, myId, readOnly, toast, esc, who, typeFor, patchItem, seriesName, isHub } = ctx);
     const it = items.get(id); if (!it) return;
     ensureDom();
     itemId = id; seriesId = it.series || "";
@@ -100,10 +100,10 @@ dialog.scr{width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;pad
   S.remote = function (id, d) {
     if (!S.isOpen() || id !== itemId || !d) return;
     const wasBusy = busy(), gen = d.gen || {};
-    if (saveT || ((d.updatedAt || 0) <= lastLocal && d.updatedBy === myId)) { doc.gen = gen; doc.filmGen = d.filmGen; if (wasFilm(d)) toast("The animation is ready. Press Open animation."); side(); return; }
+    if (saveT || ((d.updatedAt || 0) <= lastLocal && d.updatedBy === myId)) { doc.gen = gen; doc.filmGen = d.filmGen; if (wasFilm(d)) toast("The storyboard is ready. Press Open storyboard."); side(); return; }
     doc = JSON.parse(JSON.stringify(d));
     if (wasBusy && gen.state === "done") toast("Claude finished the script.");
-    if (doc.filmGen && doc.filmGen.state === "done" && d.filmGen && (wasFilm(d))) toast("The animation is ready. Press Open animation.");
+    if (doc.filmGen && doc.filmGen.state === "done" && d.filmGen && (wasFilm(d))) toast("The storyboard is ready. Press Open storyboard.");
     drawAll();
   };
   function drawAll() { main(); side(); }
@@ -187,11 +187,11 @@ dialog.scr{width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;pad
     if (has && isHub) {
       const fg = doc.filmGen || {}, fbusy = fg.state === "queued" || fg.state === "writing", film = edits && edits.get(itemId), isFilm = film && film.film;
       lastFilmState = lastFilmState || fg.state || "";
-      const fst = fg.state === "queued" ? "Waiting for the studio Mac (it checks every 3 minutes)…" : fg.state === "writing" ? "Claude is laying out the scenes…" : fg.state === "failed" ? "Couldn’t make it: " + (fg.error || "unknown") : "";
-      h += '<div class="scr-card"><h3>🎬 Animation</h3><p class="hint">Claude turns this script into an animated video from the Gearizo templates. You adjust it after.</p>' +
+      const fst = fg.state === "queued" ? "Waiting for the studio Mac (it checks every 3 minutes)…" : fg.state === "writing" ? "Claude is drawing the storyboard…" : fg.state === "failed" ? "Couldn’t make it: " + (fg.error || "unknown") : "";
+      h += '<div class="scr-card"><h3>🎬 Storyboard → video</h3><p class="hint">Claude turns this script into a visual storyboard from the Gearizo templates. Check it, then make the video and fix anything before sending it to Review.</p>' +
         (fst ? '<div class="scr-state ' + (fg.state === "failed" ? "err" : "run") + '">' + esc(fst) + "</div>" : "") +
-        (isFilm ? '<div class="row"><button class="btn go sm" type="button" data-s="openfilm">Open animation</button><span class="hint">' + film.film.scenes.length + " scenes</span></div>" : "") +
-        (film && !isFilm ? '<p class="hint">This video already has a filmed project (Adjust).</p>' : '<textarea id="scrFilmSteer" rows="2" placeholder="Optional: e.g. pink look, more steps, shorter"></textarea><button class="btn sm' + (isFilm ? "" : " primary") + '" type="button" data-s="makefilm"' + (fbusy || busy() || readOnly ? " disabled" : "") + ">" + (isFilm ? "Make it again with Claude" : "Make animation with Claude") + "</button>" + (isFilm ? '<p class="hint">Making it again keeps your product photo, music and 花字; scene edits are replaced.</p>' : "")) + "</div>";
+        (isFilm ? '<div class="row"><button class="btn go sm" type="button" data-s="openfilm">Open storyboard</button><span class="hint">' + film.film.scenes.length + " scenes</span></div>" : "") +
+        (film && !isFilm ? '<p class="hint">This video already has a filmed project (Adjust).</p>' : '<textarea id="scrFilmSteer" rows="2" placeholder="Optional: e.g. pink look, more steps, shorter"></textarea><button class="btn sm' + (isFilm ? "" : " primary") + '" type="button" data-s="makefilm"' + (fbusy || busy() || readOnly ? " disabled" : "") + ">" + (isFilm ? "Redo storyboard with Claude" : "Make storyboard with Claude") + "</button>" + (isFilm ? '<p class="hint">Making it again keeps your product photo, music and 花字; scene edits are replaced.</p>' : "")) + "</div>";
     }
     if (has) {
       h += '<div class="scr-card"><h3>Approval <span class="scr-pill ' + (doc.status === "approved" ? "approved" : "draft") + '">' + (doc.status === "approved" ? "Approved" : "Draft") + "</span></h3>" +
@@ -259,11 +259,11 @@ dialog.scr{width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;pad
       const a = b.dataset.s, shot = b.closest(".scr-shot"), si = shot ? Number(shot.dataset.i) : -1;
       if (a === "close") close();
       else if (a === "write") requestWrite();
-      else if (a === "openfilm") { await close(); openAdjust(itemId); }
+      else if (a === "openfilm") { await close(); (openBoard || openAdjust)(itemId); }
       else if (a === "makefilm") {
         if (saveT) await save();
         const g = { state: "queued", req: Date.now(), by: myId || "", steer: ($s("scrFilmSteer") || {}).value ? $s("scrFilmSteer").value.trim().slice(0, 1000) : "" };
-        try { await db.collection("scripts").doc(itemId).update({ filmGen: g }); doc.filmGen = g; lastFilmState = "queued"; side(); toast("Sent to Claude on the studio Mac. The animation appears here in a few minutes."); }
+        try { await db.collection("scripts").doc(itemId).update({ filmGen: g }); doc.filmGen = g; lastFilmState = "queued"; side(); toast("Sent to Claude on the studio Mac. The storyboard appears here in a few minutes."); }
         catch (err) { toast("Couldn’t send it. Check your connection."); }
       }
       else if (a === "copyall") copy(asText(), "Script copied");

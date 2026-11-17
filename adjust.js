@@ -30,6 +30,7 @@
   const starts = () => { let a = 0; return doc.film.scenes.map((x) => { const b = a; a += sDur(x); return b; }); };
   const sceneAt = (t) => { let i = 0; starts().forEach((a, j) => { if (t >= a) i = j; }); return i; };
   const $a = (id) => document.getElementById(id);
+  let actx = null;
   let dlg = null, itemId = null, doc = null, sel = null, k = 1, raf = 0, saveT = null, savedAt = 0, saving = false;
   let hist = [], fut = [], pending = null, tab = "layer", pxs = 40, linkSubs = true;
   const ROWS = [{ id: "sub", name: "字幕 Subtitles" }, { id: "text", name: "花字 Text" }, { id: "media", name: "素材 Stickers & images" }];
@@ -115,7 +116,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       '<button class="btn ghost sm" type="button" data-a="close" aria-label="Close">✕</button>' +
       '<div class="adj-title"><b id="adjTitle"></b><span id="adjSaved">Saved</span></div>' +
       '<button class="btn sm" type="button" data-a="undo" title="Undo (⌘Z)" aria-label="Undo">↶</button><button class="btn sm" type="button" data-a="redo" title="Redo (⇧⌘Z)" aria-label="Redo">↷</button>' +
-      '<span class="adj-rs" id="adjRs"></span><button class="btn primary sm" type="button" data-a="render" id="adjRender">Render new version</button></div>' +
+      '<span class="adj-rs" id="adjRs"></span><button class="btn sm" type="button" data-a="board" id="adjBoard" hidden>▦ Storyboard</button><button class="btn primary sm" type="button" data-a="render" id="adjRender">Render new version</button></div>' +
       '<div class="adj-body"><div class="adj-left"><div class="adj-view" id="adjView"><div class="adj-box" id="adjBox"><div class="adj-stage" id="adjStage">' +
       '<video id="adjVid" playsinline preload="auto"></video><div class="adj-layers" id="adjLayers"></div><div class="adj-guide v" id="adjGv"></div><div class="adj-guide h" id="adjGh"></div></div>' +
       '<div class="adj-sel" id="adjSel" hidden><i id="adjHandle" title="Drag to resize"></i></div></div></div>' +
@@ -129,8 +130,8 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
   }
 
   /* ---------- open / close / save ---------- */
-  A.open = function (id, ctx) {
-    ({ db, items, edits, myId, readOnly, toast, esc, who, fbFor, attHtml, assets, typeFor } = ctx);
+  A.open = function (id, ctx, opts) {
+    ({ db, items, edits, myId, readOnly, toast, esc, who, fbFor, attHtml, assets, typeFor } = ctx); actx = ctx; opts = opts || {};
     const d = edits.get(id);
     if (!d) { toast("This video has no adjustable project."); return; }
     ensureDom();
@@ -154,7 +155,12 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     const lay = $a("adjLayers"); lay.innerHTML = ""; lay._gzl = null;
     if (!dlg.open) dlg.showModal();
     fit(); pxs = Math.max(8, ($a("adjTlx").clientWidth - 20) / Math.max(1, doc.dur || 1));
+    $a("adjBoard").hidden = !FM;
+    $a("adjRender").textContent = FM ? "Export → Review" : "Render new version";
+    $a("adjRender").title = FM ? "The Mac renders the MP4 and sends it to Review as the next version" : "";
     renderStatus(); panel(); timeline(); draw();
+    if (FM && opts.scene != null && doc.film.scenes[opts.scene]) selectScene(opts.scene, true);
+    if (FM && opts.play) play();
   };
   A.isOpen = () => !!(dlg && dlg.open);
   A.remote = function (id, d) {           // a new copy arrived from the database
@@ -166,7 +172,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       if (sel && !cur()) sel = null; panel(); timeline(); draw();
     }
   };
-  function close() { flush(); playing = false; stop(); $a("adjVid").pause(); dlg.close(); }
+  function close() { flush(); playing = false; stop(); $a("adjVid").pause(); dlg.close(); if (actx && actx.onClose) setTimeout(actx.onClose, 0); }
   function changed() {
     $a("adjSaved").textContent = "Saving…";
     clearTimeout(saveT); saveT = setTimeout(flush, 900);
@@ -439,6 +445,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       else if (a === "setstart" && L) { mark(); setVal("start", r2(now())); syncFields(); }
       else if (a === "setend" && L) { mark(); setVal("end", r2(now())); syncFields(); }
       else if (a === "render") requestRender();
+      else if (a === "board" && actx.openBoard) { const id = itemId; close(); actx.openBoard(id); }
     });
 
     const pan = $a("adjPan");
@@ -602,6 +609,106 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     el.className = "adj-rs" + (r.state === "failed" ? " err" : r.state === "done" ? " ok" : "");
     el.textContent = r.state === "queued" ? "Waiting for the Mac (it checks every 3 minutes)…" : r.state === "rendering" ? "Rendering on the Mac…" :
       r.state === "done" ? "v" + r.n + " sent for review ✓" : r.state === "failed" ? "Render failed: " + (r.error || "unknown") : "";
+  }
+  /* ---------- storyboard: one still per scene to check before making the video ---------- */
+  let bd = null, bId = null, bctx = null;
+  const BSTYLE = `
+.sbd{border:0;padding:0;margin:0;inset:0;width:100%;height:100%;max-width:100%;max-height:100%;box-sizing:border-box;background:var(--bg,#F6F4EF);color:var(--ink)}
+.sbd::backdrop{background:rgba(0,0,0,.4)}
+.sb-wrap{display:grid;grid-template-rows:auto minmax(0,1fr);height:100%}
+.sb-top{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface);flex-wrap:wrap}
+.sb-top .ttl{flex:1;min-width:160px;display:flex;flex-direction:column}
+.sb-top .ttl b{font-size:15px} .sb-top .ttl span{font-size:12.5px;color:var(--ink-2)}
+.sb-pill{font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;background:color-mix(in srgb,var(--review) 20%,var(--surface))}
+.sb-pill.ok{background:color-mix(in srgb,var(--ready) 22%,var(--surface))}
+.sb-body{overflow:auto;padding:16px;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.sb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+.sb-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.sb-th{position:relative;width:100%;aspect-ratio:9/16;border-radius:8px;overflow:hidden;background:#eee;cursor:pointer}
+.sb-th>div{position:absolute;left:0;top:0;width:1080px;height:1920px;transform-origin:0 0}
+.sb-n{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-3)}
+.sb-n b{font-family:var(--display);font-size:15px;color:var(--ink)}
+.sb-tr{font-size:11.5px;color:var(--ink-3)}
+.sb-line{font-size:12.5px;color:var(--ink-2);border-left:3px solid var(--pink);padding-left:7px}
+.sb-side{position:sticky;top:0;display:flex;flex-direction:column;gap:12px}
+.sb-box{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.sb-box h3{margin:0;font-size:14px}
+.sb-box textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;resize:vertical}
+.sb-box .hint{font-size:12.5px;color:var(--ink-2);margin:0}
+.sb-state{font-size:12.5px;border-radius:10px;padding:6px 10px;background:color-mix(in srgb,var(--review) 16%,var(--surface))}
+.sb-state.err{background:color-mix(in srgb,var(--edit) 18%,var(--surface))}
+@media (max-width:820px){.sb-body{grid-template-columns:1fr}.sb-side{position:static}.sb-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+`;
+  function tStart(s) { const m = String(s || "").match(/(\d+(?:\.\d+)?)\s*[–\-~to]+\s*(\d+(?:\.\d+)?)/); return m ? [Number(m[1]), Number(m[2])] : null; }
+  A.board = function (id, ctx) {
+    bctx = ctx; bId = id;
+    if (!bd) {
+      const st = document.createElement("style"); st.textContent = BSTYLE; document.head.appendChild(st);
+      bd = document.createElement("dialog"); bd.className = "sbd"; bd.setAttribute("aria-label", "Storyboard");
+      bd.innerHTML = '<div class="sb-wrap"><div class="sb-top" id="sbTop"></div><div class="sb-body"><div class="sb-grid" id="sbGrid"></div><aside class="sb-side" id="sbSide"></aside></div></div>';
+      document.body.appendChild(bd);
+      bd.addEventListener("click", boardClick);
+      bd.addEventListener("close", () => { bId = null; if (bctx && bctx.onClose) setTimeout(bctx.onClose, 0); });
+    }
+    if (!bd.open) bd.showModal();
+    A.boardRefresh(true);
+  };
+  A.boardOpen = () => !!(bd && bd.open);
+  let bSig = "";
+  A.boardRefresh = function (force) {
+    if (!bd || !bd.open || !bId) return;
+    const c = bctx, e = c.getEdit(bId), s = c.getScript(bId) || {}, it = c.getItem(bId) || {}, E = c.esc;
+    const film = e && e.film, ok = !!(e && e.board && e.board.state === "approved");
+    const fg = s.filmGen || {}, busy = fg.state === "queued" || fg.state === "writing";
+    $a("sbTop").innerHTML = '<button class="btn ghost sm" type="button" data-b="close" aria-label="Close">✕</button>' +
+      '<div class="ttl"><b>Storyboard · ' + E((it.code ? it.code + " " : "") + (it.title || "")) + '</b><span>' + (film ? film.scenes.length + " scenes · " + Math.round(GZS.filmDur(film)) + " s" : "No storyboard yet") + "</span></div>" +
+      (film ? '<span class="sb-pill' + (ok ? " ok" : "") + '">' + (ok ? "✓ Approved" + (e.board.by ? " · " + E(c.who(e.board.by)) : "") : "Waiting for your OK") + "</span>" : "") +
+      (film ? (ok ? '<button class="btn primary sm" type="button" data-b="make">Open the video →</button>' : '<button class="btn primary sm" type="button" data-b="approve"' + (c.readOnly || busy ? " disabled" : "") + '>Looks good → Make the video</button>') : "");
+    const fst = fg.state === "queued" ? "Waiting for the studio Mac (it checks every 3 minutes)…" : fg.state === "writing" ? "Claude is drawing the storyboard…" : fg.state === "failed" ? "Couldn’t make it: " + (fg.error || "unknown") : "";
+    $a("sbSide").innerHTML = (fst ? '<div class="sb-state' + (fg.state === "failed" ? " err" : "") + '">' + E(fst) + "</div>" : "") +
+      '<div class="sb-box"><h3>Ask Claude to change it</h3><textarea id="sbSteer" rows="3" placeholder="e.g. shorter, start with the nail close-up, pink look, add a compare scene"></textarea>' +
+      '<button class="btn sm" type="button" data-b="redo"' + (busy || c.readOnly || !(s.lines || s.shots) ? " disabled" : "") + ">" + (film ? "Redo with Claude" : "Make storyboard with Claude") + "</button>" +
+      '<p class="hint">' + (film ? "Redoing replaces the scenes and asks for your OK again. Your product photo and music stay." : "Claude turns the script into scenes from the Gearizo templates.") + "</p></div>" +
+      (film ? '<div class="sb-box"><h3>Small changes</h3><p class="hint">Tap a scene to change its words, template, length or icon yourself.</p><button class="btn sm" type="button" data-b="edit">Edit scenes</button></div>' : "");
+    const sig = JSON.stringify([film, s.lines]);
+    if (!force && sig === bSig) return; bSig = sig;
+    const grid = $a("sbGrid"); grid.innerHTML = "";
+    if (!film) { grid.innerHTML = '<p class="hint">' + (busy ? "Claude is working on it…" : "No storyboard yet. Press “Make storyboard with Claude”.") + "</p>"; return; }
+    // match the script lines to scenes by time (scaled to the film's length)
+    const lines = (s.lines || []).map((l) => ({ l, r: tStart(l.t) })).filter((x) => x.r);
+    const sEnd = Math.max(1, ...lines.map((x) => x.r[1])), fdur = GZS.filmDur(film), k2 = fdur / sEnd;
+    let a0 = 0; const st0 = film.scenes.map((x) => { const b = a0; a0 += Math.max(0.6, Number(x.dur) || (GZS.TPL[x.tpl] || {}).dur || 3); return b; });
+    film.scenes.forEach((x, i) => {
+      const T = GZS.TPL[x.tpl] || {}, dur = Math.max(0.6, Number(x.dur) || T.dur || 3), a = st0[i], b = a + dur;
+      const mine = lines.filter((y) => { const m = (y.r[0] + y.r[1]) / 2 * k2; return m >= a && (m < b || i === film.scenes.length - 1); });
+      const card = document.createElement("div"); card.className = "sb-card";
+      card.innerHTML = '<div class="sb-th" data-b="scene" data-i="' + i + '" title="Edit this scene"><div></div></div>' +
+        '<div class="sb-n"><b>' + (i + 1) + '</b><span>' + E(T.name || x.tpl) + " · " + dur.toFixed(1) + " s</span></div>" +
+        (i ? '<div class="sb-tr">' + ({ slide: "→ slides in", zoom: "→ zooms in", wipe: "→ wipes in" }[x.trans || "slide"] || "") + "</div>" : "") +
+        mine.map((y) => '<div class="sb-line">' + E(y.l.line || "") + "</div>").join("");
+      grid.appendChild(card);
+      const th = card.querySelector(".sb-th"), stage = th.firstChild;
+      requestAnimationFrame(() => {
+        stage.style.transform = "scale(" + (th.clientWidth / 1080) + ")";
+        try { GZS.render(stage, { theme: film.theme, scenes: [x] }, Math.min(dur - 0.05, dur * 0.8 + 0.6), {}); } catch (err) {}
+      });
+    });
+  };
+  async function boardClick(ev) {
+    const b = ev.target.closest("[data-b]"); if (!b) return;
+    const a = b.dataset.b, c = bctx, id = bId;
+    if (a === "close") bd.close();
+    else if (a === "edit" || a === "scene" || a === "make") { bd.close(); c.openAdjust(id, a === "scene" ? { scene: Number(b.dataset.i) } : a === "make" ? { play: true } : {}); }
+    else if (a === "approve") {
+      try { await c.db.collection("edits").doc(id).update({ board: { state: "approved", by: c.myId || "", at: Date.now() } }); }
+      catch (err) { c.toast("Couldn’t save. Check your connection."); return; }
+      c.toast("Storyboard approved. Here’s the video: fix anything, then Export → Review.");
+      bd.close(); c.openAdjust(id, { play: true });
+    } else if (a === "redo") {
+      const g = { state: "queued", req: Date.now(), by: c.myId || "", steer: ($a("sbSteer").value || "").trim().slice(0, 1000) };
+      try { await c.db.collection("scripts").doc(id).update({ filmGen: g }); c.toast("Sent to Claude on the studio Mac. The new storyboard shows here in a few minutes."); A.boardRefresh(true); }
+      catch (err) { c.toast("Couldn’t send it. Check your connection."); }
+    }
   }
   async function requestRender() {
     if (!db || readOnly) return;

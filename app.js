@@ -414,6 +414,7 @@ async function connect(){
       if(view==="edit"&&!(window.gzScript&&gzScript.isOpen())) render();
       if(editingId&&$("dlg")&&$("dlg").open) scriptBtn();
       if(window.gzScript) scripts.forEach((d,id)=>gzScript.remote(id,d));
+      if(window.gzAdjust&&gzAdjust.boardRefresh) gzAdjust.boardRefresh();
     },()=>{});
     db.collection("edits").onSnapshot(snap=>{
       edits=new Map(snap.docs.filter(x=>x.exists).map(x=>[x.id,x.data()||{}]));
@@ -421,6 +422,7 @@ async function connect(){
       if(window.gzScript&&gzScript.isOpen()) gzScript.refresh(edits);
       if(view==="edit"&&!(window.gzAdjust&&gzAdjust.isOpen())) render();
       if(window.gzAdjust) edits.forEach((d,id)=>gzAdjust.remote(id,d));
+      if(window.gzAdjust&&gzAdjust.boardRefresh) gzAdjust.boardRefresh();
     },()=>{});
     db.collection("postjobs").onSnapshot(snap=>{
       const j={}; snap.docs.forEach(x=>{ if(x.exists) j[x.id]=x.data()||{} }); jobs=j;
@@ -688,7 +690,6 @@ function scrState(it){
   const d=scripts.get(it.id); if(!d) return {k:"none",t:"No script yet"};
   const g=d.gen||{}, n=Array.isArray(d.shots)?d.shots.length:0, clips=Array.isArray(d.shots)?d.shots.filter(x=>x&&x.clip).length:0;
   if(g.state==="queued"||g.state==="writing") return {k:"busy",t:"Claude is writing…"};
-  if(d.filmGen&&(d.filmGen.state==="queued"||d.filmGen.state==="writing")) return {k:"busy",t:"Claude is making the animation…"};
   if(g.state==="failed") return {k:"fail",t:"Last try failed"};
   if(!n&&!(d.lines||[]).length) return {k:"none",t:"No script yet"};
   return {k:d.status==="approved"?"ok":"draft",t:(d.status==="approved"?"Approved":"Draft")+" · "+n+" shots"+(clips?" · "+clips+" clips":"")};
@@ -700,28 +701,43 @@ function adjState(it){
   const st=r.state==="queued"?"waiting for the Mac":r.state==="rendering"?"rendering…":r.state==="done"?"rendered v"+r.n:r.state==="failed"?"render failed":"";
   return {film:!!film,busy,fail:r.state==="failed",t:(film?film+" scenes":n+" layers")+(st?" · "+st:"")};
 }
+function boardState(it){
+  const d=edits.get(it.id), s=scripts.get(it.id)||{}, fg=s.filmGen||{};
+  if(fg.state==="queued"||fg.state==="writing") return {k:"busy",t:"Claude is drawing…"};
+  if(!d||!d.film) return fg.state==="failed"?{k:"fail",t:"Storyboard failed"}:{k:"none",t:"No storyboard"};
+  return d.board&&d.board.state==="approved"?{k:"ok",t:"Storyboard OK"}:{k:"draft",t:"Storyboard to check"};
+}
 function editRow(it){
-  const s=scrState(it), a=adjState(it), k=ST_K[it.status]||"var(--ink-3)";
-  const when=it.due||it.date;
+  const s=scrState(it), a=adjState(it), d=edits.get(it.id), film=!!(d&&d.film), b=boardState(it), k=ST_K[it.status]||"var(--ink-3)";
+  const when=it.due||it.date, hasScript=s.k!=="none"&&s.k!=="busy"||film;
+  const chip=(x,pre)=>'<span class="edchip '+x.k+'">'+pre+esc(x.t)+'</span>';
+  let chips=chip(s,"① ");
+  if(film||hasScript) chips+='<span class="edarr">›</span>'+chip(b,"② ");
+  if(film) chips+='<span class="edarr">›</span>'+chip({k:a.busy?"busy":a.fail?"fail":(d.render||{}).state==="done"?"ok":"none",t:(d.render||{}).state==="done"?"v"+d.render.n+" in Review":a.busy?"Exporting…":a.fail?"Export failed":"Not exported"},"③ ");
+  else if(a) chips+=chip({k:a.busy?"busy":a.fail?"fail":"ok",t:"🎛 "+a.t},"");
+  // the next step gets the pink button
+  const next=film?(b.k==="ok"?"video":"board"):a?"adjust":s.k==="none"||s.k==="busy"?"script":"board";
+  const btn=(kind,label,attr)=>'<button class="btn sm'+(next===kind?" primary":"")+'" type="button" '+attr+'="'+esc(it.id)+'">'+label+'</button>';
   return '<div class="edrow"><div class="edmain"><b>'+(it.code?'<span class="edcode">'+esc(it.code)+'</span>':"")+esc(it.title||"Untitled")+'</b>'+
     '<span class="edmeta"><span class="pl" style="--k:'+k+'"><i></i>'+esc(ST1[it.status]||it.status)+'</span>'+(when?'<span>'+esc(when)+'</span>':"")+'</span>'+
-    '<span class="edchips"><span class="edchip '+s.k+'">📝 '+esc(s.t)+'</span>'+(a?'<span class="edchip '+(a.busy?"busy":a.fail?"fail":"ok")+'">'+(a.film?"🎬 ":"🎛 ")+esc(a.t)+'</span>':"")+'</span></div>'+
-    '<div class="edacts"><button class="btn sm'+(s.k==="none"?"":" primary")+'" type="button" data-script="'+esc(it.id)+'">'+(s.k==="none"?"Write script":"Script")+'</button>'+
-    (a?'<button class="btn sm primary" type="button" data-adjust="'+esc(it.id)+'">'+(a.film?"Animation":"Adjust")+'</button>':"")+'</div></div>';
+    '<span class="edchips">'+chips+'</span></div>'+
+    '<div class="edacts">'+btn("script",s.k==="none"?"Write script":"Script","data-script")+
+    (film||hasScript?btn("board","Storyboard","data-board"):"")+
+    (film?btn("video","Video","data-adjust"):a?btn("adjust","Adjust","data-adjust"):"")+'</div></div>';
 }
 function renderEdit(){
   const box=$("editView"), q=edQ.trim().toLowerCase();
   const all=[...items.values()].filter(i=>i.type!=="design"&&(!q||((i.code||"")+" "+(i.title||"")).toLowerCase().includes(q)));
-  const busy=i=>{ const s=scrState(i), a=adjState(i); return s.k==="busy"||(a&&a.busy) };
-  const pick={all:()=>true,script:i=>scrState(i).k==="none",draft:i=>["draft","fail"].includes(scrState(i).k),anim:i=>edits.has(i.id),busy}[edF]||(()=>true);
+  const busy=i=>{ const s=scrState(i), a=adjState(i); return s.k==="busy"||boardState(i).k==="busy"||!!(a&&a.busy) };
+  const pick={all:()=>true,script:i=>scrState(i).k==="none",draft:i=>["draft","fail"].includes(scrState(i).k),board:i=>boardState(i).k==="draft",anim:i=>edits.has(i.id),busy}[edF]||(()=>true);
   const list=all.filter(pick), open=["idea","script","shoot","edit","changes"];
   const byDate=(a,b)=>String(a.due||a.date||"9999").localeCompare(String(b.due||b.date||"9999"));
   const working=list.filter(i=>open.includes(i.status)).sort((a,b)=>busy(b)-busy(a)||byDate(a,b));
   const later=list.filter(i=>!open.includes(i.status)&&(scripts.has(i.id)||edits.has(i.id))).sort((a,b)=>byDate(b,a));
-  const n=f=>all.filter({script:i=>scrState(i).k==="none"&&open.includes(i.status),draft:i=>["draft","fail"].includes(scrState(i).k),anim:i=>edits.has(i.id),busy}[f]).length;
+  const n=f=>all.filter({script:i=>scrState(i).k==="none"&&open.includes(i.status),draft:i=>["draft","fail"].includes(scrState(i).k),board:i=>boardState(i).k==="draft",anim:i=>edits.has(i.id),busy}[f]).length;
   const chip=(id,label,c)=>'<button type="button" class="edf" aria-pressed="'+(edF===id)+'" data-edf="'+id+'">'+label+(c?'<span class="ncount">'+c+'</span>':"")+'</button>';
   const html='<div class="edhead"><input type="search" id="edQ" placeholder="Search code or title" aria-label="Search videos" value="'+esc(edQ)+'">'+
-    '<div class="edfs">'+chip("all","All")+chip("script","Needs script",n("script"))+chip("draft","Drafts",n("draft"))+chip("anim","Animations & projects",n("anim"))+chip("busy","Claude working",n("busy"))+'</div></div>'+
+    '<div class="edfs">'+chip("all","All")+chip("script","Needs script",n("script"))+chip("draft","Script drafts",n("draft"))+chip("board","Storyboards to check",n("board"))+chip("anim","Videos & projects",n("anim"))+chip("busy","Claude working",n("busy"))+'</div></div>'+
     '<div class="shsec"><h2>Working on</h2>'+(working.length?working.map(editRow).join(""):'<p class="empty">Nothing here.</p>')+'</div>'+
     (later.length?'<details class="shsec edlater"><summary><h2>In review and posted <span class="ncount">'+later.length+'</span></h2></summary>'+later.map(editRow).join("")+'</details>':"");
   const qEl=$("edQ"), had=qEl&&document.activeElement===qEl, pos=had?qEl.selectionStart:0, wasOpen=box.querySelector(".edlater")&&box.querySelector(".edlater").open;
@@ -744,18 +760,29 @@ function scriptBtn(){
 async function openScript(id){
   const v=(window.GZ_CONFIG&&GZ_CONFIG.version)||"1";
   try{ if(!window.gzScript) await loadScript("script.js?v="+v) }catch(e){ toast("Couldn’t open the script. Check your connection."); return }
-  gzScript.open(id,{db,assets,items,scripts,edits,openAdjust,myId,readOnly,toast,esc,who,typeFor,patchItem:(iid,patch)=>{ const it=items.get(iid); if(it) persist(iid,{...it,...patch}) },seriesName:sid=>(SERIES.find(x=>x.id===sid)||{name:"No series"}).name,isHub:isCr()});
+  gzScript.open(id,{db,assets,items,scripts,edits,openAdjust,openBoard,myId,readOnly,toast,esc,who,typeFor,patchItem:(iid,patch)=>{ const it=items.get(iid); if(it) persist(iid,{...it,...patch}) },seriesName:sid=>(SERIES.find(x=>x.id===sid)||{name:"No series"}).name,isHub:isCr()});
 }
 document.addEventListener("click",e=>{ const b=e.target.closest("[data-script]"); if(b){ e.preventDefault(); openScript(b.dataset.script) } });
 let adjLoading=null;
 function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement("script"); s.src=src; s.onload=res; s.onerror=()=>rej(new Error("load")); document.head.appendChild(s) }) }
-async function openAdjust(id){
+async function loadEditor(){
   const v=(window.GZ_CONFIG&&GZ_CONFIG.version)||"1";
-  try{ adjLoading=adjLoading||(async()=>{ if(!window.GZL) await loadScript("gzlayers.js?v="+v); if(!window.GZS) await loadScript("gzscenes.js?v="+v); if(!window.gzAdjust) await loadScript("adjust.js?v="+v); if(!document.getElementById("gzsFonts")){ const l=document.createElement("link"); l.id="gzsFonts"; l.rel="stylesheet"; l.href=GZS.fontsHref(); document.head.appendChild(l) } })(); await adjLoading }
-  catch(e){ adjLoading=null; toast("Couldn’t open the editor. Check your connection."); return }
-  if($("dlg")&&$("dlg").open) $("dlg").close();
-  gzAdjust.open(id,{db,items,edits,myId,readOnly,toast,esc,who,fbFor,attHtml,assets,typeFor});
+  try{ adjLoading=adjLoading||(async()=>{ if(!window.GZL) await loadScript("gzlayers.js?v="+v); if(!window.GZS) await loadScript("gzscenes.js?v="+v); if(!window.gzAdjust) await loadScript("adjust.js?v="+v); if(!document.getElementById("gzsFonts")){ const l=document.createElement("link"); l.id="gzsFonts"; l.rel="stylesheet"; l.href=GZS.fontsHref(); document.head.appendChild(l) } })(); await adjLoading; return true }
+  catch(e){ adjLoading=null; toast("Couldn’t open the editor. Check your connection."); return false }
 }
+const edCtx=()=>({db,items,edits,myId,readOnly,toast,esc,who,fbFor,attHtml,assets,typeFor,openBoard,openAdjust,getItem:id=>items.get(id),getEdit:id=>edits.get(id),getScript:id=>scripts.get(id),onClose:()=>{ if(view==="edit"&&!gzAdjust.isOpen()&&!gzAdjust.boardOpen()) render() }});
+async function openAdjust(id,opts){
+  if(!await loadEditor()) return;
+  if($("dlg")&&$("dlg").open) $("dlg").close();
+  gzAdjust.open(id,edCtx(),opts);
+}
+/* Storyboard: one still per animated scene, approved before the video is made */
+async function openBoard(id){
+  if(!await loadEditor()) return;
+  if($("dlg")&&$("dlg").open) $("dlg").close();
+  gzAdjust.board(id,edCtx());
+}
+document.addEventListener("click",e=>{ const b=e.target.closest("[data-board]"); if(b){ e.preventDefault(); openBoard(b.dataset.board) } });
 document.addEventListener("click",e=>{ const b=e.target.closest("[data-adjust]"); if(b){ e.preventDefault(); openAdjust(b.dataset.adjust) } });
 function verCard(v,latest,it){
   if(it&&it.type==="design"&&v.files&&v.files.length&&!v.asset){

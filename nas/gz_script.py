@@ -280,7 +280,8 @@ def handle_films(docs, merge, put, log):
             dur = round(sum(x["dur"] for x in film["scenes"]), 2)
             doc = dict(old if old.get("film") else {}, item=item_id, film=film, w=1080, h=1920, fps=30, dur=dur,
                        layers=old.get("layers", []) if old.get("film") else [], audio=old.get("audio", {}) if old.get("film") else {},
-                       rev=int(old.get("rev") or 0) + 1, updatedAt=now(), updatedBy="claude", render=old.get("render") or {"state": "idle"})
+                       rev=int(old.get("rev") or 0) + 1, updatedAt=now(), updatedBy="claude", render=old.get("render") or {"state": "idle"},
+                       board={})                  # a new storyboard waits for the team's OK again
             if old and not old.get("film"):
                 raise RuntimeError("This video already has a filmed project (Adjust). Make the animation on another video, or ask to replace it.")
             put("edits", item_id, doc)
