@@ -94,6 +94,8 @@
     toks.forEach((sp, i) => { const p = seg(lt, t0 + i * g, t0 + i * g + 0.42); set(sp, "translateY(" + ((1 - E.out(p)) * 46).toFixed(1) + "px) scale(" + (0.8 + 0.2 * E.back(p)).toFixed(3) + ")", p * 2.4); if (sp._mk) sp._mk.style.transform = "scaleX(" + E.out(seg(lt, t0 + toks.length * g + 0.25, t0 + toks.length * g + 0.7)).toFixed(3) + ")"; });
     return t0 + toks.length * g + 0.42;
   }
+  /* parts the team can move and restyle per scene (scene.style[key] = {x, y, size, font, color}) */
+  function tag(e, key, txt, kind) { if (!e) return e; e.dataset.gzp = key; e._gzTxt = txt === undefined ? e : txt; e._gzKind = kind || ""; return e; }
   const fadeUp = (e, lt, t0, d) => { const p = seg(lt, t0, t0 + (d || 0.5)); set(e, "translateY(" + ((1 - E.out(p)) * 34).toFixed(1) + "px)", p); };
   function pill(text, th, bg, fg) { return el("div", "display:inline-block;font:700 34px/1 " + FONT + ";letter-spacing:.08em;text-transform:uppercase;padding:16px 28px;border-radius:999px;background:" + (bg || th.ink) + ";color:" + (fg || th.card), text); }
   function badge(name, th, size, fill, stroke) {
@@ -106,7 +108,7 @@
     const h = el("div", "display:flex;flex-direction:column;align-items:center;gap:22px");
     if (d.kicker) { h.appendChild(pill(d.kicker, th)); }
     if (d.heading) { const w = words(d.heading, th, "font:800 " + titleSize(d.heading, 0.62) + "px/1.08 " + FONT + ";color:" + th.text + ";max-width:920px"); h.appendChild(w); h._w = w; }
-    col.appendChild(h); return h;
+    tag(h, "heading", h._w || null); col.appendChild(h); return h;
   };
   const animHead = (h, lt) => { if (!h) return 0; let e = 0; if (h.firstChild && !h.firstChild._toks) { const p = seg(lt, 0.05, 0.45); set(h.firstChild, "translateX(" + ((1 - E.out(p)) * -60).toFixed(1) + "px)", p); } if (h._w) e = popWords(h._w, lt, 0.12); return e; };
   const times = (n, given, from, to) => Array.from({ length: n }, (_, i) => (given && isFinite(given[i]) ? Number(given[i]) : from + (n <= 1 ? 0 : (i * (to - from)) / (n - 1))));
@@ -114,14 +116,15 @@
   /* ---------- the templates ---------- */
   const TPL = {};
   TPL.hook = {
+    parts: [["title", "Title"], ["sub", "Line under"], ["kicker", "Label"], ["icon", "Icon"]],
     name: "大标题钩子 Hook title", dur: 3.2, fields: { kicker: "small label (optional)", title: "the hook, *highlight* a word", sub: "one short line under it (optional)", icon: "icon name" },
     use: "Opening line / question that stops the scroll.",
     build(d, th) {
-      const c = column("gap:46px"), kick = d.kicker ? pill(d.kicker, th) : null;
+      const c = column("gap:46px"), kick = tag(d.kicker ? pill(d.kicker, th) : null, "kicker");
       if (kick) c.appendChild(kick);
-      const b = d.icon !== "none" ? badge(d.icon || "sparkle", th, 330) : null; if (b) c.appendChild(b);
-      const t = words(d.title || "Title", th, "font:800 " + titleSize(d.title) + "px/1.04 " + FONT + ";color:" + th.text + ";max-width:940px"); c.appendChild(t);
-      const s = d.sub ? el("div", "font:600 " + bodySize(d.sub) + "px/1.3 " + FONT + ";color:" + th.sub + ";max-width:860px", d.sub) : null; if (s) c.appendChild(s);
+      const b = tag(d.icon !== "none" ? badge(d.icon || "sparkle", th, 330) : null, "icon", null, "scale"); if (b) c.appendChild(b);
+      const t = tag(words(d.title || "Title", th, "font:800 " + titleSize(d.title) + "px/1.04 " + FONT + ";color:" + th.text + ";max-width:940px"), "title"); c.appendChild(t);
+      const s = tag(d.sub ? el("div", "font:600 " + bodySize(d.sub) + "px/1.3 " + FONT + ";color:" + th.sub + ";max-width:860px", d.sub) : null, "sub"); if (s) c.appendChild(s);
       return { root: c, update(lt) {
         if (kick) { const p = seg(lt, 0.0, 0.4); set(kick, "translateY(" + ((1 - E.out(p)) * -30) + "px)", p); }
         if (b) { const p = seg(lt, 0.05, 0.55); set(b, "scale(" + E.back(p).toFixed(3) + ") rotate(" + ((1 - E.out(p)) * -12).toFixed(1) + "deg) translateY(" + (Math.sin(lt * 2.2) * 7).toFixed(1) + "px)", p * 3); drawIcon(b._ic, seg(lt, 0.2, 1.0)); }
@@ -131,20 +134,21 @@
     }
   };
   TPL.iconText = {
+    parts: [["title", "Title"], ["text", "Text"], ["tag", "Label"], ["icon", "Icon"], ["card", "Whole card"]],
     name: "图标 + 说明 Icon card", dur: 4, fields: { tag: "small label (optional)", icon: "icon name", title: "short title, *highlight* ok", text: "1–2 sentences" },
     use: "Explaining one point. Use several in a row for several points.",
     build(d, th) {
       const c = column();
       const card = el("div", "width:900px;box-sizing:border-box;background:" + th.card + ";border:5px solid " + th.ink + ";border-radius:48px;padding:70px 64px 76px;display:flex;flex-direction:column;align-items:center;gap:36px;box-shadow:0 30px 60px rgba(0,0,0,.08);position:relative");
-      const tag = d.tag ? pill(d.tag, th, th.accent, "#fff") : null;
-      if (tag) { tag.style.position = "absolute"; tag.style.top = "-30px"; card.appendChild(tag); }
-      const b = badge(d.icon || "sparkle", th, 260, th.soft); card.appendChild(b);
-      const t = words(d.title || "", th, "font:800 " + titleSize(d.title, 0.72) + "px/1.08 " + FONT + ";color:" + th.text); card.appendChild(t);
-      const x = d.text ? el("div", "font:600 " + bodySize(d.text) + "px/1.35 " + FONT + ";color:" + th.sub, d.text) : null; if (x) card.appendChild(x);
-      c.appendChild(card);
+      const lab = tag(d.tag ? pill(d.tag, th, th.accent, "#fff") : null, "tag");
+      if (lab) { lab.style.position = "absolute"; lab.style.top = "-30px"; card.appendChild(lab); }
+      const b = tag(badge(d.icon || "sparkle", th, 260, th.soft), "icon", null, "scale"); card.appendChild(b);
+      const t = tag(words(d.title || "", th, "font:800 " + titleSize(d.title, 0.72) + "px/1.08 " + FONT + ";color:" + th.text), "title"); card.appendChild(t);
+      const x = tag(d.text ? el("div", "font:600 " + bodySize(d.text) + "px/1.35 " + FONT + ";color:" + th.sub, d.text) : null, "text"); if (x) card.appendChild(x);
+      tag(card, "card", null, "move"); c.appendChild(card);
       return { root: c, update(lt) {
         const p = seg(lt, 0, 0.6); set(card, "translateY(" + ((1 - E.out(p)) * 140).toFixed(1) + "px) rotate(" + ((1 - E.out(p)) * 3).toFixed(2) + "deg)", p * 2);
-        if (tag) { const q = seg(lt, 0.45, 0.8); set(tag, "scale(" + E.back(q).toFixed(3) + ")", q * 3); }
+        if (lab) { const q = seg(lt, 0.45, 0.8); set(lab, "scale(" + E.back(q).toFixed(3) + ")", q * 3); }
         const q = seg(lt, 0.25, 0.7); set(b, "scale(" + E.back(q).toFixed(3) + ") translateY(" + (Math.sin(lt * 2) * 5).toFixed(1) + "px)", q * 3); drawIcon(b._ic, seg(lt, 0.4, 1.2));
         const e = popWords(t, lt, 0.6);
         if (x) fadeUp(x, lt, e - 0.1, 0.6);
@@ -152,6 +156,7 @@
     }
   };
   TPL.lens = {
+    parts: [["heading", "Heading"], ["label", "Meaning"], ["text", "Extra line"]],
     name: "放大镜看字 Magnifier", dur: 5, fields: { heading: "title above (optional)", band: "the text printed on the tyre/box, e.g. 80/90-14 M/C 46P TUBELESS", word: "the word to zoom on (must be in band)", label: "what it means, *highlight* ok", text: "extra line (optional)" },
     use: "Pointing at small print: tyre sidewall markings, labels, codes.",
     build(d, th) {
@@ -174,8 +179,8 @@
       lens.appendChild(handle); lens.appendChild(glass); r.appendChild(lens);
       const call = el("div", "position:absolute;left:90px;right:90px;top:1300px;display:flex;flex-direction:column;align-items:center;gap:26px;text-align:center");
       const lab = words(d.label || "", th, "font:800 " + titleSize(d.label, 0.66) + "px/1.1 " + FONT + ";color:" + th.text);
-      const labBox = el("div", "background:" + th.card + ";border:5px solid " + th.accent + ";border-radius:36px;padding:34px 44px"); labBox.appendChild(lab); call.appendChild(labBox);
-      const x = d.text ? el("div", "font:600 " + bodySize(d.text) + "px/1.35 " + FONT + ";color:" + th.sub, d.text) : null; if (x) call.appendChild(x);
+      const labBox = tag(el("div", "background:" + th.card + ";border:5px solid " + th.accent + ";border-radius:36px;padding:34px 44px"), "label", lab); labBox.appendChild(lab); call.appendChild(labBox);
+      const x = tag(d.text ? el("div", "font:600 " + bodySize(d.text) + "px/1.35 " + FONT + ";color:" + th.sub, d.text) : null, "text"); if (x) call.appendChild(x);
       r.appendChild(call);
       return { root: r, update(lt) {
         animHead(h, lt);
@@ -198,6 +203,7 @@
     }
   };
   TPL.compare = {
+    parts: [["heading", "Heading"], ["left.title", "Left title"], ["left.text", "Left text"], ["right.title", "Right title"], ["right.text", "Right text"]],
     name: "左右对比 Compare", dur: 5, fields: { heading: "title (optional)", left: "{icon,title,text,mark: yes|no|''}", right: "{icon,title,text,mark}" },
     use: "Two options side by side, optionally right ✓ / wrong ✗.",
     build(d, th) {
@@ -207,8 +213,8 @@
         const s = d[k] || {}, card = el("div", "position:absolute;top:" + (d.heading ? 760 : 620) + "px;left:" + (i ? 560 : 60) + "px;width:460px;height:780px;box-sizing:border-box;background:" + th.card + ";border:5px solid " + th.ink + ";border-radius:44px;padding:64px 36px;display:flex;flex-direction:column;align-items:center;gap:30px;text-align:center;box-shadow:0 26px 50px rgba(0,0,0,.08)");
         const b = badge(s.icon || "sparkle", th, 230, th.soft); card.appendChild(b);
         const longest = Math.max(...String(s.title || "").replace(/\*/g, "").split(/\s+/).map(weight), 1);
-        const t = words(s.title || "", th, "font:800 " + Math.round(Math.min(74, titleSize(s.title, 0.6), 370 / (longest * 1.05))) + "px/1.08 " + FONT + ";color:" + th.text); card.appendChild(t);
-        const x = s.text ? el("div", "font:600 " + Math.min(40, bodySize(s.text)) + "px/1.32 " + FONT + ";color:" + th.sub, s.text) : null; if (x) card.appendChild(x);
+        const t = tag(words(s.title || "", th, "font:800 " + Math.round(Math.min(74, titleSize(s.title, 0.6), 370 / (longest * 1.05))) + "px/1.08 " + FONT + ";color:" + th.text), k + ".title"); card.appendChild(t);
+        const x = tag(s.text ? el("div", "font:600 " + Math.min(40, bodySize(s.text)) + "px/1.32 " + FONT + ";color:" + th.sub, s.text) : null, k + ".text"); if (x) card.appendChild(x);
         let m = null;
         if (s.mark === "yes" || s.mark === "no") { m = el("div", "position:absolute;right:-26px;top:-36px;width:140px;height:140px;border-radius:50%;background:" + (s.mark === "yes" ? th.yes : th.no) + ";display:flex;align-items:center;justify-content:center;box-shadow:0 14px 30px rgba(0,0,0,.2)"); const ic = icon(s.mark === "yes" ? "check" : "cross", 92, "#fff", 11); m.appendChild(ic); m._ic = ic; card.appendChild(m); }
         r.appendChild(card);
@@ -230,20 +236,21 @@
     }
   };
   TPL.steps = {
+    parts: [["heading", "Heading"], ["steps", "Steps"]],
     name: "1-2-3 步骤 Steps", dur: 6, fields: { heading: "title", steps: "[{icon (optional), text}] 2–5 steps", times: "[seconds into the scene when each step appears] (optional, for VO)" },
     use: "How-to sequences: do this, then this.",
     build(d, th) {
       const r = el("div", "position:absolute;inset:0");
       const c = column("justify-content:flex-start;top:330px"); const h = head(d, th, c); r.appendChild(c);
       const st = (d.steps || []).slice(0, 5), top0 = d.heading ? 720 : 560, gap = Math.min(250, 900 / Math.max(1, st.length));
-      const line = el("div", "position:absolute;left:182px;width:8px;border-radius:4px;background:" + th.ink + ";opacity:.25;top:" + (top0 + 60) + "px;height:" + Math.max(0, (st.length - 1) * gap) + "px;transform-origin:50% 0"); r.appendChild(line);
+      const line = el("div", "position:absolute;left:182px;width:8px;border-radius:4px;background:" + th.ink + ";opacity:.25;top:" + (top0 + 60) + "px;height:" + Math.max(0, (st.length - 1) * gap) + "px;transform-origin:50% 0"); r.appendChild(tag(line, "steps", null, "move"));
       const rows = st.map((s, i) => {
         const row = el("div", "position:absolute;left:120px;right:70px;top:" + (top0 + i * gap) + "px;display:flex;align-items:center;gap:40px");
         const n = el("div", "flex:none;width:132px;height:132px;border-radius:50%;background:" + th.ink + ";color:" + th.card + ";font:800 64px/132px " + FONT + ";text-align:center;box-shadow:0 12px 26px rgba(0,0,0,.12)", String(i + 1));
         const box = el("div", "flex:1;display:flex;align-items:center;gap:26px;background:" + th.card + ";border-radius:30px;padding:26px 30px;border:4px solid transparent;min-height:120px;box-sizing:border-box");
         const ic = s.icon ? icon(s.icon, 92, th.ink, 6) : null; if (ic) box.appendChild(ic);
         const tx = el("div", "font:700 " + Math.min(50, bodySize(s.text) + 4) + "px/1.25 " + FONT + ";color:" + th.text + ";text-align:left", s.text || ""); box.appendChild(tx);
-        row.appendChild(n); row.appendChild(box); r.appendChild(row);
+        row.appendChild(n); row.appendChild(box); r.appendChild(tag(row, "steps", tx));
         return { row, n, box, ic };
       });
       const at = times(rows.length, d.times, 0.7, Math.max(1.2, (d.dur || 6) - 1.6));
@@ -263,6 +270,7 @@
     }
   };
   TPL.stop = {
+    parts: [["heading", "Heading"], ["items", "Items"]],
     name: "警告清单 Stop list", dur: 6, fields: { heading: "warning title, e.g. JANGAN TUNGGANG JIKA:", items: "[short lines] 2–6", times: "[seconds when each appears] (optional)" },
     use: "Don'ts, danger signs, when to stop / call for help.",
     build(d, th) {
@@ -270,14 +278,15 @@
       const ban = el("div", "position:absolute;left:70px;right:70px;top:340px;background:" + th.no + ";border-radius:40px;padding:40px 44px;display:flex;align-items:center;gap:30px;box-shadow:0 22px 50px rgba(200,49,79,.3)");
       const wi = icon("warning", 130, "#fff", 8); ban.appendChild(wi);
       const ht = el("div", "font:800 " + Math.min(76, titleSize(d.heading, 0.55)) + "px/1.08 " + FONT + ";color:#fff;text-align:left", d.heading || "STOP"); ban.appendChild(ht);
-      r.appendChild(ban);
+      r.appendChild(tag(ban, "heading", ht));
       const it = (d.items || []).slice(0, 6), gap = Math.min(190, 1000 / Math.max(1, it.length));
       const rows = it.map((s, i) => {
         const row = el("div", "position:absolute;left:90px;right:90px;top:" + (690 + i * gap) + "px;display:flex;align-items:center;gap:30px;background:" + th.card + ";border-radius:28px;padding:22px 28px;box-shadow:0 10px 24px rgba(0,0,0,.06)");
         const m = el("div", "flex:none;width:96px;height:96px;border-radius:50%;background:" + th.no + ";display:flex;align-items:center;justify-content:center");
         const ic = icon("cross", 60, "#fff", 12); m.appendChild(ic);
-        row.appendChild(m); row.appendChild(el("div", "font:700 " + Math.min(50, bodySize(s) + 4) + "px/1.22 " + FONT + ";color:" + th.text, s));
-        r.appendChild(row); return { row, m, ic };
+        const tx = el("div", "font:700 " + Math.min(50, bodySize(s) + 4) + "px/1.22 " + FONT + ";color:" + th.text, s);
+        row.appendChild(m); row.appendChild(tx);
+        r.appendChild(tag(row, "items", tx)); return { row, m, ic };
       });
       const at = times(rows.length, d.times, 0.9, Math.max(1.4, (d.dur || 6) - 1.4));
       return { root: r, update(lt) {
@@ -288,6 +297,7 @@
     }
   };
   TPL.endcard = {
+    parts: [["title", "Tagline"], ["sub", "Product name"], ["cta", "Button"], ["product", "Product photo"], ["logo", "Logo"]],
     name: "产品结尾卡 Product end card", dur: 5, fields: { image: "product photo with transparent background (url/path)", logo: "logo url (default Gearizo)", title: "tagline, *highlight* ok", sub: "product name / one line (optional)", cta: "button text, e.g. SAVE & SHARE (optional)" },
     use: "The last scene: product, logo, tagline, call to action.",
     build(d, th, ctx) {
@@ -300,12 +310,12 @@
       let prod;
       if (d.image) { prod = el("img", "position:absolute;left:190px;top:330px;width:700px;height:760px;object-fit:contain"); prod.alt = ""; prod.setAttribute("src", ctx.url(d.image)); }
       else { prod = el("div", "position:absolute;left:290px;top:430px;width:500px;height:560px;display:flex;align-items:center;justify-content:center"); const ic = icon("inflator", 460, th.ink, 4); prod.appendChild(ic); prod._ic = ic; }
-      r.appendChild(prod);
+      r.appendChild(tag(prod, "product", null, "scale"));
       const low = el("div", "position:absolute;left:80px;right:80px;top:1210px;display:flex;flex-direction:column;align-items:center;gap:26px;text-align:center");
-      const logo = d.logo === "none" ? null : el("img", "width:380px;height:auto;display:block;margin-bottom:6px"); if (logo) { logo.alt = ""; logo.setAttribute("src", ctx.url(d.logo || "brand/gearizo-logo.png")); low.appendChild(logo); }
-      const t = words(d.title || "", th, "font:800 " + titleSize(d.title, 0.8) + "px/1.06 " + FONT + ";color:" + th.text + ";max-width:920px"); low.appendChild(t);
-      const s = d.sub ? el("div", "font:600 " + bodySize(d.sub) + "px/1.3 " + FONT + ";color:" + th.sub, d.sub) : null; if (s) low.appendChild(s);
-      const cta = d.cta ? el("div", "margin-top:14px;font:800 42px/1 " + FONT + ";letter-spacing:.08em;color:#fff;background:" + th.accent + ";padding:26px 46px;border-radius:999px;box-shadow:0 16px 34px rgba(0,0,0,.16)", d.cta) : null; if (cta) low.appendChild(cta);
+      const logo = d.logo === "none" ? null : el("img", "width:380px;height:auto;display:block;margin-bottom:6px"); if (logo) { logo.alt = ""; logo.setAttribute("src", ctx.url(d.logo || "brand/gearizo-logo.png")); low.appendChild(tag(logo, "logo", null, "scale")); }
+      const t = tag(words(d.title || "", th, "font:800 " + titleSize(d.title, 0.8) + "px/1.06 " + FONT + ";color:" + th.text + ";max-width:920px"), "title"); low.appendChild(t);
+      const s = tag(d.sub ? el("div", "font:600 " + bodySize(d.sub) + "px/1.3 " + FONT + ";color:" + th.sub, d.sub) : null, "sub"); if (s) low.appendChild(s);
+      const cta = tag(d.cta ? el("div", "margin-top:14px;font:800 42px/1 " + FONT + ";letter-spacing:.08em;color:#fff;background:" + th.accent + ";padding:26px 46px;border-radius:999px;box-shadow:0 16px 34px rgba(0,0,0,.16)", d.cta) : null, "cta"); if (cta) low.appendChild(cta);
       r.appendChild(low);
       return { root: r, update(lt, dur) {
         r1.setAttribute("stroke-dashoffset", String(1 - E.out(seg(lt, 0, 1.0))));
@@ -329,6 +339,19 @@
     const v = el("div", "position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,rgba(255,255,255,0) 55%,rgba(0,0,0,.07) 100%)");
     const w = el("div", "position:absolute;inset:0;overflow:hidden"); w.appendChild(b); w.appendChild(v); w._g = b; return w;
   }
+  function restyle(box, style) {
+    if (!style) return;
+    box.querySelectorAll("[data-gzp]").forEach((e) => {
+      const st = style[e.dataset.gzp]; if (!st) return;
+      if (st.x || st.y) e.style.translate = (Number(st.x) || 0) + "px " + (Number(st.y) || 0) + "px";
+      const k = Number(st.size) || 1;
+      if (e._gzKind === "scale") { if (k !== 1) e.style.scale = String(k); return; }
+      const tx = e._gzTxt; if (!tx || e._gzKind === "move") return;
+      if (k !== 1) { const base = parseFloat(tx.style.fontSize) || 0; if (base) tx.style.fontSize = (base * k).toFixed(1) + "px"; }
+      if (st.font && root.GZL) tx.style.fontFamily = root.GZL.fontOf(st.font).fam + "," + FONT;
+      if (st.color) tx.style.color = st.color;
+    });
+  }
   function render(stage, film, t, opts) {
     opts = opts || {};
     const th = THEMES[film.theme] || THEMES.paper;
@@ -344,6 +367,7 @@
         const T = TPL[s.tpl] || TPL.iconText, dur = Math.max(0.6, Number(s.dur) || T.dur);
         const wrap = el("div", "position:absolute;left:0;top:0;width:" + W + "px;height:" + H + "px;will-change:transform,opacity");
         const inst = T.build(Object.assign({ dur }, s.data || {}), th, ctx); wrap.appendChild(inst.root); root.appendChild(wrap);
+        wrap.dataset.gzs = String(root.childElementCount - 2); restyle(inst.root, s.style);
         const o = { s, wrap, inst, start: s0, dur, trans: s.trans || "slide" }; s0 += dur; return o;
       });
       const bar = el("div", "position:absolute;top:0;bottom:0;width:16px;background:" + th.accent + ";display:none;z-index:9"); root.appendChild(bar);
@@ -354,7 +378,7 @@
     st.bar.style.display = "none";
     st.scenes.forEach((o, i) => {
       const next = st.scenes[i + 1], end = o.start + o.dur;
-      const inWin = i > 0 && t >= o.start - TR && t < o.start, live = t >= o.start && t < end, show = live || inWin || (opts.all && i === 0);
+      const inWin = i > 0 && t >= o.start - TR && t < o.start, live = t >= o.start && t < end, show = live || inWin || !!opts.all;
       o.wrap.style.display = show ? "" : "none";
       if (!show) return;
       o.wrap.style.clipPath = ""; o.wrap.style.filter = "";
