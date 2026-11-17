@@ -617,6 +617,27 @@ dialog{border-radius:18px}
 .shcard .acts{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .shcard .acts input{flex:1 1 180px;min-width:0;border:1px solid var(--line);border-radius:999px;padding:6px 12px;min-height:36px}
 .shcard .what .moved{color:var(--edit);font-weight:600}
+.edhead{display:flex;flex-direction:column;gap:10px}
+.edhead input[type=search]{border:1px solid var(--line);border-radius:999px;padding:8px 14px;min-height:40px;font:inherit;background:var(--surface);max-width:420px}
+.edfs{display:flex;flex-wrap:wrap;gap:6px}
+.edf{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;color:var(--ink-2)}
+.edf[aria-pressed=true]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.edrow{display:flex;align-items:center;gap:12px;background:var(--sunk);border-radius:14px;padding:10px 12px;margin-top:8px}
+.edmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.edmain b{font-size:14.5px;word-break:break-word}
+.edcode{font-family:var(--display);font-size:12px;color:var(--ink-3);margin-right:6px}
+.edmeta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3)}
+.edchips{display:flex;flex-wrap:wrap;gap:6px}
+.edchip{font-size:12px;border-radius:999px;padding:2px 9px;background:var(--surface);color:var(--ink-2)}
+.edchip.none{color:var(--ink-3)}
+.edchip.ok{background:color-mix(in srgb,var(--ready) 16%,var(--surface))}
+.edchip.busy{background:color-mix(in srgb,var(--review) 18%,var(--surface))}
+.edchip.fail{background:color-mix(in srgb,var(--edit) 18%,var(--surface))}
+.edacts{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.edlater summary{list-style:none;cursor:pointer}
+.edlater summary::-webkit-details-marker{display:none}
+.edlater summary h2{display:inline-flex;align-items:center;gap:6px}
+@media (max-width:720px){.edrow{flex-direction:column;align-items:stretch}.edacts{justify-content:flex-start}}
 .shcard .shmove{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:var(--surface);border-radius:12px;padding:8px 10px}
 .shcard .shmove[hidden]{display:none}
 .shcard .shmove .hint{flex:1 1 100%;font-size:12.5px;color:var(--ink-2)}
@@ -1753,6 +1774,7 @@ dialog#temple::backdrop{background:#2A0A0B}
   <button id="vHome" type="button" aria-pressed="false" title="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/></svg>Home<span class="badge" id="homeBadge" hidden>0</span></button>
   <button id="vCal" type="button" aria-pressed="true" title="Calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Calendar</button>
   <button id="vRev" type="button" aria-pressed="false" title="Review"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="13" rx="2"/><path d="M10.2 8.4v5.2l4.3-2.6z" fill="currentColor"/><path d="M8 21h8M12 17.5V21"/></svg>Review<span class="badge" id="revBadge" hidden>0</span></button>
+  <button id="vEdit" type="button" aria-pressed="false" title="Edit" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit</button>
   <button id="vPipe" type="button" aria-pressed="false" title="Pipeline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="4.5" height="16" rx="1.2"/><rect x="9.75" y="4" width="4.5" height="11" rx="1.2"/><rect x="16" y="4" width="4.5" height="7" rx="1.2"/></svg>Pipeline</button>
   <button id="vShoot" type="button" aria-pressed="false" title="Shoots" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>Shoots<span class="badge" id="shBadge" hidden>0</span></button>
   <button id="vTask" type="button" aria-pressed="false" title="Tasks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5l1.6 1.6L8.8 5"/><path d="M4 12.5l1.6 1.6 3.2-3.1"/><path d="M4 18.5l1.6 1.6 3.2-3.1"/><path d="M12 7h8M12 13h8M12 19h8"/></svg>Tasks<span class="badge" id="tkBadge" hidden>0</span></button>
@@ -1790,6 +1812,7 @@ dialog#temple::backdrop{background:#2A0A0B}
     <section class="home" id="homeView" hidden aria-label="Home"></section>
     <main id="main"></main>
     <section class="shview" id="shoots" hidden aria-label="Shoots"></section>
+    <section class="shview edview" id="editView" hidden aria-label="Edit"></section>
     <section class="tkview" id="tasks" hidden aria-label="Tasks">
       <form class="tkadd" id="tkForm" hidden>
         <input id="tkText" placeholder="Add a task…" autocomplete="off" aria-label="New task" maxlength="200">

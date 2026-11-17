@@ -69,7 +69,7 @@ let nRead=(()=>{
   try{ const r=JSON.parse(localStorage.getItem(NOTIF_KEY)||"null"); if(r&&r.floor) return {floor:Number(r.floor)||0,ids:new Set(Array.isArray(r.ids)?r.ids:[])} }catch(e){}
   const s={floor:Date.now(),ids:new Set()}; saveRead(s); return s;
 })();
-const VIEWS=["home","calendar","review","pipeline","tasks","shoots"];
+const VIEWS=["home","calendar","review","edit","pipeline","tasks","shoots"];
 function hashView(){ const h=location.hash.slice(1), i=h.indexOf("/"), v=i<0?h:h.slice(0,i); return {v:VIEWS.includes(v)?v:"home",a:i<0?"":decodeURIComponent(h.slice(i+1))} }
 let view=hashView().v, wantSel=hashView().v==="review"&&hashView().a||null;
 const now=new Date(); const todayStr=ymd(now);
@@ -176,7 +176,7 @@ function renderHeader(){
   const isCal=view==="calendar", isHome=view==="home";
   $("kicker").hidden=!isHome;
   if(isHome){ const d=new Date(); $("kicker").textContent=DOW_LONG[d.getDay()]+", "+d.getDate()+" "+MONTHS[d.getMonth()] }
-  $("monthLabel").textContent=isHome?(myName?"Hi, "+myName.split(/\s+/)[0]:"Hi there"):isCal?MONTHS[cursor.getMonth()]+" "+cursor.getFullYear():view==="review"?"Review":view==="tasks"?"Tasks":view==="shoots"?"Shoots":"Pipeline";
+  $("monthLabel").textContent=isHome?(myName?"Hi, "+myName.split(/\s+/)[0]:"Hi there"):isCal?MONTHS[cursor.getMonth()]+" "+cursor.getFullYear():view==="review"?"Review":view==="edit"?"Edit":view==="tasks"?"Tasks":view==="shoots"?"Shoots":"Pipeline";
   if(isHome){ $("stats").innerHTML="" }
   else if(isCal){
     const prefix=cursor.getFullYear()+"-"+pad(cursor.getMonth()+1);
@@ -199,7 +199,7 @@ function renderHeader(){
       :stat(all.filter(i=>!["idea","posted"].includes(i.status)).length,"in production")+stat(all.filter(i=>i.status==="idea").length,"ideas");
   }
   $("prev").hidden=$("next").hidden=$("todayBtn").hidden=!isCal;
-  $("vHome").setAttribute("aria-pressed",isHome); $("vCal").setAttribute("aria-pressed",isCal); $("vRev").setAttribute("aria-pressed",view==="review"); $("vPipe").setAttribute("aria-pressed",view==="pipeline"); $("vTask").setAttribute("aria-pressed",view==="tasks"); $("vShoot").setAttribute("aria-pressed",view==="shoots");
+  $("vHome").setAttribute("aria-pressed",isHome); $("vCal").setAttribute("aria-pressed",isCal); $("vRev").setAttribute("aria-pressed",view==="review"); $("vEdit").setAttribute("aria-pressed",view==="edit"); $("vPipe").setAttribute("aria-pressed",view==="pipeline"); $("vTask").setAttribute("aria-pressed",view==="tasks"); $("vShoot").setAttribute("aria-pressed",view==="shoots");
   $("newBtn").hidden=readOnly||isHr();
   $("teamFilter").hidden=!isCr()||view==="tasks"||view==="shoots"||isHome;
   $("teamFilter").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.t===teamF));
@@ -302,14 +302,16 @@ function renderColumns(cols){
 function render(){
   if(isHr()&&!["home","tasks","shoots"].includes(view)){ view="home"; history.replaceState(null,"","#home") }
   if(view==="shoots"&&isMk()){ view="home"; history.replaceState(null,"","#home") }
+  if(view==="edit"&&myRole()&&!isCr()){ view="home"; history.replaceState(null,"","#home") }
   renderHeader(); renderFilters();
   ["vCal","vRev","vPipe"].forEach(k=>{ $(k).hidden=isHr() });
-  $("vShoot").hidden=!(isCr()||isHr());
-  const hv=view==="home", sv=view==="shoots";
-  $("homeView").hidden=!hv; $("shoots").hidden=!sv;
-  const rev=view==="review", tv=view==="tasks"||sv;
-  $("layout").classList.toggle("full",rev||tv||hv||isEc()); $("main").hidden=rev||tv||hv; $("desk").hidden=!rev; $("tasks").hidden=!tv; $("fbar").hidden=hv; $("filters").hidden=tv||isEc();
+  $("vShoot").hidden=!(isCr()||isHr()); $("vEdit").hidden=!isCr();
+  const hv=view==="home", sv=view==="shoots", ev=view==="edit";
+  $("homeView").hidden=!hv; $("shoots").hidden=!sv; $("editView").hidden=!ev;
+  const rev=view==="review", tv=view==="tasks"||sv||ev;
+  $("layout").classList.toggle("full",rev||tv||hv||isEc()); $("main").hidden=rev||tv||hv; $("desk").hidden=!rev; $("tasks").hidden=!(view==="tasks"||sv); $("fbar").hidden=hv||ev; $("filters").hidden=tv||isEc();
   if(hv) renderHome();
+  else if(ev) renderEdit();
   else if(view==="calendar") renderCalendar();
   else if(rev) renderDesk();
   else if(sv) renderShoots();
@@ -409,7 +411,7 @@ async function connect(){
     },()=>{});
     db.collection("scripts").onSnapshot(snap=>{
       scripts=new Map(snap.docs.filter(x=>x.exists).map(x=>[x.id,x.data()||{}]));
-      if(view==="review"&&!(window.gzScript&&gzScript.isOpen())) render();
+      if(view==="edit"&&!(window.gzScript&&gzScript.isOpen())) render();
       if(editingId&&$("dlg")&&$("dlg").open) scriptBtn();
       if(window.gzScript) scripts.forEach((d,id)=>gzScript.remote(id,d));
     },()=>{});
@@ -417,7 +419,7 @@ async function connect(){
       edits=new Map(snap.docs.filter(x=>x.exists).map(x=>[x.id,x.data()||{}]));
       if(editingId&&$("dlg")&&$("dlg").open) scriptBtn();
       if(window.gzScript&&gzScript.isOpen()) gzScript.refresh(edits);
-      if(view==="review"&&!(window.gzAdjust&&gzAdjust.isOpen())) render();
+      if(view==="edit"&&!(window.gzAdjust&&gzAdjust.isOpen())) render();
       if(window.gzAdjust) edits.forEach((d,id)=>gzAdjust.remote(id,d));
     },()=>{});
     db.collection("postjobs").onSnapshot(snap=>{
@@ -680,21 +682,55 @@ function pickSel(){
   for(const g of qgroups()){ const f=all.find(i=>g.sts.includes(i.status)); if(f){ selId=f.id; return } }
   selId=null;
 }
-/* Claude-made videos with an editable project: content opens the Adjust screen (adjust.js, loaded on demand) */
-function adjCardHtml(it){
-  const d=edits.get(it.id); if(!d||!isCr()) return "";
-  const r=d.render||{}, n=Array.isArray(d.layers)?d.layers.length:0;
-  const st=r.state==="queued"?"Waiting for the Mac to render":r.state==="rendering"?"Rendering on the Mac…":r.state==="done"?"Rendered v"+r.n+(r.doneAt?" · "+fmtTime(r.doneAt):""):r.state==="failed"?"Last render failed":"";
-  const film=d.film&&Array.isArray(d.film.scenes)?d.film.scenes.length:0;
-  return '<div class="adjcard"><span class="ai">'+(film?"🎬":"🎛")+'</span><div><b>'+(film?"Animated video":"Adjustable project")+'</b><span>'+(film?film+" scenes":n+" layers · subtitles, 花字 and stickers")+(st?" · "+esc(st):"")+'</span></div><button class="btn primary sm" type="button" data-adjust="'+esc(it.id)+'">'+(film?"Open":"Adjust")+'</button></div>';
+/* Edit: scripts, storyboards, animations and adjustable projects for every video (content team) */
+let edF="all", edQ="";
+function scrState(it){
+  const d=scripts.get(it.id); if(!d) return {k:"none",t:"No script yet"};
+  const g=d.gen||{}, n=Array.isArray(d.shots)?d.shots.length:0, clips=Array.isArray(d.shots)?d.shots.filter(x=>x&&x.clip).length:0;
+  if(g.state==="queued"||g.state==="writing") return {k:"busy",t:"Claude is writing…"};
+  if(d.filmGen&&(d.filmGen.state==="queued"||d.filmGen.state==="writing")) return {k:"busy",t:"Claude is making the animation…"};
+  if(g.state==="failed") return {k:"fail",t:"Last try failed"};
+  if(!n&&!(d.lines||[]).length) return {k:"none",t:"No script yet"};
+  return {k:d.status==="approved"?"ok":"draft",t:(d.status==="approved"?"Approved":"Draft")+" · "+n+" shots"+(clips?" · "+clips+" clips":"")};
 }
-/* Script & storyboard (script.js, loaded on demand): Claude on the studio Mac writes it from the idea */
-function scrCardHtml(it){
-  const d=scripts.get(it.id); if(!d&&!isCr()) return "";
-  const g=(d&&d.gen)||{}, n=d&&Array.isArray(d.shots)?d.shots.length:0, clips=d&&Array.isArray(d.shots)?d.shots.filter(x=>x&&x.clip).length:0;
-  const st=g.state==="queued"||g.state==="writing"?"Claude is writing…":g.state==="failed"?"Last try failed":!d||!n&&!(d.lines||[]).length?"Not written yet":(d.status==="approved"?"Approved":"Draft")+" · "+n+" shots"+(clips?" · "+clips+" clips":"");
-  return '<div class="adjcard scrcard"><span class="ai">📝</span><div><b>Script & storyboard</b><span>'+esc(st)+'</span></div><button class="btn sm" type="button" data-script="'+esc(it.id)+'">Open</button></div>';
+function adjState(it){
+  const d=edits.get(it.id); if(!d) return null;
+  const r=d.render||{}, film=d.film&&Array.isArray(d.film.scenes)?d.film.scenes.length:0, n=Array.isArray(d.layers)?d.layers.length:0;
+  const busy=r.state==="queued"||r.state==="rendering";
+  const st=r.state==="queued"?"waiting for the Mac":r.state==="rendering"?"rendering…":r.state==="done"?"rendered v"+r.n:r.state==="failed"?"render failed":"";
+  return {film:!!film,busy,fail:r.state==="failed",t:(film?film+" scenes":n+" layers")+(st?" · "+st:"")};
 }
+function editRow(it){
+  const s=scrState(it), a=adjState(it), k=ST_K[it.status]||"var(--ink-3)";
+  const when=it.due||it.date;
+  return '<div class="edrow"><div class="edmain"><b>'+(it.code?'<span class="edcode">'+esc(it.code)+'</span>':"")+esc(it.title||"Untitled")+'</b>'+
+    '<span class="edmeta"><span class="pl" style="--k:'+k+'"><i></i>'+esc(ST1[it.status]||it.status)+'</span>'+(when?'<span>'+esc(when)+'</span>':"")+'</span>'+
+    '<span class="edchips"><span class="edchip '+s.k+'">📝 '+esc(s.t)+'</span>'+(a?'<span class="edchip '+(a.busy?"busy":a.fail?"fail":"ok")+'">'+(a.film?"🎬 ":"🎛 ")+esc(a.t)+'</span>':"")+'</span></div>'+
+    '<div class="edacts"><button class="btn sm'+(s.k==="none"?"":" primary")+'" type="button" data-script="'+esc(it.id)+'">'+(s.k==="none"?"Write script":"Script")+'</button>'+
+    (a?'<button class="btn sm primary" type="button" data-adjust="'+esc(it.id)+'">'+(a.film?"Animation":"Adjust")+'</button>':"")+'</div></div>';
+}
+function renderEdit(){
+  const box=$("editView"), q=edQ.trim().toLowerCase();
+  const all=[...items.values()].filter(i=>i.type!=="design"&&(!q||((i.code||"")+" "+(i.title||"")).toLowerCase().includes(q)));
+  const busy=i=>{ const s=scrState(i), a=adjState(i); return s.k==="busy"||(a&&a.busy) };
+  const pick={all:()=>true,script:i=>scrState(i).k==="none",draft:i=>["draft","fail"].includes(scrState(i).k),anim:i=>edits.has(i.id),busy}[edF]||(()=>true);
+  const list=all.filter(pick), open=["idea","script","shoot","edit","changes"];
+  const byDate=(a,b)=>String(a.due||a.date||"9999").localeCompare(String(b.due||b.date||"9999"));
+  const working=list.filter(i=>open.includes(i.status)).sort((a,b)=>busy(b)-busy(a)||byDate(a,b));
+  const later=list.filter(i=>!open.includes(i.status)&&(scripts.has(i.id)||edits.has(i.id))).sort((a,b)=>byDate(b,a));
+  const n=f=>all.filter({script:i=>scrState(i).k==="none"&&open.includes(i.status),draft:i=>["draft","fail"].includes(scrState(i).k),anim:i=>edits.has(i.id),busy}[f]).length;
+  const chip=(id,label,c)=>'<button type="button" class="edf" aria-pressed="'+(edF===id)+'" data-edf="'+id+'">'+label+(c?'<span class="ncount">'+c+'</span>':"")+'</button>';
+  const html='<div class="edhead"><input type="search" id="edQ" placeholder="Search code or title" aria-label="Search videos" value="'+esc(edQ)+'">'+
+    '<div class="edfs">'+chip("all","All")+chip("script","Needs script",n("script"))+chip("draft","Drafts",n("draft"))+chip("anim","Animations & projects",n("anim"))+chip("busy","Claude working",n("busy"))+'</div></div>'+
+    '<div class="shsec"><h2>Working on</h2>'+(working.length?working.map(editRow).join(""):'<p class="empty">Nothing here.</p>')+'</div>'+
+    (later.length?'<details class="shsec edlater"><summary><h2>In review and posted <span class="ncount">'+later.length+'</span></h2></summary>'+later.map(editRow).join("")+'</details>':"");
+  const qEl=$("edQ"), had=qEl&&document.activeElement===qEl, pos=had?qEl.selectionStart:0, wasOpen=box.querySelector(".edlater")&&box.querySelector(".edlater").open;
+  setHTML(box,html);
+  if(wasOpen&&box.querySelector(".edlater")) box.querySelector(".edlater").open=true;
+  if(had){ const e=$("edQ"); e.focus(); e.setSelectionRange(pos,pos) }
+}
+document.addEventListener("click",e=>{ const b=e.target.closest("[data-edf]"); if(b){ edF=b.dataset.edf; renderEdit() } });
+document.addEventListener("input",e=>{ if(e.target.id==="edQ"){ edQ=e.target.value; renderEdit() } });
 function scriptBtn(){
   const bar=$("tPub")&&$("tPub").parentNode; if(!bar) return;
   let b=$("tScript");
@@ -799,7 +835,7 @@ function renderDesk(){
   setHTML($("vStatus"),'<div class="banner" style="--k:'+k+'"><div><b>'+esc(head)+'</b><span>'+esc(sub)+'</span></div>'+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>');
 
   const isD=it.type==="design";
-  setHTML($("nasBox"),(isD?"":scrCardHtml(it)+adjCardHtml(it)+nasBoxHtml(it)+deskCoverHtml(it))+(it.refs.length?'<div class="refs"><b>References</b>'+attHtml(it.refs)+'</div>':""));
+  setHTML($("nasBox"),(isD?"":nasBoxHtml(it)+deskCoverHtml(it))+(it.refs.length?'<div class="refs"><b>References</b>'+attHtml(it.refs)+'</div>':""));
   setHTML($("vLatest"),latest?verCard(latest,true,it):'<p class="empty">'+(isD?"No design yet.":"No video yet.")+(can?" Add the first "+(isD?"version":"cut")+" below.":" The content team hasn’t added one.")+'</p>');
   setHTML($("vOlder"),vs.length>1?'<details class="older"><summary>Earlier versions ('+(vs.length-1)+')</summary>'+vs.slice(1).map(v=>verCard(v,false,it)).join("")+'</details>':"");
   $("vVideoRows").hidden=isD; $("vAttTxt").textContent=isD?"+ Images":"+ Files";
@@ -1665,6 +1701,7 @@ $("dBack").onclick=()=>{ $("desk").classList.remove("phone-detail"); window.scro
 $("vPipe").onclick=()=>{location.hash="pipeline"};
 $("vTask").onclick=()=>{location.hash="tasks"};
 $("vShoot").onclick=()=>{location.hash="shoots"};
+$("vEdit").onclick=()=>{location.hash="edit"};
 window.addEventListener("hashchange",()=>{ const h=hashView(); view=h.v; if(h.v==="review"&&h.a){ wantSel=h.a; selId=null; $("desk").classList.toggle("phone-detail",narrow.matches) } render(); window.scrollTo(0,0) });
 narrow.addEventListener("change",render);
 $("main").addEventListener("input",e=>{ if(e.target.id==="plQ"){ pipe.q=e.target.value; renderPipeList() } });
