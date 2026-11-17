@@ -261,20 +261,50 @@ def audio_args(doc, proj_dir, dur, first_input, sfx_files=None):
 
 
 # ---------- voice-over: fit the scenes to it ----------
-def speech_segments(path):
-    """Where someone is talking: [[start, end], ...] in seconds (gaps of 0.25 s or more are pauses)."""
-    r = subprocess.run([FFMPEG, "-hide_banner", "-i", path, "-af", "silencedetect=noise=-38dB:d=0.25", "-f", "null", "-"], capture_output=True, text=True)
-    total = probe_audio(path)
-    starts = [float(x) for x in re.findall(r"silence_start: (-?[\d.]+)", r.stderr)]
-    ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", r.stderr)]
-    segs, cur = [], 0.0
-    for i, s in enumerate(starts):
-        if s - cur > 0.08:
-            segs.append([round(max(0, cur), 3), round(s, 3)])
-        cur = ends[i] if i < len(ends) else total
-    if total - cur > 0.08:
-        segs.append([round(cur, 3), round(total, 3)])
-    return segs, total
+def _levels(path, step=0.02):
+    """Loudness of the voice every 20 ms, in dB."""
+    import struct, math
+    raw = subprocess.run([FFMPEG, "-v", "error", "-i", path, "-ac", "1", "-ar", "8000", "-f", "s16le", "-"], capture_output=True, timeout=300).stdout
+    n, F = len(raw) // 2, int(8000 * step)
+    x = struct.unpack("<%dh" % n, raw[:n * 2])
+    return [10 * math.log10(sum(v * v for v in x[i:i + F]) / F / 32768 ** 2 + 1e-12) for i in range(0, n - F + 1, F)]
+
+
+def speech_segments(path, min_pause=0.06):
+    """Where someone is talking: [[start, end], ...] in seconds, split at every pause of min_pause or more.
+    "Quiet" is judged against this recording's own loudness, so studio, phone and AI voices all work."""
+    db, step = _levels(path), 0.02
+    if not db:
+        return [], 0.0
+    srt = sorted(db)
+    loud = srt[int(len(srt) * 0.9)]
+    thr = min(loud - 26, max(srt[int(len(srt) * 0.05)] + 6, loud - 36))
+    total = len(db) * step
+    segs, st, quiet = [], None, 0
+    for i, v in enumerate(db + [-200.0] * int(min_pause / step + 2)):
+        if v >= thr:
+            if st is None:
+                st = i
+            quiet = 0
+        elif st is not None:
+            quiet += 1
+            if quiet * step >= min_pause:
+                end = i - quiet + 1
+                if (end - st) * step >= 0.08:
+                    segs.append([round(st * step, 3), round(min(total, end * step), 3)])
+                st, quiet = None, 0
+    return segs, round(total, 3)
+
+
+def merge_short(segs, gap=0.25):
+    """Join talking parts separated by short pauses (for the timeline and for dipping the music)."""
+    out = []
+    for s, e in segs:
+        if out and s - out[-1][1] < gap:
+            out[-1][1] = e
+        else:
+            out.append([s, e])
+    return out
 
 
 def align_lines(segs, texts):
@@ -364,7 +394,7 @@ def scene_lines(film, lines):
     return out
 
 
-def fit_to_vo(film, spans, groups, tr=0.5):
+def fit_to_vo(film, spans, groups, tr=0.5, segs=None):
     """New scene lengths so each scene sits on its lines; steps/stop items appear with their lines.
     Returns (film, vo_at): vo_at delays the voice when scenes without lines come first."""
     sc = film["scenes"]
@@ -413,9 +443,16 @@ def fit_to_vo(film, spans, groups, tr=0.5):
         if key and g and d.get(key):
             m = len(d[key][:5 if key == "steps" else 6])
             base = s0 - tr if i > 0 else s0
-            use = g[-m:] if len(g) >= m else None
-            if use:
-                d["times"] = [round(max(0.3, spans[k][0] + at - base), 2) for k in use]
+            if len(g) >= m:
+                at_ = [spans[k][0] for k in g[-m:]]
+            else:                            # fewer lines than items: use the pauses inside those lines
+                a0, b0 = spans[min(g)][0], spans[max(g)][1]
+                inside = [s for s, e in (segs or []) if a0 - 0.01 <= s < b0]
+                at_ = [inside[round(j * (len(inside) - 1) / max(1, m - 1))] for j in range(m)] if len(inside) >= m else None
+                if at_ and len(set(at_)) < m:
+                    at_ = None
+            if at_:
+                d["times"] = [round(max(0.3, x + at - base), 2) for x in at_]
             else:
                 d.pop("times", None)
         s0 += float(x["dur"])
@@ -468,9 +505,9 @@ def handle_vo(docs, merge, log):
                             j = i
                         acc += x
                     groups[j].append(k)
-            film, at = fit_to_vo(film, spans, groups)
+            film, at = fit_to_vo(film, spans, groups, segs=segs)
             fdur = round(sum(float(x["dur"]) for x in film["scenes"]), 3)
-            nvo = dict(vo, url=url, clean=True, align="done", at=at, dur=round(total, 2), segs=segs, lines=spans, error="", doneAt=now())
+            nvo = dict(vo, url=url, clean=True, align="done", at=at, dur=round(total, 2), segs=merge_short(segs), lines=spans, error="", doneAt=now())
             audio = dict(d.get("audio") or {}, vo=nvo)
             merge("edits", item_id, {"film": film, "audio": audio, "dur": fdur, "rev": int(d.get("rev") or 0) + 1, "updatedAt": now(), "updatedBy": "mac"})
             log(f"vo: fitted {len(film['scenes'])} scenes of {item_id} to {len(spans)} lines ({total:.1f} s of voice)")
