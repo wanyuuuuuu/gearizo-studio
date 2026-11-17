@@ -6,7 +6,9 @@ TikTok inbox a few minutes before the time. TikTok notifies the account; whoever
 notification, adds the caption from the studio and posts it there. The server (notify, postdue)
 renews the sign-ins and follows each draft until it is posted.
 
-TikTok's inbox upload carries no caption, and until the developer app passes TikTok's review it
+TikTok documents no caption for inbox video uploads (only photo posts take one), but the caption is
+sent along as post_info.title anyway, the field Direct Post uses; if TikTok refuses that request for
+any reason, the video goes again the documented way, without it. Until the developer app passes TikTok's review it
 only reaches the accounts added as Sandbox target users. At most 5 drafts per account may wait
 unposted in any 24 hours.
 
@@ -54,12 +56,27 @@ def pieces(size):
     return CHUNK, size // CHUNK
 
 
-def send(token, path):
-    """Uploads path to the account's TikTok inbox; returns TikTok's publish_id."""
+def title(caption):
+    """The caption cut to TikTok's 2200 UTF-16 units, never splitting a character."""
+    b = (caption or "").strip().encode("utf-16-le")[:4400]
+    return b.decode("utf-16-le", "ignore").strip()
+
+
+def send(token, path, caption=""):
+    """Uploads path to the account's TikTok inbox; returns (publish_id, whether the caption went along)."""
     size = os.path.getsize(path)
     chunk, count = pieces(size)
-    d = call("/post/publish/inbox/video/init/", token, {"source_info": {
-        "source": "FILE_UPLOAD", "video_size": size, "chunk_size": chunk, "total_chunk_count": count}})
+    src = {"source": "FILE_UPLOAD", "video_size": size, "chunk_size": chunk, "total_chunk_count": count}
+    t, with_caption = title(caption), False
+    d = None
+    if t:
+        try:
+            d = call("/post/publish/inbox/video/init/", token, {"post_info": {"title": t}, "source_info": src})
+            with_caption = True
+        except TikTokError:
+            pass                               # whatever the reason, try once more the documented way
+    if d is None:
+        d = call("/post/publish/inbox/video/init/", token, {"source_info": src})
     url, pid = d.get("upload_url"), d.get("publish_id")
     if not url or not pid:
         raise TikTokError("TikTok gave no upload address")
@@ -80,7 +97,7 @@ def send(token, path):
                                    e.read().decode("utf-8", "replace")))[:300])
             if code not in (200, 201, 206):
                 raise TikTokError("upload part %d of %d: HTTP %s" % (i + 1, count, code))
-    return pid
+    return pid, with_caption
 
 
 def expired(row):
@@ -148,9 +165,10 @@ def run(api, docs, put, merge, log, items, versions):
                              "tries": tries, "at": now})
                     continue
                 try:
-                    pid = send(a["access_token"], src)
-                    save(s, {"state": "sent", "publish_id": pid, "at": now})
-                    log("tiktok: %s sent to %s drafts (%s)" % (it.get("title"), SLOTS[s], a.get("display_name") or s))
+                    pid, cap = send(a["access_token"], src, it.get("caption", ""))
+                    save(s, {"state": "sent", "publish_id": pid, "caption": cap, "at": now})
+                    log("tiktok: %s sent to %s drafts (%s)%s" % (it.get("title"), SLOTS[s], a.get("display_name") or s,
+                                                                ", caption included" if cap else ""))
                 except Exception as e:
                     save(s, {"state": "failed", "error": str(e)[:300], "tries": tries, "at": now})
                     log("tiktok: %s couldn't go to %s: %s" % (it.get("title"), SLOTS[s], e))

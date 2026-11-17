@@ -995,6 +995,12 @@ function renderPublish(){
     const lab=st==="posted"?"Posted ✓":st==="uploaded"||st==="scheduled"?"Ready ✓":st==="failed"?"Failed":"Auto";
     return '<span class="apl '+(st||"auto")+'" title="'+esc(st==="failed"?(j.error||""):st==="uploaded"||st==="scheduled"?"Uploaded, goes out at the time":"Uploads up to a day before")+'">'+esc(nm)+' · '+lab+'</span>';
   }).join("")+'</div>'+(autoOn&&job.error==="nofile"?'<p class="waitnote pubnote">Final video not found on the NAS.</p>':"");
+  if(tt&&["approved","scheduled"].includes(it.status)){
+    const cv=it.cover;
+    if(cv) ttCoverPrep(it);            // fetched ahead, so the phone's share sheet can open on the tap itself
+    html+='<div class="tthelp"><div><b>For TikTok</b><span class="hint">The video lands in each account’s TikTok drafts at the time. Open it there, check the caption, set the cover and post.</span></div>'+
+      '<div class="tthelp-b"><button class="btn sm" type="button" data-ttcap>Copy caption</button>'+(cv?'<button class="btn sm" type="button" data-ttcover>Save cover to phone</button>':'<span class="hint">No cover photo yet</span>')+'</div></div>';
+  }
   html+='<div class="pubacts">'+(latest&&latest.link?'<button class="btn sm" type="button" data-copy="'+esc(latest.link)+'">Copy v'+latest.n+' path</button>':"")+
     (ig||!tt?'<a class="btn sm" href="https://business.facebook.com/" target="_blank" rel="noopener">Meta ↗</a>':"")+(tt?'<a class="btn sm" href="https://www.tiktok.com/tiktokstudio" target="_blank" rel="noopener">TikTok ↗</a>':"")+'</div>';
   setHTML(box,html);
@@ -1017,6 +1023,26 @@ $("pubInfo").addEventListener("click",e=>{
     const url=($("pubLink").value||"").trim(); if(url&&!/^https?:\/\/\S+$/i.test(url)){ toast("The link should start with https://"); return }
     $("fStatus").value="posted"; persist(id,{...base,status:"posted",...stamp("posted",id),postUrl:url||base.postUrl||""}); catMove("hop"); toast(base.team==="ecomm"?"Marked live.":"Marked as posted.");
   }
+});
+/* TikTok helpers: the caption to paste and the cover to pick from the phone's photos */
+let ttCover={id:"",file:null};
+async function ttCoverPrep(it){
+  const cv=it.cover; if(!cv||ttCover.id===cv.id) return;
+  ttCover={id:cv.id,file:null};
+  try{ const r=await fetch("/_blob/"+cv.id); if(!r.ok) return; const b=await r.blob();
+    let fn=String(cv.name||((it.code||"GZ")+" cover")); if(!/\.[a-z0-9]{2,5}$/i.test(fn)) fn+="."+(EXT_BY_TYPE[b.type]||"jpg");
+    if(ttCover.id===cv.id) ttCover.file=new File([b],fn,{type:b.type||cv.type||"image/jpeg"}) }catch(e){}
+}
+$("pubInfo").addEventListener("click",async e=>{
+  if(e.target.closest("[data-ttcap]")){ const it=editingId&&items.get(editingId); const c=($("fCaption").value||(it&&it.caption)||"").trim(); if(!c){ toast("No caption yet."); return } copyText(c); return }
+  if(!e.target.closest("[data-ttcover]")) return;
+  const it=editingId&&items.get(editingId), cv=it&&it.cover; if(!cv) return;
+  const f=ttCover.id===cv.id?ttCover.file:null;
+  // On a phone the share sheet offers "Save Image", which puts it in Photos where TikTok's cover picker looks.
+  if(f&&navigator.canShare&&navigator.canShare({files:[f]})){
+    try{ await navigator.share({files:[f]}); return }catch(err){ if(err&&err.name==="AbortError") return }
+  }
+  dlFile("/_blob/"+cv.id,f?f.name:(cv.name||"cover"));
 });
 $("pubInfo").addEventListener("change",e=>{
   const c=e.target.closest("[data-plat]"); if(!c||!editingId) return;
