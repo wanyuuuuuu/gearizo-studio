@@ -685,7 +685,7 @@ function pickSel(){
   selId=null;
 }
 /* Edit: scripts, storyboards, animations and adjustable projects for every video (content team) */
-let edF="all", edQ="";
+let edQ="";
 function scrState(it){
   const d=scripts.get(it.id); if(!d) return {k:"none",t:"No script yet"};
   const g=d.gen||{}, n=Array.isArray(d.shots)?d.shots.length:0, clips=Array.isArray(d.shots)?d.shots.filter(x=>x&&x.clip).length:0;
@@ -728,25 +728,20 @@ function editRow(it){
 }
 function renderEdit(){
   const box=$("editView"), q=edQ.trim().toLowerCase();
-  const all=[...items.values()].filter(i=>i.type!=="design"&&(!q||((i.code||"")+" "+(i.title||"")).toLowerCase().includes(q)));
+  const all=[...items.values()].filter(i=>i.type!=="design"&&i.kind==="ai"&&(!q||((i.code||"")+" "+(i.title||"")).toLowerCase().includes(q)));
   const busy=i=>{ const s=scrState(i), a=adjState(i); return s.k==="busy"||boardState(i).k==="busy"||!!(a&&a.busy) };
-  const pick={all:()=>true,script:i=>scrState(i).k==="none",draft:i=>["draft","fail"].includes(scrState(i).k),board:i=>boardState(i).k==="draft",anim:i=>edits.has(i.id),busy}[edF]||(()=>true);
-  const list=all.filter(pick), open=["idea","script","shoot","edit","changes"];
+  const list=all, open=["idea","script","shoot","edit","changes"];
   const byDate=(a,b)=>String(a.due||a.date||"9999").localeCompare(String(b.due||b.date||"9999"));
   const working=list.filter(i=>open.includes(i.status)).sort((a,b)=>busy(b)-busy(a)||byDate(a,b));
   const later=list.filter(i=>!open.includes(i.status)&&(scripts.has(i.id)||edits.has(i.id))).sort((a,b)=>byDate(b,a));
-  const n=f=>all.filter({script:i=>scrState(i).k==="none"&&open.includes(i.status),draft:i=>["draft","fail"].includes(scrState(i).k),board:i=>boardState(i).k==="draft",anim:i=>edits.has(i.id),busy}[f]).length;
-  const chip=(id,label,c)=>'<button type="button" class="edf" aria-pressed="'+(edF===id)+'" data-edf="'+id+'">'+label+(c?'<span class="ncount">'+c+'</span>':"")+'</button>';
-  const html='<div class="edhead"><input type="search" id="edQ" placeholder="Search code or title" aria-label="Search videos" value="'+esc(edQ)+'">'+
-    '<div class="edfs">'+chip("all","All")+chip("script","Needs script",n("script"))+chip("draft","Script drafts",n("draft"))+chip("board","Storyboards to check",n("board"))+chip("anim","Videos & projects",n("anim"))+chip("busy","Claude working",n("busy"))+'</div></div>'+
-    '<div class="shsec"><h2>Working on</h2>'+(working.length?working.map(editRow).join(""):'<p class="empty">Nothing here.</p>')+'</div>'+
+  const html='<div class="edhead"><input type="search" id="edQ" placeholder="Search code or title" aria-label="Search videos" value="'+esc(edQ)+'"></div>'+
+    '<div class="shsec"><h2>Working on</h2>'+(working.length?working.map(editRow).join(""):'<p class="empty">'+(q?"No AI video matches.":"No AI videos in progress. Videos show here when their type on the Plan tab is AI video.")+'</p>')+'</div>'+
     (later.length?'<details class="shsec edlater"><summary><h2>In review and posted <span class="ncount">'+later.length+'</span></h2></summary>'+later.map(editRow).join("")+'</details>':"");
   const qEl=$("edQ"), had=qEl&&document.activeElement===qEl, pos=had?qEl.selectionStart:0, wasOpen=box.querySelector(".edlater")&&box.querySelector(".edlater").open;
   setHTML(box,html);
   if(wasOpen&&box.querySelector(".edlater")) box.querySelector(".edlater").open=true;
   if(had){ const e=$("edQ"); e.focus(); e.setSelectionRange(pos,pos) }
 }
-document.addEventListener("click",e=>{ const b=e.target.closest("[data-edf]"); if(b){ edF=b.dataset.edf; renderEdit() } });
 document.addEventListener("input",e=>{ if(e.target.id==="edQ"){ edQ=e.target.value; renderEdit() } });
 function scriptBtn(){
   const bar=$("tPub")&&$("tPub").parentNode; if(!bar) return;
