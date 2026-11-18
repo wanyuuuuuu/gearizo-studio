@@ -350,6 +350,12 @@
       if (k !== 1) { const base = parseFloat(tx.style.fontSize) || 0; if (base) tx.style.fontSize = (base * k).toFixed(1) + "px"; }
       if (st.font && root.GZL) tx.style.fontFamily = root.GZL.fontOf(st.font).fam + "," + FONT;
       if (st.color) tx.style.color = st.color;
+      if (st.italic) tx.style.fontStyle = "italic";
+      if (st.shadow) tx.style.textShadow = "0 5px 16px rgba(0,0,0,.42),0 2px 3px rgba(0,0,0,.38)";
+      if (st.bg) {
+        const s2 = tx.style; s2.background = st.bg; s2.padding = ".12em .38em"; s2.borderRadius = ".22em"; s2.width = "fit-content";
+        s2.boxDecorationBreak = s2.webkitBoxDecorationBreak = "clone"; if (!s2.marginLeft) s2.marginLeft = s2.marginRight = "auto";
+      }
     });
   }
   function render(stage, film, t, opts) {

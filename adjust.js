@@ -103,6 +103,15 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
 .adj-two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
 .adj-two>*{min-width:0}
 .adj-chips{display:flex;flex-wrap:wrap;gap:6px}
+.adj-tsty{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:-4px 0 4px}
+.adj-tsty button,.adj-tsty .sw{position:relative;width:32px;height:30px;border:1px solid var(--line);background:var(--surface);border-radius:8px;display:grid;place-items:center;padding:0;font:inherit;font-size:14px;font-weight:700;color:var(--ink);cursor:pointer}
+.adj-tsty button[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.adj-tsty .sw input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0}
+.adj-tsty .sw b{pointer-events:none;line-height:1;border-bottom:4px solid var(--c,var(--ink-3));padding:0 2px 1px}
+.adj-tsty .sw b.bgsw{width:16px;height:16px;border:1px solid rgba(0,0,0,.2);border-radius:4px;background:var(--c);padding:0}
+.adj-tsty i{font-family:Georgia,serif;font-size:15px}
+.adj-tsty .shd{text-shadow:1px 2px 2px rgba(0,0,0,.55)}
+.adj-tsty .bgi{background:#FFE14D;color:#262A28;border-radius:3px;padding:0 4px;line-height:1.2}
 .adj-chips button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 11px;font:inherit;font-size:12.5px;cursor:pointer;color:var(--ink-2)}
 .adj-chips button[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
 .adj-chips button.set::after{content:" •";color:var(--pink)}
@@ -425,21 +434,33 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     const said = (S.lines || []).map((k) => (sl[k] || {}).line).filter(Boolean);
     let h = '<div class="adj-nav"><button type="button" data-a="sprev" aria-label="Previous scene"' + (i ? "" : " disabled") + '>‹</button><div class="mid"><b>Scene ' + (i + 1) + " of " + n + "</b><span>" + esc((T.name || S.tpl)) + " · " + fmt(st0).replace(/\.\d$/, "") + "–" + fmt(st0 + sDur(S)).replace(/\.\d$/, "") + '</span></div><button type="button" data-a="snext" aria-label="Next scene"' + (i < n - 1 ? "" : " disabled") + ">›</button></div>" +
       said.map((x) => '<p class="adj-said">🎙 ' + esc(x) + "</p>").join("");
-    // words
+    // words: each text that is a template part gets a small style row (colour, italic, shadow, background)
+    const tparts = new Set((T.parts || []).map((x) => x[0]).filter((x) => !/^(icon|product|logo|card)$/.test(x)));
+    const tsty = (k2) => {
+      if (readOnly || !tparts.has(k2)) return "";
+      const st = (S.style || {})[k2] || {}, on = (x) => ' aria-pressed="' + !!x + '"';
+      return '<div class="adj-tsty" data-part="' + esc(k2) + '">' +
+        '<label class="sw" title="Text colour"><input type="color" data-tsc="color" value="' + esc(st.color || "#262A28") + '" aria-label="Text colour"><b' + (st.color ? ' style="--c:' + esc(st.color) + '"' : "") + '>A</b></label>' +
+        '<button type="button" data-tst="italic"' + on(st.italic) + ' title="Italic" aria-label="Italic"><i>I</i></button>' +
+        '<button type="button" data-tst="shadow"' + on(st.shadow) + ' title="Shadow" aria-label="Shadow"><span class="shd">S</span></button>' +
+        '<button type="button" data-tst="bg"' + on(st.bg) + ' title="Background" aria-label="Background"><span class="bgi">A</span></button>' +
+        (st.bg ? '<label class="sw" title="Background colour"><input type="color" data-tsc="bg" value="' + esc(st.bg) + '" aria-label="Background colour"><b class="bgsw" style="--c:' + esc(st.bg) + '"></b></label>' : "") +
+        (st.color || st.italic || st.shadow || st.bg ? '<button type="button" data-tst="clear" title="Back to the template look" aria-label="Back to the template look">↺</button>' : "") + "</div>";
+    };
     let w = "";
     (SFIELDS[S.tpl] || []).forEach(([k, label, kind]) => {
       const v = getPath(g, k);
       if (kind === "icon") w += fs(label, icons(k, v));
       else if (kind === "mark") w += fs(label, '<select data-sk="' + k + '">' + opt("", v || "", "None") + opt("yes", v, "✓ Right") + opt("no", v, "✗ Wrong") + "</select>");
-      else if (kind === "area") w += fs(label, '<textarea data-sk="' + k + '" rows="2">' + esc(v || "") + "</textarea>");
-      else if (kind === "lines") w += fs(label, '<textarea data-sk="' + k + '" data-lines="1" rows="4">' + esc((v || []).join("\n")) + "</textarea>");
-      else if (kind === "steps") w += '<div class="adj-fs"><span>' + label + "</span>" + (v || []).map((x, j) => '<div class="adj-step"><select data-sk="steps.' + j + '.icon" aria-label="Icon"><option value="">No icon</option>' + GZS.ICONS.map((y) => opt(y, x.icon || "", y)).join("") + '</select><input type="text" data-sk="steps.' + j + '.text" value="' + esc(x.text || "") + '"><button class="btn sm ghost" type="button" data-a="stepdel" data-i="' + j + '" aria-label="Remove step">×</button></div>').join("") + (readOnly ? "" : '<div><button class="btn sm ghost" type="button" data-a="stepadd">+ Step</button></div>') + "</div>";
+      else if (kind === "area") w += fs(label, '<textarea data-sk="' + k + '" rows="2">' + esc(v || "") + "</textarea>") + tsty(k);
+      else if (kind === "lines") w += fs(label, '<textarea data-sk="' + k + '" data-lines="1" rows="4">' + esc((v || []).join("\n")) + "</textarea>") + tsty(k);
+      else if (kind === "steps") w += '<div class="adj-fs"><span>' + label + "</span>" + (v || []).map((x, j) => '<div class="adj-step"><select data-sk="steps.' + j + '.icon" aria-label="Icon"><option value="">No icon</option>' + GZS.ICONS.map((y) => opt(y, x.icon || "", y)).join("") + '</select><input type="text" data-sk="steps.' + j + '.text" value="' + esc(x.text || "") + '"><button class="btn sm ghost" type="button" data-a="stepdel" data-i="' + j + '" aria-label="Remove step">×</button></div>').join("") + (readOnly ? "" : '<div><button class="btn sm ghost" type="button" data-a="stepadd">+ Step</button></div>') + "</div>" + tsty(k);
       else if (kind === "image") {
         const stt = g.imageCut === "pending" ? "The studio Mac is removing the background (within 3 minutes)…" : g.imageCut === "failed" ? "Couldn’t remove the background: " + (g.imageCutError || "") : "";
         w += '<div class="adj-fs"><span>' + label + '</span><div class="row" style="align-items:center">' + (g.image ? '<img src="' + esc(g.image.startsWith("/_blob/") || /^https?:/.test(g.image) || g.image.startsWith("brand/") ? g.image : "") + '" alt="" style="width:72px;height:72px;object-fit:contain;background:var(--sunk);border-radius:10px">' : '<span class="hint">No photo: a drawing is used.</span>') +
           (readOnly || !assets ? "" : '<label class="btn sm">' + (g.image ? "Replace" : "Upload photo") + '<input type="file" class="adj-up" accept="image/png,image/jpeg,image/webp" hidden></label>' + (g.image ? '<button class="btn sm ghost" type="button" data-a="nophoto">Remove</button>' : "")) + "</div>" +
           (readOnly || !assets ? "" : '<label class="chk"><input type="checkbox" id="adjCut" checked> Remove the white background</label>') + (stt ? '<p class="hint">' + esc(stt) + "</p>" : "") + "</div>";
-      } else w += fs(label.replace(" (*star* a word)", ""), txt(k, v));
+      } else w += fs(label.replace(" (*star* a word)", ""), txt(k, v)) + tsty(k);
     });
     if (/\*/.test(JSON.stringify(SFIELDS[S.tpl] || []))) w += '<p class="hint">Put *stars* around a word to colour it.</p>';
     h += card("words", "Words", w);
@@ -645,6 +666,16 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       const pk = e.target.closest("[data-pick]"); if (pk) { select(pk.dataset.pick, true); return; }
       const pc = e.target.closest("[data-pchip]");
       if (pc && FM) { const idx = sc == null ? sceneAt(now()) : sc; part = part === pc.dataset.pchip ? null : pc.dataset.pchip; sc = idx; secOpen.style = true; panel(); draw(); return; }
+      const ts = e.target.closest("[data-tst]");
+      if (ts && FM && !readOnly) {
+        const idx = sc == null ? sceneAt(now()) : sc, S = doc.film.scenes[idx], pk2 = ts.closest("[data-part]").dataset.part, a2 = ts.dataset.tst;
+        mark(); S.style = S.style || {}; const st = S.style[pk2] = S.style[pk2] || {};
+        if (a2 === "clear") ["color", "italic", "shadow", "bg"].forEach((x) => delete st[x]);
+        else if (a2 === "bg") { if (st.bg) delete st.bg; else st.bg = "#FFE14D"; }
+        else if (st[a2]) delete st[a2]; else st[a2] = true;
+        if (!Object.keys(st).length) delete S.style[pk2];
+        sc = idx; secOpen.words = true; panel(); draw(); changed(); return;
+      }
       const lk = e.target.closest("[data-look]");
       if (lk && FM && !readOnly) { if ((doc.film.theme || "paper") !== lk.dataset.look) { mark(); doc.film.theme = lk.dataset.look; draw(); changed(); } panel(); return; }
       const sm = e.target.closest(".adj-card>summary");
@@ -682,7 +713,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     pan.addEventListener("input", (e) => {
       const i = e.target; if (i.id === "adjLink" || i.id === "adjCut") return;
       if (FM && i.dataset.fx) { fxInput(i); return; }
-      if (FM && (i.dataset.sk != null || i.dataset.sa || i.dataset.fa || i.dataset.ps || i.dataset.pst)) { sceneInput(i); return; }
+      if (FM && (i.dataset.sk != null || i.dataset.sa || i.dataset.fa || i.dataset.ps || i.dataset.pst || i.dataset.tsc)) { sceneInput(i); return; }
       const key = i.dataset.k; if (!key) return;
       begin();
       let val = i.type === "checkbox" ? i.checked : i.value;
@@ -844,6 +875,11 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     begin();
     const idx = sc == null ? sceneAt(now()) : sc, S = doc.film.scenes[idx]; let v = i.value;
     if (i.dataset.ps) { pending = null; part = i.value || null; sc = idx; panel(); draw(); return; }
+    if (i.dataset.tsc) {
+      const pk2 = i.closest("[data-part]").dataset.part; S.style = S.style || {}; const st = S.style[pk2] = S.style[pk2] || {};
+      st[i.dataset.tsc] = i.value; const sw = i.parentNode.querySelector("b"); if (sw) sw.style.setProperty("--c", i.value);
+      sc = idx; draw(); changed(); return;
+    }
     if (i.dataset.pst) {
       if (!part) return;
       const k2 = i.dataset.pst; S.style = S.style || {}; const st = S.style[part] = S.style[part] || {};
