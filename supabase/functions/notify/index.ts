@@ -401,7 +401,8 @@ const CAP_TAGS: Record<string, string> = {
   zh: "#Gearizo #MichelinLifestyle #汽车配件 #马来西亚车主 #用车知识",
 };
 
-// Which AI writes it: OpenAI when OPENAI_API_KEY is set (model OPENAI_MODEL, default gpt-5.4-mini),
+// Which AI writes it: OpenAI when OPENAI_API_KEY is set (model OPENAI_MODEL, default gpt-5.4-mini;
+// OPENAI_REASONING none|low|medium|off, default none),
 // otherwise Claude (ANTHROPIC_API_KEY, ANTHROPIC_MODEL). CAPTION_PROVIDER=openai|anthropic overrides.
 function captionAI(): { name: string; key: string } | null {
   const oa = Deno.env.get("OPENAI_API_KEY") || "", an = Deno.env.get("ANTHROPIC_API_KEY") || "";
@@ -415,14 +416,24 @@ function captionAI(): { name: string; key: string } | null {
 async function askAI(ai: { name: string; key: string }, prompt: string): Promise<{ text?: string; error?: string }> {
   const who = ai.name === "openai" ? "OpenAI" : "Claude";
   try {
-    const res = ai.name === "openai"
-      ? await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST", signal: AbortSignal.timeout(60000),
-          headers: { Authorization: "Bearer " + ai.key, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: Deno.env.get("OPENAI_MODEL") || "gpt-5.4-mini", max_completion_tokens: 2048,
-            messages: [{ role: "user", content: prompt }] }),
-        })
-      : await fetch("https://api.anthropic.com/v1/messages", {
+    // A caption needs no thinking time. Newer OpenAI models (gpt-6-luna) reason at "medium" unless told
+    // otherwise, and those hidden tokens count against max_completion_tokens: enough of them and the
+    // caption comes back empty. So ask for OPENAI_REASONING (default "none"); a model that doesn't take
+    // the setting gets the request again without it.
+    const oaBody = (effort: string) => JSON.stringify({ model: Deno.env.get("OPENAI_MODEL") || "gpt-5.4-mini", max_completion_tokens: 4096,
+      ...(effort ? { reasoning_effort: effort } : {}), messages: [{ role: "user", content: prompt }] });
+    const oaCall = (effort: string) => fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST", signal: AbortSignal.timeout(60000),
+      headers: { Authorization: "Bearer " + ai.key, "Content-Type": "application/json" }, body: oaBody(effort) });
+    let res: Response;
+    if (ai.name === "openai") {
+      const effort = (Deno.env.get("OPENAI_REASONING") ?? "none").trim();
+      res = await oaCall(effort === "off" ? "" : effort);
+      if (res.status === 400 && effort && effort !== "off") {
+        const why = await res.clone().text();
+        if (/reasoning/i.test(why)) res = await oaCall("");
+      }
+    } else res = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST", signal: AbortSignal.timeout(60000),
           headers: { "x-api-key": ai.key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
           body: JSON.stringify({ model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-5", max_tokens: 1024,
