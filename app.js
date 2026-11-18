@@ -587,12 +587,13 @@ function addPending(k,files){
   let bad=[];
   [...files].forEach(f=>{
     if(!typeFor(f)){ bad.push(f.name+" (this file type can’t be attached)"); return }
-    if(f.size>20*1024*1024){ bad.push(f.name+" (over 20 MB)"); return }
+    const cap=f.type.startsWith("image/")?50:20;
+    if(f.size>cap*1024*1024){ bad.push(f.name+" (over "+cap+" MB)"); return }
     if(pending[k].length>=8){ bad.push(f.name+" (8 files max)"); return }
     pending[k].push(f);
   });
   renderPending(k);
-  if(bad.length) toast("Not attached: "+bad.join(", ")+". Use images, MP4, PDF or text files under 20 MB.");
+  if(bad.length) toast("Not attached: "+bad.join(", ")+". Use images up to 50 MB, or MP4, PDF or text files under 20 MB.");
 }
 async function uploadPending(k){
   const out=[];
@@ -604,7 +605,7 @@ async function uploadPending(k){
 }
 function uploadErr(e){
   const c=e&&e.code;
-  toast(c==="too_large"?"A file is too big. Keep each file under 20 MB.":c==="unsupported_type"?"A file type can’t be uploaded. Use images, MP4, PDF or text files.":c==="quota_or_state"?"File storage is full. Remove old previews or add the NAS link only.":c==="not_granted"?"You don’t have permission to upload files here.":"Upload failed. Check your connection and try again.");
+  toast(c==="too_large"?"A file is too big. Keep pictures under 50 MB and other files under 20 MB.":c==="unsupported_type"?"A file type can’t be uploaded. Use images, MP4, PDF or text files.":c==="quota_or_state"?"File storage is full. Remove old previews or add the NAS link only.":c==="not_granted"?"You don’t have permission to upload files here.":"Upload failed. Check your connection and try again.");
 }
 
 /* View and save attachments inside the app */
@@ -624,7 +625,86 @@ async function dlFile(url,name){
     toast(c==="fetch"?"Couldn’t load that file. It may have been removed.":c==="rejected_extension"?"This file type can’t be saved here.":c==="rate_limited"?"A save is already waiting for you. Finish that one first.":"Couldn’t save the file. Try again.");
   }
 }
-function openLb(url,name,el){ lbFile={url,name}; $("lbImg").src=url; $("lbImg").alt=name||""; $("lbName").textContent=name||"";
+/* Zoom for pictures (the attachment viewer and the mark-up editor). The box scrolls; the element is sized to w*z by h*z.
+   Long pictures (twice as tall as wide, like shop listing images) open at full width so they can be read by scrolling.
+   ⌘/Ctrl + scroll, a trackpad pinch or two fingers zoom; double-click or double-tap zooms in where you tap. */
+function zoomer(box,el,bar,o){
+  o=o||{};
+  const Z={z:1,w:0,h:0,ptr:new Map(),pinch:null,pan:null,tapAt:0,tapXY:null};
+  const rel=(x,y)=>{ const r=box.getBoundingClientRect(); return [x-r.left,y-r.top] };
+  Z.fits=()=>{ const cs=getComputedStyle(box), px=parseFloat(cs.paddingLeft)+parseFloat(cs.paddingRight), py=parseFloat(cs.paddingTop)+parseFloat(cs.paddingBottom);
+    const bw=Math.max(40,box.clientWidth-px-2), bh=Math.max(40,box.clientHeight-py-2), width=Math.min(1,bw/Z.w);
+    return {width,whole:Math.min(width,bh/Z.h)} };
+  Z.long=()=>Z.h/Z.w>2;
+  Z.home=()=>{ const f=Z.fits(); return Z.long()?f.width:f.whole };
+  Z.set=(z,fx,fy)=>{
+    if(!Z.w) return; const f=Z.fits(), lo=Math.min(f.whole,1), hi=Math.max(4,f.width*2);
+    z=Math.max(lo,Math.min(hi,z));
+    if(fx==null){ fx=box.clientWidth/2; fy=box.clientHeight/2 }
+    const ix=(box.scrollLeft+fx-el.offsetLeft)/Z.z, iy=(box.scrollTop+fy-el.offsetTop)/Z.z;
+    Z.z=z; el.style.width=(Z.w*z)+"px"; el.style.height=(Z.h*z)+"px";
+    box.scrollLeft=ix*z+el.offsetLeft-fx; box.scrollTop=iy*z+el.offsetTop-fy;
+    Z.ui();
+  };
+  Z.reset=(w,h)=>{ Z.w=w; Z.h=h; Z.z=1; Z.ptr.clear(); Z.pinch=Z.pan=null; if(!w) { el.style.width=el.style.height=""; return }
+    Z.z=Z.home(); el.style.width=(w*Z.z)+"px"; el.style.height=(h*Z.z)+"px"; box.scrollTop=0; box.scrollLeft=Math.max(0,(box.scrollWidth-box.clientWidth)/2); Z.ui() };
+  Z.step=(k,fx,fy)=>Z.set(Z.z*k,fx,fy);
+  Z.ui=()=>{ if(!bar) return; const f=Z.fits(), at=(a,b)=>Math.abs(a-b)<.005;
+    bar.querySelector('[data-z="one"]').textContent=Math.round(Z.z*100)+"%";
+    bar.querySelector('[data-z="out"]').disabled=Z.z<=Math.min(f.whole,1)+.001;
+    bar.querySelector('[data-z="in"]').disabled=Z.z>=Math.max(4,f.width*2)-.001;
+    const fb=bar.querySelector('[data-z="fit"]'); fb.textContent=Z.long()&&at(Z.z,f.whole)?"Fit width":Z.long()&&!at(f.width,f.whole)?"Whole":"Fit";
+  };
+  if(bar) bar.addEventListener("click",e=>{ const b=e.target.closest("[data-z]"); if(!b||!Z.w) return; const k=b.dataset.z, f=Z.fits();
+    if(k==="in") Z.step(1.25); else if(k==="out") Z.step(1/1.25); else if(k==="one") Z.set(1);
+    else Z.set(Z.long()&&Math.abs(Z.z-f.whole)<.005?f.width:f.whole);
+    if(Z.long()&&k==="fit"&&Math.abs(Z.z-f.width)<.005) box.scrollTop=0;
+  });
+  box.addEventListener("wheel",e=>{ if(!(e.ctrlKey||e.metaKey)||!Z.w) return; e.preventDefault(); const [x,y]=rel(e.clientX,e.clientY); Z.set(Z.z*Math.exp(-Math.max(-60,Math.min(60,e.deltaY))*.01),x,y) },{passive:false});
+  let g0=1; box.addEventListener("gesturestart",e=>{ e.preventDefault(); g0=Z.z });
+  box.addEventListener("gesturechange",e=>{ e.preventDefault(); const [x,y]=rel(e.clientX,e.clientY); Z.set(g0*e.scale,x,y) });
+  const dbl=(x,y)=>{ const h=Z.home(); if(Z.z>=Math.max(h*2.9,1.99)) Z.set(h,x,y); else Z.set(Math.max(Z.z*2,1),x,y) };
+  if(!o.draw) box.addEventListener("dblclick",e=>{ if(!Z.w) return; e.preventDefault(); const [x,y]=rel(e.clientX,e.clientY); dbl(x,y) });
+  // Pointer handling. With o.draw one finger or the mouse draws, so only two fingers move and zoom.
+  Z.down=e=>{
+    if(!Z.w||(e.pointerType==="mouse"&&e.button!==0)) return false;
+    Z.ptr.set(e.pointerId,[e.clientX,e.clientY]);
+    if(Z.ptr.size===2){ const [a,b]=[...Z.ptr.values()]; Z.pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1])||1,z:Z.z,m:[(a[0]+b[0])/2,(a[1]+b[1])/2]}; Z.pan=null; return true }
+    if(Z.ptr.size===1&&!o.draw){ Z.pan={x:e.clientX,y:e.clientY,l:box.scrollLeft,t:box.scrollTop,moved:false}; box.classList.add("drag"); return true }
+    return false;
+  };
+  Z.move=e=>{
+    if(!Z.ptr.has(e.pointerId)) return false; Z.ptr.set(e.pointerId,[e.clientX,e.clientY]);
+    if(Z.pinch&&Z.ptr.size>=2){ const [a,b]=[...Z.ptr.values()], m=[(a[0]+b[0])/2,(a[1]+b[1])/2], d=Math.hypot(a[0]-b[0],a[1]-b[1])||1;
+      box.scrollLeft-=m[0]-Z.pinch.m[0]; box.scrollTop-=m[1]-Z.pinch.m[1]; Z.pinch.m=m;
+      const [x,y]=rel(m[0],m[1]); Z.set(Z.pinch.z*d/Z.pinch.d,x,y); return true }
+    if(Z.pan){ const dx=e.clientX-Z.pan.x, dy=e.clientY-Z.pan.y; if(Math.abs(dx)+Math.abs(dy)>4) Z.pan.moved=true;
+      box.scrollLeft=Z.pan.l-dx; box.scrollTop=Z.pan.t-dy; return true }
+    return !!Z.pinch;
+  };
+  Z.up=e=>{
+    if(!Z.ptr.has(e.pointerId)) return false; const was=!!(Z.pinch||Z.pan), tap=Z.pan&&!Z.pan.moved&&e.pointerType!=="mouse";
+    Z.ptr.delete(e.pointerId); box.classList.remove("drag");
+    if(Z.pinch&&Z.ptr.size<2){ Z.pinch=null; if(Z.ptr.size===1&&!o.draw){ const [p]=[...Z.ptr.values()]; Z.pan={x:p[0],y:p[1],l:box.scrollLeft,t:box.scrollTop,moved:true} } return true }
+    if(!Z.ptr.size) Z.pan=null;
+    if(tap&&e.type==="pointerup"){ const now=Date.now(), xy=[e.clientX,e.clientY];
+      if(now-Z.tapAt<320&&Z.tapXY&&Math.hypot(xy[0]-Z.tapXY[0],xy[1]-Z.tapXY[1])<30){ Z.tapAt=0; const [x,y]=rel(xy[0],xy[1]); dbl(x,y) } else { Z.tapAt=now; Z.tapXY=xy } }
+    return was;
+  };
+  Z.busy=()=>Z.ptr.size>=2||!!Z.pinch;
+  window.addEventListener("resize",()=>{ if(Z.w&&box.isConnected&&box.offsetParent) Z.set(Z.z) });
+  return Z;
+}
+const LBZ=zoomer($("lbBody"),$("lbImg"),$("lbZoom"));
+["pointerdown","pointermove","pointerup","pointercancel"].forEach(t=>$("lbBody").addEventListener(t,e=>{
+  const ok=t==="pointerdown"?LBZ.down(e):t==="pointermove"?LBZ.move(e):LBZ.up(e);
+  if(t==="pointerdown"&&ok) try{ $("lbBody").setPointerCapture(e.pointerId) }catch(_){}
+}));
+$("lbImg").addEventListener("load",()=>{ const im=$("lbImg"); if(im.naturalWidth) LBZ.reset(im.naturalWidth,im.naturalHeight) });
+$("lb").addEventListener("keydown",e=>{ if(e.metaKey||e.ctrlKey||e.altKey||/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+  if(e.key==="+"||e.key==="="){ e.preventDefault(); LBZ.step(1.25) } else if(e.key==="-"||e.key==="_"){ e.preventDefault(); LBZ.step(1/1.25) } else if(e.key==="0"){ e.preventDefault(); LBZ.set(LBZ.home()); if(LBZ.long()) $("lbBody").scrollTop=0 } });
+$("lb").addEventListener("close",()=>{ if(!$("lb").open){ LBZ.reset(0,0); $("lbImg").removeAttribute("src") } });
+function openLb(url,name,el){ lbFile={url,name}; LBZ.reset(0,0); $("lbImg").src=url; $("lbImg").alt=name||""; $("lbName").textContent=name||"";
   const mb=$("lbMark"); if(mb) mb.hidden=!(el&&el.closest&&el.closest("#detail")&&$("mkDlg")&&selId&&!$("fbAttach").hidden&&$("fbForm").offsetParent!==null);
   $("lb").showModal() }
 document.addEventListener("click",e=>{
@@ -789,7 +869,7 @@ function verCard(v,latest,it){
       '<div class="atts big">'+imgs.map((f,i)=>'<figure><button type="button" class="img" data-lb="/_blob/'+f.id+'" data-name="'+esc(f.name)+'" title="View '+esc(f.name)+'"><img src="/_blob/'+f.id+'" alt="Image '+(i+1)+': '+esc(f.name)+'" loading="lazy"></button><figcaption><b>Image '+(i+1)+'</b> · '+esc(f.name)+'</figcaption></figure>').join("")+'</div>'+
       attHtml(other)+linkHtml(v.link)+(v.note?'<p>'+fbHtml(v.note)+'</p>':"")+'</div>';
   }
-  const media=v.asset?(v.assetType.startsWith("image/")?'<img src="'+esc(v.asset)+'" alt="Preview for v'+v.n+'" style="max-width:100%;border-radius:8px;margin:6px 0">':'<video src="'+esc(v.asset)+'" controls preload="metadata" playsinline></video>'):v.gone?'<div class="vgone">Preview cleared after posting · full video on the NAS</div>':"";
+  const media=v.asset?(v.assetType.startsWith("image/")?'<button type="button" class="img vimg" data-lb="'+esc(v.asset)+'" data-name="v'+v.n+' preview" title="View full size"><img src="'+esc(v.asset)+'" alt="Preview for v'+v.n+'"></button>':'<video src="'+esc(v.asset)+'" controls preload="metadata" playsinline></video>'):v.gone?'<div class="vgone">Preview cleared after posting · full video on the NAS</div>':"";
   const cap=latest&&v.asset&&!v.assetType.startsWith("image/")&&assets&&!readOnly&&mode==="db"
     ?'<button type="button" class="camcap" data-cap aria-label="Capture this frame into your feedback" title="Capture this frame into your feedback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>':"";
   return '<div class="ver'+(latest?" latest":"")+'"><div class="ver-h"><b>v'+v.n+(latest?" (latest)":"")+'</b><span>'+esc(who(v.by))+', '+esc(fmtTime(v.at))+'</span></div>'+(cap?'<div class="vwrap">'+media+cap+'</div>':media)+linkHtml(v.link)+(v.note?'<p>'+fbHtml(v.note)+'</p>':"")+attHtml(v.files)+'</div>';
@@ -901,7 +981,8 @@ async function addVersion(){
   if(!isD&&!link&&!file){toast("Paste the NAS link or path, or choose a preview file.");$("vLink").focus();return}
   const btn=$("vAdd"); let asset="", assetType="";
   if(file){
-    if(file.size>20*1024*1024){toast("That file is "+(file.size/1048576).toFixed(0)+" MB. Export a smaller preview under 20 MB, or just add the NAS link.");return}
+    const cap=(file.type||"").startsWith("image/")?50:20;
+    if(file.size>cap*1024*1024){toast("That file is "+(file.size/1048576).toFixed(0)+" MB. Export a smaller preview under "+cap+" MB, or just add the NAS link.");return}
     if(!assets){toast("You can’t upload files here. Add the NAS link instead.");return}
     btn.disabled=true; btn.textContent="Uploading…";
     try{ const r=await assets.upload(file,{type:file.type||"video/mp4"}); asset=r.url; assetType=r.contentType||file.type||"" }
@@ -1896,13 +1977,14 @@ async function markUp(src,opts){
   let im; try{ im=await new Promise((res,rej)=>{ const x=new Image(); x.onload=()=>res(x); x.onerror=rej; x.src=url }) }catch(e){ im=null }
   const w=im&&(im.naturalWidth||im.width), h=im&&(im.naturalHeight||im.height);
   if(!w||!h){ URL.revokeObjectURL(url); toast("Couldn’t open this picture."); return null }
-  const sc=Math.min(1,1600/Math.max(w,h)), cv=$("mkCv");
+  // Keep the picture's own pixels (long shop images stay sharp); only shrink past what a phone canvas can hold.
+  const sc=Math.min(1,16000/Math.max(w,h),Math.sqrt(16e6/(w*h))), cv=$("mkCv");
   cv.width=Math.max(1,Math.round(w*sc)); cv.height=Math.max(1,Math.round(h*sc));
   return new Promise(res=>{
     const shapes=(opts.shapes||[]).map(x=>JSON.parse(JSON.stringify(x)));
     mk={im,url,blob,cv,ctx:cv.getContext("2d"),shapes,cur:null,pid:null,raf:0,hint:!shapes.length,lw:Math.max(3,Math.round(Math.min(cv.width,cv.height)/120)),res};
     $("mkDone").textContent=opts.done||"Add to feedback";
-    mkPaint(); mkSync(); if(!dlg.open) dlg.showModal();
+    mkPaint(); mkSync(); if(!dlg.open) dlg.showModal(); MKZ.reset(cv.width,cv.height);
   });
 }
 // Marks up a picture and puts the result in the feedback attachments (replacing `prev` when re-editing).
@@ -1916,11 +1998,19 @@ async function markInto(src,name,prev){
   if(i>=0){ if(prev._u) URL.revokeObjectURL(prev._u); pending.fb[i]=f; renderPending("fb") } else addPending("fb",[f]);
   return true;
 }
+let MKZ=null;
 if($("mkDlg")){
   const cv=$("mkCv");
+  MKZ=zoomer(cv.parentElement,cv,$("mkZoom"),{draw:true});
+  // Two fingers move and zoom the picture; a shape started by the first finger is dropped.
+  ["pointerdown","pointermove","pointerup","pointercancel"].forEach(t=>cv.parentElement.addEventListener(t,e=>{
+    const was=MKZ.busy(), ok=t==="pointerdown"?MKZ.down(e):t==="pointermove"?MKZ.move(e):MKZ.up(e);
+    if(ok&&t==="pointerdown"&&mk&&mk.cur){ mk.cur=null; mk.pid=null; mkReq() }
+    if(ok||was) e.stopImmediatePropagation();
+  },true));
   const pt=e=>{ const r=cv.getBoundingClientRect(); return [Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),Math.min(1,Math.max(0,(e.clientY-r.top)/r.height))] };
   cv.addEventListener("pointerdown",e=>{
-    if(!mk||mk.cur||(e.pointerType==="mouse"&&e.button!==0)) return; e.preventDefault();
+    if(!mk||mk.cur||MKZ.busy()||(e.pointerType==="mouse"&&e.button!==0)) return; e.preventDefault();
     try{ cv.setPointerCapture(e.pointerId) }catch(_){}
     const p=pt(e); mk.pid=e.pointerId; mk.cur=mkTool==="pen"?{t:"pen",c:mkCol,p:[p]}:{t:mkTool,c:mkCol,a:p,b:p}; mkReq();
   });
@@ -1943,12 +2033,12 @@ if($("mkDlg")){
     mkSync();
   });
   $("mkDlg").addEventListener("keydown",e=>{ if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&e.key.toLowerCase()==="z"){ e.preventDefault(); $("mkUndo").click() } });
-  $("mkDlg").addEventListener("close",()=>{ if(mk) mkFinish(null) });
+  $("mkDlg").addEventListener("close",()=>{ if(mk) mkFinish(null); if(!$("mkDlg").open) MKZ.reset(0,0) });
   $("mkUndo").onclick=()=>{ if(mk&&mk.shapes.length){ mk.shapes.pop(); mkReq(); mkSync() } };
   $("mkCancel").onclick=()=>mkFinish(null);
   $("mkDone").onclick=async()=>{
     if(!mk) return; const m=mk; m.cur=null; mkPaint();
-    try{ const b=await new Promise((res,rej)=>m.cv.toBlob(x=>x?res(x):rej(new Error("empty")),"image/jpeg",0.9)); if(mk===m) mkFinish({blob:b,shapes:m.shapes,src:m.blob}) }
+    try{ const b=await new Promise((res,rej)=>m.cv.toBlob(x=>x?res(x):rej(new Error("empty")),"image/jpeg",0.95)); if(mk===m) mkFinish({blob:b,shapes:m.shapes,src:m.blob}) }
     catch(e){ toast("Couldn’t save the marked picture. Try again.") }
   };
 }
