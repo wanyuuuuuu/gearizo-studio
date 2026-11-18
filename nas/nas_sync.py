@@ -18,6 +18,7 @@ import settings as S  # noqa: E402
 import nas_preview as NP  # noqa: E402
 import autopost  # noqa: E402
 import tiktok  # noqa: E402
+import gz_stats  # noqa: E402
 import gz_edit  # noqa: E402
 import gz_script  # noqa: E402
 
@@ -333,6 +334,10 @@ def run():
         tiktok.run(api, docs, put, merge, log, items, docs("versions"))
     except Exception:
         log("tiktok ERROR " + traceback.format_exc().strip().replace("\n", " | "))
+    try:
+        gz_stats.run(api, docs, put, log, items)
+    except Exception:
+        log("stats ERROR " + traceback.format_exc().strip().replace("\n", " | "))
 
 
 if __name__ == "__main__":

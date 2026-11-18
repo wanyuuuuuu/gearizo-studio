@@ -44,7 +44,7 @@ const newId=()=>"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6
 let edits=new Map(), scripts=new Map(), items=new Map(), versions=[], feedback=[], focus=[], ideas=[], ideaFrom=null, liveIdeas=false;
 let db=null, assets=null, userNs=null, myId=null, amOwner=false, names={}, myName="";
 let mode="local", readOnly=false, live={items:false,focus:false,team:false};
-let team={}, promptedRole=false, inbox=[], tasks=[], shoots=[], avail=[], busy=[], jobs={}, metaState=null, ttState=null;
+let team={}, promptedRole=false, inbox=[], tasks=[], shoots=[], avail=[], busy=[], jobs={}, stats={}, metaState=null, ttState=null;
 const AUTO_P=["reel","fb"];
 const PLAT_G=[{id:"ig",name:"Instagram"},{id:"tt",name:"TikTok"},{id:"fb",name:"Facebook Page"}];
 const TT_P=["tiktok","tt_gz","tt_my","tt_sg"];                // the old single "tiktok" plus one per account
@@ -280,6 +280,26 @@ function postLinks(it){
   if(done&&!(j.ig&&j.ig.permalink)&&it.platforms.some(p=>pMap[p].g==="ig")&&metaState&&metaState.ig) add("IG @"+metaState.ig,"https://www.instagram.com/"+encodeURIComponent(metaState.ig)+"/");
   return out;
 }
+/* Post numbers, collected by the studio Mac (nas/gz_stats.py) into docs "stats". */
+const fmtN=n=>n==null?"–":n>=1e6?(n/1e6).toFixed(1).replace(/\.0$/,"")+"M":n>=1e4?Math.round(n/1e3)+"k":n>=1e3?(n/1e3).toFixed(1).replace(/\.0$/,"")+"k":String(n);
+const STAT_P={ig:"Instagram",fb:"Facebook",tt_gz:"TikTok Main",tt_my:"TikTok CN",tt_sg:"TikTok SG"};
+const STAT_NEED={ig_insights:"Instagram views, reach, saves and shares show once Facebook is connected again with the new permission.",tt_list:"TikTok numbers show once TikTok allows reading the account's videos."};
+function statTotals(id){ const s=stats[id]; if(!s||!s.p) return null; const v=Object.values(s.p); if(!v.length) return null;
+  const sum=k=>v.some(x=>x[k]!=null)?v.reduce((a,x)=>a+(x[k]||0),0):null; return {views:sum("views"),likes:sum("likes"),comments:sum("comments")} }
+const statShort=t=>!t?"":t.views!=null?fmtN(t.views)+" views":t.likes!=null?fmtN(t.likes)+" likes":"";
+function statsHtml(id){
+  const s=stats[id]; if(!s) return "";
+  const ps=Object.keys(STAT_P).filter(k=>s.p&&s.p[k]), cols=[["views","Views"],["likes","Likes"],["comments","Comments"],["shares","Shares"],["saves","Saves"],["reach","Reach"]].filter(([k])=>ps.some(p=>s.p[p][k]!=null));
+  let h='<div class="pstats"><div class="pstats-h"><b>Numbers</b><span class="hint">Updated '+(s.at?ago(s.at)+" ago":"")+'</span></div>';
+  if(ps.length) h+='<div class="pstats-t" style="--n:'+cols.length+'"><span></span>'+cols.map(([,l])=>'<span class="th">'+l+'</span>').join("")+
+    ps.map(p=>{ const x=s.p[p]; return '<span class="pn">'+(x.url?'<a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+STAT_P[p]+' ↗</a>':STAT_P[p])+'</span>'+cols.map(([k])=>'<span class="'+(k==="views"?"big":"")+'">'+fmtN(x[k])+'</span>').join("") }).join("")+'</div>';
+  const hv=(s.h||[]).filter(x=>x[1]>0);
+  if(hv.length>2){ const mx=Math.max(...hv.map(x=>x[1])), t0=hv[0][0], t1=hv[hv.length-1][0]||t0+1;
+    h+='<svg class="pspark" viewBox="0 0 300 48" preserveAspectRatio="none" aria-label="Total views over time"><polyline fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" points="'+hv.map(x=>((x[0]-t0)/Math.max(1,t1-t0)*300).toFixed(1)+","+(46-x[1]/mx*44).toFixed(1)).join(" ")+'"/></svg>' }
+  (s.need||[]).forEach(k=>{ if(STAT_NEED[k]) h+='<p class="hint">'+esc(STAT_NEED[k])+'</p>' });
+  if(!ps.length&&!(s.need||[]).length) h+='<p class="hint">No numbers yet.</p>';
+  return h+'</div>';
+}
 function plMenuHtml(it){
   const link=fileLink(it), posts=postLinks(it); let f="";
   if(link.startsWith(NAS_MAC)){ const rel=link.slice(NAS_MAC.length), dir=rel.split("/").slice(0,-1).join("/");
@@ -288,7 +308,8 @@ function plMenuHtml(it){
   else if(link) f='<button class="btn sm ghost" type="button" data-copy="'+esc(link)+'">Copy path</button><code>'+esc(link.split(/[\\/]/).pop())+'</code>';
   return '<div class="plmenu"><button class="btn sm primary" type="button" data-open="'+esc(it.id)+'">Open</button>'+
     '<div class="plm"><b>File</b>'+(f||'<span class="hint">Not on the NAS yet</span>')+'</div>'+
-    (posts.length||it.status==="posted"?'<div class="plm"><b>'+(it.team==="ecomm"?"Live":"Posted")+'</b>'+(posts.length?posts.map(([l,u])=>'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(l)+' ↗</a>').join(""):'<span class="hint">No link saved. Add it in Publish.</span>')+'</div>':"")+'</div>';
+    (posts.length||it.status==="posted"?'<div class="plm"><b>'+(it.team==="ecomm"?"Live":"Posted")+'</b>'+(posts.length?posts.map(([l,u])=>'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(l)+' ↗</a>').join(""):'<span class="hint">No link saved. Add it in Publish.</span>')+'</div>':"")+
+    (stats[it.id]?'<div class="plm plnums">'+statsHtml(it.id)+'</div>':"")+'</div>';
 }
 function renderPipeList(){
   const body=$("plBody"); if(!body) return;
@@ -308,7 +329,7 @@ function renderPipeList(){
         '<span class="plcode">'+(it.code?esc(it.code):'<em>—</em>')+(v?'<small>v'+v.n+'</small>':"")+'</span>'+
         '<span class="pltitle"><b>'+esc(it.title)+'</b><small>'+esc([tm,it.type==="design"?"Design":""].filter(Boolean).join(" · "))+(f?'<span class="plfile" title="'+esc(f)+'">'+esc(f)+'</span>':"")+'</small></span>'+
         '<span class="plprog">'+progHtml(it)+'</span>'+
-        '<span class="pldate">'+(it.date?esc(shortDate(it.date)):'<em>No date</em>')+'</span></button>'+(on?plMenuHtml(it):"")+'</div>';
+        '<span class="pldate">'+(it.date?esc(shortDate(it.date)):'<em>No date</em>')+(statShort(statTotals(it.id))?'<small class="plviews">'+statShort(statTotals(it.id))+'</small>':"")+'</span></button>'+(on?plMenuHtml(it):"")+'</div>';
     }).join(""):'<p class="empty">Nothing matches.</p>')+
     '</div><p class="hint plcount">'+list.length+' of '+[...items.values()].filter(visible).length+'</p>';
 }
@@ -445,6 +466,10 @@ async function connect(){
       if(view==="edit"&&!(window.gzAdjust&&gzAdjust.isOpen())) render();
       if(window.gzAdjust) edits.forEach((d,id)=>gzAdjust.remote(id,d));
       if(window.gzAdjust&&gzAdjust.boardRefresh) gzAdjust.boardRefresh();
+    },()=>{});
+    db.collection("stats").onSnapshot(snap=>{
+      const j={}; snap.docs.forEach(x=>{ if(x.exists) j[x.id]=x.data()||{} }); stats=j;
+      if(view==="pipeline"&&pipe.mode==="list") renderPipeList(); if($("dlg").open&&editingId) renderPublish();
     },()=>{});
     db.collection("postjobs").onSnapshot(snap=>{
       const j={}; snap.docs.forEach(x=>{ if(x.exists) j[x.id]=x.data()||{} }); jobs=j;
@@ -1129,7 +1154,7 @@ function renderPublish(){
       :'<p class="waitnote pubnote">E-commerce marks it live.</p>'));
     return;
   }
-  if(it.status==="posted"){ setHTML(box,banner("var(--blue)","Posted",it.postedAt?fmtTime(it.postedAt):"",it.postUrl?'<a class="btn sm" href="'+esc(it.postUrl)+'" target="_blank" rel="noopener">Open post ↗</a>':"")); return }
+  if(it.status==="posted"){ setHTML(box,banner("var(--blue)","Posted",it.postedAt?fmtTime(it.postedAt):"",it.postUrl?'<a class="btn sm" href="'+esc(it.postUrl)+'" target="_blank" rel="noopener">Open post ↗</a>':"")+statsHtml(it.id)); return }
   if(!["approved","scheduled"].includes(it.status)){ setHTML(box,banner("var(--ink-3)","Not approved yet","You can pick a time once it’s approved.")); return }
   const can=!readOnly&&mode==="db"&&isMk(), sch=it.status==="scheduled"&&it.postAt>0, due=sch&&it.postAt<=now;
   const ig=it.platforms.some(p=>["ig","fb"].includes(pMap[p].g)), tt=it.platforms.some(p=>TT_P.includes(p));
@@ -1840,7 +1865,7 @@ $("main").addEventListener("click",e=>{
   const pm=e.target.closest("[data-pm]"); if(pm){ pipe.mode=pm.dataset.pm; savePipe(); $("plBar").remove(); renderPipeline(); return }
   const ps=e.target.closest("[data-ps]"); if(ps){ const k=ps.dataset.ps; if(pipe.sort===k) pipe.dir=-pipe.dir; else { pipe.sort=k; pipe.dir=1 } savePipe(); renderPipeList(); return }
   const pl=e.target.closest("[data-pl]"); if(pl){ const id=pl.dataset.pl, it=items.get(id);
-    if(it&&!fileLink(it)&&!postLinks(it).length&&it.status!=="posted"){ pipe.menu=null; openItem(id); return }
+    if(it&&!fileLink(it)&&!postLinks(it).length&&it.status!=="posted"&&!stats[id]){ pipe.menu=null; openItem(id); return }
     pipe.menu=pipe.menu===id?null:id; renderPipeList(); return }
   const cpy=e.target.closest(".plmenu [data-copy]"); if(cpy){ copyText(cpy.dataset.copy); return }
   const pr=e.target.closest("[data-open]"); if(pr){ pipe.menu=null; openItem(pr.dataset.open); return }

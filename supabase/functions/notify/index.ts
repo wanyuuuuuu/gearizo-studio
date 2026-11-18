@@ -141,7 +141,7 @@ async function send(msg: Msg, actor: string | null, roleOf: Record<string, strin
 const GRAPH = "https://graph.facebook.com/v27.0";
 const AUTO = ["reel", "fb"];                                   // posted automatically when connected
 const CALLBACK = (Deno.env.get("SUPABASE_URL") || "") + "/functions/v1/notify/meta-callback";
-const SCOPES = "pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_engagement,pages_read_user_content,instagram_basic,instagram_content_publish,business_management";
+const SCOPES = "pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_engagement,pages_read_user_content,instagram_basic,instagram_content_publish,instagram_manage_insights,business_management";
 class GraphError extends Error { code?: number }
 async function graph(path: string, params: Record<string, string>, token: string, method = "GET") {
   const q = new URLSearchParams(token ? { ...params, access_token: token } : params);
