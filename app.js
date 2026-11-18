@@ -269,6 +269,27 @@ function renderPipeline(){
   if(pipe.mode==="board"){ renderColumns(STATUSES); return }
   renderPipeList();
 }
+/* Tapping a row in the list offers: open it, go to its file on the NAS, or go to where it was posted. */
+function fileLink(it){ const v=vFor(it.id).find(v=>v.link); return v?v.link:"" }
+function postLinks(it){
+  const j=jobs[it.id]||{}, out=[], add=(l,u)=>{ if(u&&!out.some(x=>x[1]===u)) out.push([l,u]) }, done=it.status==="posted";
+  if(j.ig&&j.ig.permalink) add("IG Reels",j.ig.permalink);
+  if(j.fb&&j.fb.video&&(j.fb.state==="posted"||done)) add("FB Page","https://www.facebook.com/watch/?v="+encodeURIComponent(j.fb.video));
+  if(it.postUrl) add(it.team==="ecomm"?"Listing":"Post",it.postUrl);
+  it.platforms.forEach(p=>{ const h=(pMap[p].name.match(/@[\w.]+/)||[])[0]; if(h&&pMap[p].g==="tt"&&(done||(j[p]&&j[p].state==="posted"))) add(pMap[p].s+" "+h,"https://www.tiktok.com/"+h) });
+  if(done&&!(j.ig&&j.ig.permalink)&&it.platforms.some(p=>pMap[p].g==="ig")&&metaState&&metaState.ig) add("IG @"+metaState.ig,"https://www.instagram.com/"+encodeURIComponent(metaState.ig)+"/");
+  return out;
+}
+function plMenuHtml(it){
+  const link=fileLink(it), posts=postLinks(it); let f="";
+  if(link.startsWith(NAS_MAC)){ const rel=link.slice(NAS_MAC.length), dir=rel.split("/").slice(0,-1).join("/");
+    f='<a class="btn sm" href="'+esc(smbUrl(dir))+'" target="_blank" rel="noopener" title="Open its folder in Finder">Folder ↗</a><button class="btn sm ghost" type="button" data-copy="'+esc(link)+'">Copy path</button><code title="'+esc(rel)+'">'+esc(dir.split("/").pop()+" / "+rel.split("/").pop())+'</code>' }
+  else if(/^https?:\/\//i.test(link)) f='<a class="btn sm" href="'+esc(link)+'" target="_blank" rel="noopener">Open file ↗</a>';
+  else if(link) f='<button class="btn sm ghost" type="button" data-copy="'+esc(link)+'">Copy path</button><code>'+esc(link.split(/[\\/]/).pop())+'</code>';
+  return '<div class="plmenu"><button class="btn sm primary" type="button" data-open="'+esc(it.id)+'">Open</button>'+
+    '<div class="plm"><b>File</b>'+(f||'<span class="hint">Not on the NAS yet</span>')+'</div>'+
+    (posts.length||it.status==="posted"?'<div class="plm"><b>'+(it.team==="ecomm"?"Live":"Posted")+'</b>'+(posts.length?posts.map(([l,u])=>'<a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(l)+' ↗</a>').join(""):'<span class="hint">No link saved. Add it in Publish.</span>')+'</div>':"")+'</div>';
+}
 function renderPipeList(){
   const body=$("plBody"); if(!body) return;
   const q=pipe.q.trim().toLowerCase();
@@ -282,11 +303,12 @@ function renderPipeList(){
   body.innerHTML='<div class="pltable"><div class="plhead">'+th("code","File")+th("title","Title")+th("prog","Progress")+th("date","Post")+'</div>'+
     (list.length?list.map(it=>{
       const v=vFor(it.id)[0], f=fileOf(it), tm=TEAMS[it.team]||"";
-      return '<button type="button" class="plrow" data-open="'+esc(it.id)+'" style="--c:'+(sMap[it.series]||{c:"var(--ink-3)"}).c+'">'+
+      const on=pipe.menu===it.id;
+      return '<div class="plitem'+(on?" on":"")+'"><button type="button" class="plrow" data-pl="'+esc(it.id)+'" aria-expanded="'+on+'" style="--c:'+(sMap[it.series]||{c:"var(--ink-3)"}).c+'">'+
         '<span class="plcode">'+(it.code?esc(it.code):'<em>—</em>')+(v?'<small>v'+v.n+'</small>':"")+'</span>'+
         '<span class="pltitle"><b>'+esc(it.title)+'</b><small>'+esc([tm,it.type==="design"?"Design":""].filter(Boolean).join(" · "))+(f?'<span class="plfile" title="'+esc(f)+'">'+esc(f)+'</span>':"")+'</small></span>'+
         '<span class="plprog">'+progHtml(it)+'</span>'+
-        '<span class="pldate">'+(it.date?esc(shortDate(it.date)):'<em>No date</em>')+'</span></button>';
+        '<span class="pldate">'+(it.date?esc(shortDate(it.date)):'<em>No date</em>')+'</span></button>'+(on?plMenuHtml(it):"")+'</div>';
     }).join(""):'<p class="empty">Nothing matches.</p>')+
     '</div><p class="hint plcount">'+list.length+' of '+[...items.values()].filter(visible).length+'</p>';
 }
@@ -1817,7 +1839,11 @@ $("main").addEventListener("click",e=>{
   const pg=e.target.closest("[data-pg]"); if(pg){ const k=pg.dataset.pg; pipeOpen.has(k)?pipeOpen.delete(k):pipeOpen.add(k); renderColumns(STATUSES); return }
   const pm=e.target.closest("[data-pm]"); if(pm){ pipe.mode=pm.dataset.pm; savePipe(); $("plBar").remove(); renderPipeline(); return }
   const ps=e.target.closest("[data-ps]"); if(ps){ const k=ps.dataset.ps; if(pipe.sort===k) pipe.dir=-pipe.dir; else { pipe.sort=k; pipe.dir=1 } savePipe(); renderPipeList(); return }
-  const pr=e.target.closest("[data-open]"); if(pr){ openItem(pr.dataset.open); return }
+  const pl=e.target.closest("[data-pl]"); if(pl){ const id=pl.dataset.pl, it=items.get(id);
+    if(it&&!fileLink(it)&&!postLinks(it).length&&it.status!=="posted"){ pipe.menu=null; openItem(id); return }
+    pipe.menu=pipe.menu===id?null:id; renderPipeList(); return }
+  const cpy=e.target.closest(".plmenu [data-copy]"); if(cpy){ copyText(cpy.dataset.copy); return }
+  const pr=e.target.closest("[data-open]"); if(pr){ pipe.menu=null; openItem(pr.dataset.open); return }
   if(e.target.closest(".shootchip")){ location.hash="shoots"; return }
   const c=e.target.closest(".chip"); if(c){openItem(c.dataset.id);return}
   const cell=e.target.closest(".cell"); if(cell&&!readOnly) openItem(null,cell.dataset.date);

@@ -1339,6 +1339,13 @@ dialog::backdrop{background:rgba(60,48,70,.18);-webkit-backdrop-filter:blur(8px)
 .plst.warn{color:var(--edit)}
 .pldate{font-size:13px;color:var(--ink-2);white-space:nowrap}
 .plcount{margin:10px 2px 0}
+.plitem.on{border-radius:16px;box-shadow:0 0 0 2px var(--c,var(--ink-3))}
+.plitem.on .plrow{border-radius:16px 16px 0 0;background:rgba(255,255,255,.85)}
+.plmenu{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 14px 12px;background:rgba(255,255,255,.72);border-radius:0 0 16px 16px;border-top:1px solid var(--line)}
+.plm{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+.plm>b{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-right:2px}
+.plm code{font-size:12px;color:var(--ink-2);background:var(--sunk);border-radius:6px;padding:3px 7px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plm .hint{font-size:12.5px}
 @media (max-width:720px){
   .plhead{display:none}
   .plrow{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"code title date" "prog prog prog";row-gap:8px}
