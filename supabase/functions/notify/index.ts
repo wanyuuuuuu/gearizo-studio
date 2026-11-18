@@ -1,5 +1,5 @@
 // Gearizo server function. Six jobs:
-//  6. Writing a caption for an item (action "caption"), so the Anthropic key stays off the public app.
+//  6. Writing a caption for an item (action "caption"), so the OpenAI / Anthropic key stays off the public app.
 //  1. Push notifications when something happens in the studio (called by the docs_push database trigger),
 //     plus scheduled posts (pg_cron calls action "postdue" every minute): publish what was uploaded to
 //     Instagram, mark auto-posted videos as posted, and remind marketing about anything left to post by hand.
@@ -401,9 +401,50 @@ const CAP_TAGS: Record<string, string> = {
   zh: "#Gearizo #MichelinLifestyle #汽车配件 #马来西亚车主 #用车知识",
 };
 
+// Which AI writes it: OpenAI when OPENAI_API_KEY is set (model OPENAI_MODEL, default gpt-5.4-mini),
+// otherwise Claude (ANTHROPIC_API_KEY, ANTHROPIC_MODEL). CAPTION_PROVIDER=openai|anthropic overrides.
+function captionAI(): { name: string; key: string } | null {
+  const oa = Deno.env.get("OPENAI_API_KEY") || "", an = Deno.env.get("ANTHROPIC_API_KEY") || "";
+  const want = (Deno.env.get("CAPTION_PROVIDER") || "").toLowerCase();
+  if (want === "anthropic" && an) return { name: "anthropic", key: an };
+  if (want === "openai" && oa) return { name: "openai", key: oa };
+  if (oa) return { name: "openai", key: oa };
+  if (an) return { name: "anthropic", key: an };
+  return null;
+}
+async function askAI(ai: { name: string; key: string }, prompt: string): Promise<{ text?: string; error?: string }> {
+  const who = ai.name === "openai" ? "OpenAI" : "Claude";
+  try {
+    const res = ai.name === "openai"
+      ? await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST", signal: AbortSignal.timeout(60000),
+          headers: { Authorization: "Bearer " + ai.key, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: Deno.env.get("OPENAI_MODEL") || "gpt-5.4-mini", max_completion_tokens: 2048,
+            messages: [{ role: "user", content: prompt }] }),
+        })
+      : await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST", signal: AbortSignal.timeout(60000),
+          headers: { "x-api-key": ai.key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+          body: JSON.stringify({ model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-5", max_tokens: 1024,
+            messages: [{ role: "user", content: prompt }] }),
+        });
+    if (!res.ok) {
+      const detail = (await res.text()).slice(0, 200);
+      if (res.status === 401) return { error: "The " + who + " API key was rejected." };
+      if (res.status === 429) return { error: who + ": too many requests or no credit left. Try again in a moment, or check the account's billing." };
+      return { error: who + " returned " + res.status + ". " + detail };
+    }
+    const out = await res.json();
+    const text = ai.name === "openai" ? String(out.choices?.[0]?.message?.content || "")
+      : (out.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+    return { text: text.trim() };
+  } catch (e) {
+    return { error: "Couldn't reach " + who + ": " + errText(e) };
+  }
+}
 async function writeCaption(body: any) {
-  const key = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!key) return { error: "Caption writing isn't set up yet: ANTHROPIC_API_KEY is missing." };
+  const ai = captionAI();
+  if (!ai) return { error: "Caption writing isn't set up yet: add OPENAI_API_KEY (or ANTHROPIC_API_KEY) in Supabase secrets." };
 
   const title = String(body.title || "").trim();
   if (!title) return { error: "Give the item a title first — that's what the caption is about." };
@@ -441,29 +482,10 @@ async function writeCaption(body: any) {
     "Return only the caption text. No preamble, no quotation marks, no hashtags, no explanation.",
   ].filter(Boolean).join("\n");
 
-  let text = "";
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({
-        model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-5",
-        max_tokens: 1024,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-    if (!res.ok) {
-      const detail = (await res.text()).slice(0, 200);
-      if (res.status === 401) return { error: "The Anthropic API key was rejected." };
-      if (res.status === 429) return { error: "Too many requests right now. Try again in a moment." };
-      return { error: "Claude returned " + res.status + ". " + detail };
-    }
-    const out = await res.json();
-    text = (out.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
-  } catch (e) {
-    return { error: "Couldn't reach Claude: " + errText(e) };
-  }
-  if (!text) return { error: "Claude came back empty. Try again." };
+  const got = await askAI(ai, prompt);
+  if (got.error) return { error: got.error };
+  let text = (got.text || "").replace(/^["“”']+|["“”']+$/g, "").trim();
+  if (!text) return { error: "The AI came back empty. Try again." };
   if (text.length > budget) text = text.slice(0, budget).trimEnd();
 
   return { caption: text, hashtags: tags, combined: text + "\n\n" + tags, limit, used: text.length + tags.length + 2, lang };
