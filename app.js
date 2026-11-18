@@ -1928,7 +1928,7 @@ async function captureFrame(btn){
 }
 /* Mark up a picture before it goes into feedback: box, circle, arrow, pen.
    The clean picture and the shapes stay on the pending file, so tapping the pen again lets you change them. */
-const MK_KEY="gearizo-mk-v1", MK_HINT={rect:"Drag on the picture to draw a box",oval:"Drag on the picture to draw a circle",arrow:"Drag towards the spot to draw an arrow",pen:"Draw on the picture"};
+const MK_KEY="gearizo-mk-v1", MK_HINT={rect:"Drag on the picture to draw a box",oval:"Drag on the picture to draw a circle",arrow:"Drag towards the spot to draw an arrow",pen:"Draw on the picture",text:"Tap the picture to type · drag text to move it · tap it to change it"};
 let mk=null, mkTool="rect", mkCol="#FF3B30";
 try{ const s=JSON.parse(localStorage.getItem(MK_KEY)||"{}"); if(MK_HINT[s.t]) mkTool=s.t; if(/^#[0-9A-F]{6}$/.test(s.c||"")) mkCol=s.c }catch(e){}
 function mkSync(){
@@ -1936,9 +1936,21 @@ function mkSync(){
   document.querySelectorAll("#mkDlg [data-mt]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.mt===mkTool)));
   document.querySelectorAll("#mkDlg [data-mc]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.mc===mkCol)));
   const n=mk?mk.shapes.length:0;
-  $("mkUndo").disabled=!n; $("mkHint").textContent=MK_HINT[mkTool]; $("mkHint").hidden=!(mk&&(mk.hint||!n));
+  $("mkUndo").disabled=!n; $("mkHint").textContent=MK_HINT[mkTool]; $("mkHint").hidden=!(mk&&!mk.edit&&(mk.hint||!n));
+  $("mkCv").style.cursor=mkTool==="text"?"text":"";
 }
+const MK_FONT="700 {px}px -apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Helvetica Neue',Arial,sans-serif";
+// Text box in canvas pixels: top-left at s.a, font size s.f × picture width.
+function mkTextBox(ctx,s,W,H){
+  const fs=s.f*W, lines=String(s.s||"").split("\n"); ctx.save(); ctx.font=MK_FONT.replace("{px}",fs);
+  const w=Math.max(fs*.5,...lines.map(l=>ctx.measureText(l).width)); ctx.restore();
+  return {x:s.a[0]*W,y:s.a[1]*H,w,h:lines.length*fs*1.25,fs,lines};
+}
+const mkEdge=c=>c==="#FFFFFF"||c==="#FFD60A"?"rgba(0,0,0,.78)":"#FFFFFF";
 function mkShape(ctx,s,W,H,lw){
+  if(s.t==="text"){ if(!s.s) return; const b=mkTextBox(ctx,s,W,H); ctx.save(); ctx.font=MK_FONT.replace("{px}",b.fs); ctx.textBaseline="top"; ctx.lineJoin="round";
+    ctx.lineWidth=Math.max(2,b.fs*.2); ctx.strokeStyle=mkEdge(s.c); ctx.fillStyle=s.c;
+    b.lines.forEach((l,i)=>{ const y=b.y+i*b.fs*1.25+b.fs*.1; ctx.strokeText(l,b.x,y); ctx.fillText(l,b.x,y) }); ctx.restore(); return }
   ctx.save(); ctx.strokeStyle=ctx.fillStyle=s.c; ctx.lineWidth=lw; ctx.lineCap="round"; ctx.lineJoin="round";
   ctx.shadowColor="rgba(0,0,0,.45)"; ctx.shadowBlur=lw; ctx.beginPath();
   if(s.t==="pen"){
@@ -1958,7 +1970,7 @@ function mkPaint(){
   if(!mk) return; mk.raf=0;
   const {ctx,cv,im}=mk, W=cv.width, H=cv.height;
   ctx.fillStyle="#FFFFFF"; ctx.fillRect(0,0,W,H); ctx.drawImage(im,0,0,W,H);
-  mk.shapes.forEach(s=>mkShape(ctx,s,W,H,mk.lw)); if(mk.cur) mkShape(ctx,mk.cur,W,H,mk.lw);
+  mk.shapes.forEach((s,i)=>{ if(!(mk.edit&&mk.edit.i===i)) mkShape(ctx,s,W,H,mk.lw) }); if(mk.cur) mkShape(ctx,mk.cur,W,H,mk.lw);
 }
 const mkReq=()=>{ if(mk&&!mk.raf) mk.raf=requestAnimationFrame(mkPaint) };
 function mkFinish(out){
@@ -1982,7 +1994,7 @@ async function markUp(src,opts){
   cv.width=Math.max(1,Math.round(w*sc)); cv.height=Math.max(1,Math.round(h*sc));
   return new Promise(res=>{
     const shapes=(opts.shapes||[]).map(x=>JSON.parse(JSON.stringify(x)));
-    mk={im,url,blob,cv,ctx:cv.getContext("2d"),shapes,cur:null,pid:null,raf:0,hint:!shapes.length,lw:Math.max(3,Math.round(Math.min(cv.width,cv.height)/120)),res};
+    mk={im,url,blob,cv,ctx:cv.getContext("2d"),shapes,cur:null,pid:null,raf:0,edit:null,sel:-1,tdown:null,hint:!shapes.length,lw:Math.max(3,Math.round(Math.min(cv.width,cv.height)/120)),res};
     $("mkDone").textContent=opts.done||"Add to feedback";
     mkPaint(); mkSync(); if(!dlg.open) dlg.showModal(); MKZ.reset(cv.width,cv.height);
   });
@@ -2009,17 +2021,53 @@ if($("mkDlg")){
     if(ok||was) e.stopImmediatePropagation();
   },true));
   const pt=e=>{ const r=cv.getBoundingClientRect(); return [Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),Math.min(1,Math.max(0,(e.clientY-r.top)/r.height))] };
+  /* Text: tap empty space to type a new line of text, tap a text to change it, drag a text to move it. */
+  const tx=$("mkTxt");
+  const hitText=p=>{ const W=cv.width,H=cv.height,x=p[0]*W,y=p[1]*H;
+    for(let i=mk.shapes.length-1;i>=0;i--){ const s=mk.shapes[i]; if(s.t!=="text") continue; const b=mkTextBox(mk.ctx,s,W,H), pad=b.fs*.3;
+      if(x>=b.x-pad&&x<=b.x+b.w+pad&&y>=b.y-pad&&y<=b.y+b.h+pad) return i } return -1 };
+  const txSize=()=>{ if(!mk||!mk.edit) return; const k=cv.clientWidth/cv.width, b=mkTextBox(mk.ctx,{...mk.edit,s:tx.value||" "},cv.width,cv.height);
+    tx.style.fontSize=(b.fs*k)+"px"; tx.style.width=(b.w*k+b.fs*k*1.2)+"px"; tx.style.height=(b.h*k+b.fs*k*.4)+"px" };
+  const txOpen=(i,p)=>{
+    // New text is about 22 px tall on screen at the current zoom (never more than a quarter of the picture's width).
+    const s=i>=0?mk.shapes[i]:null, fs=Math.min(cv.width/4,22*cv.width/cv.clientWidth);
+    mk.edit={i,a:s?s.a.slice():[p[0],Math.max(0,p[1]-fs*.6/cv.height)],f:s?s.f:fs/cv.width,c:s?s.c:mkCol};
+    tx.value=s?s.s:""; tx.style.color=mk.edit.c; tx.style.setProperty("--edge",mkEdge(mk.edit.c));
+    tx.style.left=(cv.offsetLeft+mk.edit.a[0]*cv.clientWidth-4)+"px"; tx.style.top=(cv.offsetTop+mk.edit.a[1]*cv.clientHeight-2)+"px";
+    tx.hidden=false; txSize(); mkReq(); mkSync(); tx.focus(); if(s) tx.select();
+  };
+  // Keep a text inside the picture: shift it left/up when it runs past the right or bottom edge.
+  const txKeep=sh=>{ const W=cv.width,H=cv.height,b=mkTextBox(mk.ctx,sh,W,H);
+    sh.a=[Math.max(0,Math.min(sh.a[0],(W-b.w-b.fs*.15)/W)),Math.max(0,Math.min(sh.a[1],(H-b.h)/H))] };
+  const txClose=save=>{
+    if(!mk||!mk.edit) return; const ed=mk.edit, v=tx.value.replace(/\s+$/,"").replace(/^\n+/,""); mk.edit=null; tx.hidden=true;
+    if(save){ if(v){ const sh={t:"text",c:ed.c,a:ed.a,f:ed.f,s:v}; txKeep(sh); if(ed.i>=0) mk.shapes[ed.i]=sh; else { mk.shapes.push(sh); mk.hint=false } mk.sel=ed.i>=0?ed.i:mk.shapes.length-1 }
+      else if(ed.i>=0){ mk.shapes.splice(ed.i,1); mk.sel=-1 } }
+    mkReq(); mkSync();
+  };
+  tx.addEventListener("input",txSize);
+  tx.addEventListener("blur",()=>txClose(true));
+  tx.addEventListener("keydown",e=>{ e.stopPropagation();
+    if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){ e.preventDefault(); tx.blur() }
+    else if(e.key==="Escape"){ e.preventDefault(); txClose(false) } });
+  $("mkDlg").addEventListener("cancel",e=>{ if(mk&&mk.edit){ e.preventDefault(); txClose(false) } });
   cv.addEventListener("pointerdown",e=>{
     if(!mk||mk.cur||MKZ.busy()||(e.pointerType==="mouse"&&e.button!==0)) return; e.preventDefault();
     try{ cv.setPointerCapture(e.pointerId) }catch(_){}
+    if(mkTool==="text"){ if(mk.edit){ tx.blur(); mk.tdown=null; return } const p=pt(e), i=hitText(p); mk.sel=i;
+      mk.tdown={pid:e.pointerId,p,i,a0:i>=0?mk.shapes[i].a.slice():null,moved:false}; return }
     const p=pt(e); mk.pid=e.pointerId; mk.cur=mkTool==="pen"?{t:"pen",c:mkCol,p:[p]}:{t:mkTool,c:mkCol,a:p,b:p}; mkReq();
   });
   cv.addEventListener("pointermove",e=>{
+    const td=mk&&mk.tdown; if(td&&e.pointerId===td.pid){ const p=pt(e);
+      if(Math.hypot((p[0]-td.p[0])*cv.clientWidth,(p[1]-td.p[1])*cv.clientHeight)>5) td.moved=true;
+      if(td.i>=0&&td.moved){ const sh=mk.shapes[td.i]; sh.a=[td.a0[0]+p[0]-td.p[0],td.a0[1]+p[1]-td.p[1]]; txKeep(sh); mkReq() } return }
     if(!mk||!mk.cur||e.pointerId!==mk.pid) return; const p=pt(e), s=mk.cur;
     if(s.t==="pen"){ const q=s.p[s.p.length-1]; if(s.p.length<3000&&Math.hypot((p[0]-q[0])*cv.width,(p[1]-q[1])*cv.height)>=2) s.p.push(p) } else s.b=p;
     mkReq();
   });
   const up=e=>{
+    const td=mk&&mk.tdown; if(td&&e.pointerId===td.pid){ mk.tdown=null; if(e.type==="pointerup"&&!td.moved) txOpen(td.i,td.p); return }
     if(!mk||!mk.cur||e.pointerId!==mk.pid) return; const s=mk.cur; mk.cur=null; mk.pid=null;
     const big=s.t==="pen"||Math.hypot((s.b[0]-s.a[0])*cv.width,(s.b[1]-s.a[1])*cv.height)>=mk.lw*3;
     if(e.type==="pointerup"&&big){ mk.shapes.push(s); mk.hint=false }
@@ -2028,16 +2076,18 @@ if($("mkDlg")){
   cv.addEventListener("pointerup",up); cv.addEventListener("pointercancel",up);
   $("mkDlg").addEventListener("click",e=>{
     const t=e.target.closest("[data-mt]"), c=e.target.closest("[data-mc]");
-    if(t){ mkTool=t.dataset.mt; if(mk) mk.hint=true } else if(c) mkCol=c.dataset.mc; else return;
+    if(t){ mkTool=t.dataset.mt; if(mk){ mk.hint=true; mk.sel=-1 } }
+    else if(c){ mkCol=c.dataset.mc; const s=mk&&mkTool==="text"&&mk.shapes[mk.sel]; if(s&&s.t==="text"){ s.c=mkCol; mkReq() } }
+    else return;
     try{ localStorage.setItem(MK_KEY,JSON.stringify({t:mkTool,c:mkCol})) }catch(_){}
     mkSync();
   });
-  $("mkDlg").addEventListener("keydown",e=>{ if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&e.key.toLowerCase()==="z"){ e.preventDefault(); $("mkUndo").click() } });
+  $("mkDlg").addEventListener("keydown",e=>{ if(e.target===tx) return; if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&e.key.toLowerCase()==="z"){ e.preventDefault(); $("mkUndo").click() } });
   $("mkDlg").addEventListener("close",()=>{ if(mk) mkFinish(null); if(!$("mkDlg").open) MKZ.reset(0,0) });
-  $("mkUndo").onclick=()=>{ if(mk&&mk.shapes.length){ mk.shapes.pop(); mkReq(); mkSync() } };
-  $("mkCancel").onclick=()=>mkFinish(null);
+  $("mkUndo").onclick=()=>{ if(mk&&mk.edit) txClose(false); if(mk&&mk.shapes.length){ mk.shapes.pop(); mkReq(); mkSync() } };
+  $("mkCancel").onclick=()=>{ if(mk&&mk.edit){ mk.edit=null; tx.hidden=true } mkFinish(null) };
   $("mkDone").onclick=async()=>{
-    if(!mk) return; const m=mk; m.cur=null; mkPaint();
+    if(!mk) return; if(mk.edit) txClose(true); const m=mk; m.cur=null; mkPaint();
     try{ const b=await new Promise((res,rej)=>m.cv.toBlob(x=>x?res(x):rej(new Error("empty")),"image/jpeg",0.95)); if(mk===m) mkFinish({blob:b,shapes:m.shapes,src:m.blob}) }
     catch(e){ toast("Couldn’t save the marked picture. Try again.") }
   };
