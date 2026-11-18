@@ -11,7 +11,7 @@ and records what happened in the "postjobs" collection so the app can show it.
 If a post is unscheduled or its caption/time/platforms change, the Facebook schedule is removed and redone.
 It never deletes or changes files on the NAS.
 """
-import hashlib, json, os, shutil, subprocess, time, urllib.error, urllib.parse, urllib.request, uuid
+import hashlib, json, os, re, shutil, subprocess, time, urllib.error, urllib.parse, urllib.request, uuid
 
 import settings as S
 
@@ -68,6 +68,19 @@ SPEC = ("scale='min(1920,iw)':'min(1920,ih)'"
         ":force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuv420p")
 
 
+SHORT_S = 0.5     # a copy this much shorter than the master is a cut copy
+
+
+def duration(ff, path):
+    """Length in seconds that ffmpeg reads from the file's header, or None."""
+    try:
+        r = subprocess.run([ff, "-hide_banner", "-i", path], capture_output=True, text=True, timeout=120)
+    except Exception:
+        return None
+    m = re.search(r"Duration: (\d+):(\d+):([\d.]+)", r.stderr or "")
+    return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3)) if m else None
+
+
 def encode(path, log):
     """A Reels-ready copy of path in the job's own data folder (or path itself if ffmpeg is gone)."""
     ff = S.FFMPEG if S.FFMPEG and os.path.exists(S.FFMPEG) else shutil.which("ffmpeg")
@@ -75,20 +88,35 @@ def encode(path, log):
         log("autopost: no ffmpeg, sending %s to Meta as it is" % os.path.basename(path))
         return path
     out = os.path.join(S.DATA, "upload-%s.mp4" % hashlib.sha1(path.encode("utf-8")).hexdigest()[:12])
-    r = subprocess.run([
-        ff, "-y", "-loglevel", "error", "-i", path, "-vf", SPEC, "-r", "30",
-        "-c:v", "libx264", "-profile:v", "high", "-level", "4.1", "-preset", "medium",
-        "-crf", "23", "-maxrate", "8M", "-bufsize", "16M",
-        "-g", "60", "-keyint_min", "60", "-sc_threshold", "0", "-flags", "+cgop",
-        "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
-        "-movflags", "+faststart", "-f", "mp4", out,
-    ], capture_output=True, timeout=3600)
-    if r.returncode or not os.path.isfile(out):
-        if os.path.exists(out):
-            os.remove(out)
-        raise GraphError(("ffmpeg: " + (r.stderr or b"").decode("utf-8", "replace").strip())[:300])
-    log("autopost: re-encoded %s for Meta, %.1f MB from %.1f MB"
-        % (os.path.basename(path), os.path.getsize(out) / 1e6, os.path.getsize(path) / 1e6))
+    # The master is read over the network from the NAS. When that read stops early, ffmpeg can still
+    # finish "successfully" with a shorter video -- GZ003 went out on 17 Nov at 37 s of its 43. So the
+    # copy is measured against the master before anything is uploaded, re-encoded once if it falls
+    # short, and never sent short.
+    want = duration(ff, path)
+    for attempt in (1, 2):
+        r = subprocess.run([
+            ff, "-y", "-loglevel", "error", "-i", path, "-vf", SPEC, "-r", "30",
+            "-c:v", "libx264", "-profile:v", "high", "-level", "4.1", "-preset", "medium",
+            "-crf", "23", "-maxrate", "8M", "-bufsize", "16M",
+            "-g", "60", "-keyint_min", "60", "-sc_threshold", "0", "-flags", "+cgop",
+            "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
+            "-movflags", "+faststart", "-f", "mp4", out,
+        ], capture_output=True, timeout=3600)
+        if r.returncode or not os.path.isfile(out):
+            if os.path.exists(out):
+                os.remove(out)
+            raise GraphError(("ffmpeg: " + (r.stderr or b"").decode("utf-8", "replace").strip())[:300])
+        got = duration(ff, out)
+        if want is None or (got is not None and got >= want - SHORT_S):
+            break
+        os.remove(out)
+        log("autopost: re-encode of %s came out %.1f s of %.1f s%s" % (os.path.basename(path), got or 0, want,
+            ", trying again" if attempt == 1 else ""))
+        if attempt == 2:
+            raise GraphError("the re-encode came out %.1f s of %.1f s twice (the NAS read stopped early?); not uploading a cut video"
+                             % (got or 0, want))
+    log("autopost: re-encoded %s for Meta, %.1f MB from %.1f MB, %.1f s"
+        % (os.path.basename(path), os.path.getsize(out) / 1e6, os.path.getsize(path) / 1e6, got or 0))
     return out
 
 
