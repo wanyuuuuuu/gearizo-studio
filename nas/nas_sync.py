@@ -218,6 +218,48 @@ def add_file(f, items, versions, note=None, by=None):
     NP.do_mark(f["path"])
 
 
+PIC_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+MAX_SET_PICTURES = 30
+PIC_LIMIT = 50 * 1024 * 1024     # the app's storage takes files up to 50 MB
+
+
+def handle_sets(items, versions):
+    """A folder in Checking named with a GZ code, holding pictures (no video) -> one new version with the
+    pictures at full quality, sent for review. Changing the folder later makes the next version."""
+    listing = [{"id": k, "title": v.get("title", ""), "status": v.get("status", ""), "code": v.get("code", "")} for k, v in items.items()]
+    for s in NP.find_new_sets(listing)[:2]:
+        if not s["item"]:
+            log(f"picture folder {s['name']} in Checking did not match any item: check the GZ code in its name")
+            NP.mark_key(s["key"])
+            continue
+        files, big = [], []
+        for p in s["pics"][:MAX_SET_PICTURES]:
+            if p["size"] > PIC_LIMIT:
+                big.append(p["name"])
+                continue
+            ctype = PIC_TYPES.get(os.path.splitext(p["name"])[1].lower(), "image/jpeg")
+            files.append({"id": upload(p["path"], ctype), "name": p["name"], "type": ctype})
+        it = items[s["item"]]
+        if not files:
+            log(f"picture folder {s['name']}: no picture under 50 MB, nothing added")
+            NP.mark_key(s["key"])
+            continue
+        now = int(time.time() * 1000)
+        n = max([v.get("n", 0) for v in versions.values() if v.get("item") == s["item"]] or [0]) + 1
+        extra = len(s["pics"]) - MAX_SET_PICTURES
+        note = f"From Checking: folder {s['name']} ({len(files)} picture{'s' if len(files) != 1 else ''})" + \
+            (f"; left out, over 50 MB: {', '.join(big)}" if big else "") + (f"; only the first {MAX_SET_PICTURES} are shown" if extra > 0 else "")
+        vid = f"chk-set-{s['mtime']}-v{n}"
+        vdoc = {"item": s["item"], "n": n, "link": s["path"], "asset": "", "assetType": "", "note": note, "files": files,
+                "size": s["size"], "mtime": s["mtime"], "at": now, "by": OWNER_ID}
+        put("versions", vid, vdoc)
+        versions[vid] = vdoc
+        if it.get("status") != "posted":
+            merge("items", s["item"], {"status": "review", "submittedBy": OWNER_ID, "submittedAt": now, "submittedV": n})
+        NP.mark_key(s["key"])
+        log(f"added v{n} of {it.get('title')} from picture folder {s['name']} ({len(files)} pictures) and sent it for review")
+
+
 def handle_covers(items):
     listing = [{"id": k, "title": v.get("title", ""), "status": v.get("status", ""), "code": v.get("code", "")} for k, v in items.items()]
     try:
@@ -303,6 +345,10 @@ def run():
     if S.SYNC:
         move_approved(items, versions)
         handle_new(items, versions)
+        try:
+            handle_sets(items, versions)
+        except Exception:
+            log("picture folder ERROR " + traceback.format_exc().strip().replace("\n", " | "))
         try:
             handle_covers(items)
         except Exception:

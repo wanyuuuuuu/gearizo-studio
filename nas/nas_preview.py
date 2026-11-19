@@ -2,7 +2,8 @@
 """Gearizo content studio: find new videos in the NAS item folders and make small previews.
 
 Folders on the NAS share "Marketing Content":
-  Content Video/Checking  finished versions waiting for marketing (any file name)
+  Content Video/Checking  finished versions waiting for marketing (any file name); a folder named with a
+                          GZ code that holds pictures and no video is a picture set (one version)
   Content Video/approve   final, approved files (moved here after approval)
 
 Commands (all print JSON):
@@ -14,7 +15,7 @@ Commands (all print JSON):
                         -> moves a file from Checking into approve: {"from","to"}; if the path is gone
                            (file renamed), finds the file in Checking by its size and mtime
 """
-import json, os, re, shutil, subprocess, sys, time
+import hashlib, json, os, re, shutil, subprocess, sys, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import settings as S  # noqa: E402
@@ -32,6 +33,7 @@ IMAGE_EXT = (".jpg", ".jpeg", ".png", ".webp")   # cover photos
 COVER_SETTLE_SECONDS = 60
 COVER_LIMIT_BYTES = int(7.5 * 1024 * 1024)       # Instagram takes JPEG covers up to 8 MB
 SETTLE_SECONDS = 180          # skip files still being copied/exported
+SET_SETTLE_SECONDS = 120      # a picture folder is taken once nothing in it changed for this long
 LIMIT_BYTES = int(19.5 * 1024 * 1024)
 MAX_SECONDS = 480             # previews cover at most the first 8 minutes
 CODE_RE = re.compile(r"\[([a-z0-9]{5})\]\s*$", re.I)
@@ -136,13 +138,70 @@ def find_new(items):
     return new
 
 
+def _natural(name):
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", name)]
+
+
+def set_dirs():
+    """Picture sets: folders inside Checking whose name has a GZ code and that hold pictures but no video.
+    Returns {folder path: [picture file names in natural order]}."""
+    found = {}
+    if not os.path.isdir(CHECKING):
+        return found
+    for dirpath, dirnames, files in os.walk(CHECKING):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        if dirpath == CHECKING or not CODE_IN_NAME.search(os.path.basename(dirpath)):
+            continue
+        files = [f for f in files if not f.startswith(".")]
+        pics = sorted((f for f in files if f.lower().endswith(IMAGE_EXT)), key=_natural)
+        if pics and not any(f.lower().endswith(VIDEO_EXT) for f in files):
+            found[dirpath] = pics
+    return found
+
+
+def find_new_sets(items):
+    """Picture folders not taken yet (the folder name, file names, sizes and times identify a set, so adding,
+    changing or renaming makes it new again), once nothing in them changed for SET_SETTLE_SECONDS."""
+    state, now, new = load_state(), time.time(), []
+    for d, pics in set_dirs().items():
+        try:
+            sts = [os.stat(os.path.join(d, f)) for f in pics]
+        except OSError:
+            continue
+        if now - max(st.st_mtime for st in sts) < SET_SETTLE_SECONDS:
+            continue
+        sig = os.path.basename(d) + "\n" + "\n".join("%s:%d:%d" % (f, st.st_size, int(st.st_mtime)) for f, st in zip(pics, sts))
+        k = "set|" + hashlib.sha1(sig.encode()).hexdigest()[:20]
+        if k in state:
+            continue
+        name = os.path.basename(d)
+        new.append({"path": d, "name": name, "key": k, "item": match_item(name + ".set", items),
+                    "size": sum(st.st_size for st in sts), "mtime": int(max(st.st_mtime for st in sts)),
+                    "pics": [{"path": os.path.join(d, f), "name": f, "size": st.st_size} for f, st in zip(pics, sts)]})
+    new.sort(key=lambda x: x["mtime"])
+    return new
+
+
+def mark_key(k):
+    state = load_state()
+    state[k] = int(time.time())
+    tmp = STATE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(state, f)
+    os.replace(tmp, STATE)
+
+
 def find_new_covers(items):
-    """Cover photos dropped in Checking: pictures not seen before, matched to an item like videos are."""
+    """Cover photos dropped in Checking: pictures not seen before, matched to an item like videos are.
+    Pictures inside a picture-set folder are not covers."""
     state, now, new = load_state(), time.time(), []
     seen = seen_keys(state)
+    sets = set_dirs()
     if os.path.isdir(CHECKING):
         for dirpath, dirnames, files in os.walk(CHECKING):
             dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+            if dirpath in sets:
+                continue
             for fn in files:
                 if fn.startswith(".") or not fn.lower().endswith(IMAGE_EXT):
                     continue
@@ -304,9 +363,25 @@ def do_move(path, size=None, mtime=None):
     if not os.path.isfile(path) and size and mtime:
         path = find_in_checking(int(size), int(mtime)) or path
     src = os.path.realpath(path)
-    if not src.startswith(os.path.realpath(CHECKING) + os.sep) or not os.path.isfile(src):
+    if not src.startswith(os.path.realpath(CHECKING) + os.sep) or not (os.path.isfile(src) or os.path.isdir(src)):
         return {"error": "not_in_checking", "from": path}
     os.makedirs(APPROVE, exist_ok=True)
+    if os.path.isdir(src):   # a picture set moves as a whole folder
+        base, i = os.path.basename(src), 2
+        dst = os.path.join(APPROVE, base)
+        while os.path.exists(dst):
+            dst, i = os.path.join(APPROVE, "%s (%d)" % (base, i)), i + 1
+        try:
+            os.rename(src, dst)
+        except OSError:
+            tmp = dst + ".part"
+            shutil.copytree(src, tmp)
+            os.rename(tmp, dst)
+            try:
+                shutil.rmtree(src)
+            except OSError:
+                return {"from": path, "to": dst, "original_left": True}
+        return {"from": path, "to": dst}
     base, ext = os.path.splitext(os.path.basename(src))
     dst, i = os.path.join(APPROVE, base + ext), 2
     while os.path.exists(dst):

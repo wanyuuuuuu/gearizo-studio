@@ -607,7 +607,7 @@ function normCover(c){
   if(Number(c.at)>0) f.at=Number(c.at);
   return f;
 }
-const normFiles=a=>Array.isArray(a)?a.filter(f=>f&&typeof f.id==="string"&&/^[A-Za-z0-9_-]{8,64}$/.test(f.id)).slice(0,12).map(f=>({id:f.id,name:String(f.name||"file"),type:String(f.type||"")})):[];
+const normFiles=a=>Array.isArray(a)?a.filter(f=>f&&typeof f.id==="string"&&/^[A-Za-z0-9_-]{8,64}$/.test(f.id)).slice(0,30).map(f=>({id:f.id,name:String(f.name||"file"),type:String(f.type||"")})):[];
 function parseTime(str){
   str=String(str||"").trim(); if(!str) return null;
   let m=str.match(/^(\d{1,3}):([0-5]?\d)(?:\.\d+)?$/); if(m) return Number(m[1])*60+Number(m[2]);
