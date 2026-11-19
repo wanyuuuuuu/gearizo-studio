@@ -279,6 +279,11 @@ dialog.lb{width:min(1100px,calc(100vw - 24px))}
 .lb-wrap{display:flex;flex-direction:column;max-height:calc(100dvh - 40px)}
 .lb-body{position:relative;overflow:auto;background:var(--sunk);display:flex;height:calc(100dvh - 130px);min-height:200px;border-radius:14px 14px 0 0;touch-action:none;cursor:grab;overscroll-behavior:contain}
 .lb-body.drag{cursor:grabbing}
+.lb-stage{position:relative;display:flex;flex-direction:column;min-height:0}
+.lb-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:0;background:rgba(20,24,28,.55);color:#fff;font-size:30px;line-height:1;display:grid;place-items:center;padding:0 0 4px;cursor:pointer;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);z-index:2}
+.lb-nav.prev{left:12px} .lb-nav.next{right:12px}
+.lb-nav:hover:not(:disabled){background:rgba(20,24,28,.78)}
+.lb-nav:disabled{opacity:.25;cursor:default}
 .lb-body img{display:block;flex:none;margin:auto;max-width:none;max-height:none;-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
 .lb-bar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px}
 .lb-bar span{font-size:13.5px;color:var(--ink-2);word-break:break-all;min-width:0;flex:1 1 160px}
@@ -292,7 +297,9 @@ dialog.lb{width:min(1100px,calc(100vw - 24px))}
 @media (max-width:720px){
   dialog.lb{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border-radius:0}
   .lb-wrap{height:100%;max-height:100dvh}
+  .lb-stage{flex:1}
   .lb-body{height:auto;flex:1;border-radius:0;padding-top:env(safe-area-inset-top,0px)}
+  .lb-nav{width:38px;height:38px;font-size:26px} .lb-nav.prev{left:6px} .lb-nav.next{right:6px}
   .lb-bar{padding:8px 12px calc(env(safe-area-inset-bottom,0px) + 8px)}
   .lb-bar span{display:none}
 }
@@ -2056,7 +2063,7 @@ dialog#temple::backdrop{background:#2A0A0B}
 </dialog>
 <dialog id="lb" class="lb" aria-label="Attachment">
   <div class="lb-wrap">
-    <div class="lb-body" id="lbBody"><img id="lbImg" alt="" draggable="false"></div>
+    <div class="lb-stage"><div class="lb-body" id="lbBody"><img id="lbImg" alt="" draggable="false"></div><button type="button" class="lb-nav prev" id="lbPrev" aria-label="Previous picture" title="Previous (←)" hidden>‹</button><button type="button" class="lb-nav next" id="lbNext" aria-label="Next picture" title="Next (→)" hidden>›</button></div>
     <div class="lb-bar"><span id="lbName"></span><div class="zbar" id="lbZoom" role="group" aria-label="Zoom"><button type="button" class="zpm" data-z="out" aria-label="Zoom out" title="Zoom out (−)">−</button><button type="button" class="zpct" data-z="one" title="Actual size">100%</button><button type="button" class="zpm" data-z="in" aria-label="Zoom in" title="Zoom in (+)">+</button><button type="button" data-z="fit" title="Fit (0)">Fit</button></div><div><button class="btn sm" id="lbMark" type="button" hidden>Mark up</button><button class="btn sm" id="lbSave" type="button">Save to computer</button><button class="btn sm primary" id="lbClose" type="button">Close</button></div></div>
   </div>
 </dialog>
