@@ -122,6 +122,8 @@ def run(api, docs, put, merge, log, items, versions):
         at = it.get("postAt") or 0
         if it.get("status") != "scheduled" or not at or not (at - LEAD_MS <= now <= at + LATE_MS):
             continue
+        if A.picture_post(iid, it, versions):
+            continue   # pictures: TikTok drafts here take only video, so it is posted by hand
         job = jobs.get(iid)
         todo = []
         for s in (p for p in it.get("platforms", []) if p in acct):

@@ -1139,6 +1139,9 @@ const deskCoverHtml=it=>{
 };
 
 /* Publish tab */
+// The version to post is pictures (a NAS picture folder or images added here), not a video: posted by hand.
+function picPost(it){ const vs=vFor(it.id), v=vs.find(x=>it.submittedV&&x.n===it.submittedV)||vs[0];
+  return !!v&&!v.asset&&(v.files||[]).length>0&&v.files.every(f=>f.type.startsWith("image/")) }
 function renderPublish(){
   const box=$("pubInfo");
   if(!editingId){ setHTML(box,'<p class="hint" style="margin-top:12px">Save the item first.</p>'); return }
@@ -1170,16 +1173,16 @@ function renderPublish(){
       '<button class="btn primary sm" type="button" data-pub="schedule">'+(sch?"Update time":"Schedule")+'</button>'+(sch?'<button class="btn ghost sm" type="button" data-pub="unschedule">Unschedule</button>':"")+'</div>'+
       '<div class="pubdone"><input type="url" id="pubLink" placeholder="Post link (optional)" aria-label="Link to the live post"><button class="btn go sm" type="button" data-pub="posted">Mark posted</button></div>';
   }else html+='<p class="waitnote pubnote">'+(sch?"Marketing posts it at this time.":"Marketing picks the time.")+'</p>';
-  const autoOn=!!(metaState&&metaState.connected), job=jobs[it.id]||{};
+  const autoOn=!!(metaState&&metaState.connected), job=jobs[it.id]||{}, pics=picPost(it);
   if(it.platforms.length) html+='<div class="aplrow">'+it.platforms.map(p=>{
     const nm=pMap[p].s;
-    if(TT_P.includes(p)&&ttOn(p)){
+    if(TT_P.includes(p)&&ttOn(p)&&!pics){
       const t=job[p]||{}, s=t.state, err=t.error==="nofile"?"Final video not found on the NAS.":(t.error||"");
       const lab=s==="posted"?"Posted ✓":s==="inbox"?"In drafts ✓":s==="sent"?"Sending…":s==="failed"?"Failed":"Drafts";
       const tip=s==="failed"||err?err:s==="inbox"?"In the account's TikTok drafts: open the TikTok notification, paste the caption and post":s==="sent"?"Sent, TikTok is processing it":"Goes to this account's TikTok drafts at the time; you add the caption and post it in TikTok";
       return '<span class="apl '+(s==="inbox"?"uploaded":s||"auto")+'" title="'+esc(tip)+'">'+esc(nm)+' · '+lab+'</span>';
     }
-    if(!autoOn||!AUTO_P.includes(p)) return '<span class="apl man" title="Post this one yourself">'+esc(nm)+' · You</span>';
+    if(!autoOn||!AUTO_P.includes(p)||pics) return '<span class="apl man" title="'+(pics?"Pictures are posted by hand":"Post this one yourself")+'">'+esc(nm)+' · You</span>';
     const j=(p==="reel"?job.ig:job.fb)||{}, st=j.state;
     const lab=st==="posted"?"Posted ✓":st==="uploaded"||st==="scheduled"?"Ready ✓":st==="failed"?"Failed":"Auto";
     return '<span class="apl '+(st||"auto")+'" title="'+esc(st==="failed"?(j.error||""):st==="uploaded"||st==="scheduled"?"Uploaded, goes out at the time":"Uploads up to a day before")+'">'+esc(nm)+' · '+lab+'</span>';

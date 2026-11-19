@@ -130,6 +130,19 @@ def sig(it):
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
+def picture_post(item_id, it, versions):
+    """The version to post is a set of pictures (a NAS picture folder or images added in the app), not a video:
+    Reels, Facebook video and TikTok drafts can't take it, so it is posted by hand."""
+    mine = [v for v in versions.values() if v.get("item") == item_id]
+    if not mine:
+        return False
+    want = it.get("submittedV")
+    v = next((x for x in mine if want and x.get("n") == want), None) or max(mine, key=lambda x: x.get("n", 0))
+    files = v.get("files") or []
+    return (not v.get("asset") and bool(files) and all(str(f.get("type", "")).startswith("image/") for f in files)) \
+        or (bool(v.get("link")) and os.path.isdir(v["link"]))
+
+
 def final_file(item_id, it, versions):
     mine = [v for v in versions.values() if v.get("item") == item_id]
     if not mine:
@@ -324,6 +337,8 @@ def run(api, docs, put, log, items, versions):
     jobs = docs("postjobs")
     now = int(time.time() * 1000)
     for iid, it in items.items():
+        if picture_post(iid, it, versions):
+            continue
         job = jobs.get(iid)
         plats = [p for p in it.get("platforms", []) if p in AUTO]
         sched = it.get("status") == "scheduled" and (it.get("postAt") or 0) > 0
