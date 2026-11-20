@@ -519,17 +519,20 @@ async function postDue() {
     const { data: jr } = await sb.from("docs").select("data").eq("collection", "postjobs").eq("id", r.id).maybeSingle();
     const job: any = jr?.data || { item: r.id };
     let changed = false;
-    if (linked && pl.includes("reel") && job.ig?.state === "uploaded" && m.ig_id) {
+    // Instagram: the Reel container ("ig") and the picture carousel ("carousel") both wait, uploaded, for
+    // their time and are published the same way.
+    for (const [plat, key, what] of [["reel", "ig", "video"], ["carousel", "carousel", "pictures"]] as const) {
+      if (!(linked && pl.includes(plat) && job[key]?.state === "uploaded" && m.ig_id)) continue;
       try {
-        const st = (await ig("/" + job.ig.container, { fields: "status_code" }, m)).status_code;
+        const st = (await ig("/" + job[key].container, { fields: "status_code" }, m)).status_code;
         if (st === "FINISHED") {
-          const pub = await ig("/" + m.ig_id + "/media_publish", { creation_id: job.ig.container }, m, "POST");
+          const pub = await ig("/" + m.ig_id + "/media_publish", { creation_id: job[key].container }, m, "POST");
           let link = ""; try { link = (await ig("/" + pub.id, { fields: "permalink" }, m)).permalink || ""; } catch (_) { /* link is optional */ }
-          job.ig = { ...job.ig, state: "posted", media: pub.id, permalink: link, at: now }; changed = true;
+          job[key] = { ...job[key], state: "posted", media: pub.id, permalink: link, at: now }; changed = true;
         } else if (st === "ERROR" || st === "EXPIRED" || now - Number(d.postAt) > 30 * 60000) {
-          job.ig = { ...job.ig, state: "failed", error: st === "IN_PROGRESS" ? "Instagram was still processing the video" : "Instagram couldn't use the video (" + st + ")", at: now }; changed = true;
+          job[key] = { ...job[key], state: "failed", error: st === "IN_PROGRESS" ? "Instagram was still processing the " + what : "Instagram couldn't use the " + what + " (" + st + ")", at: now }; changed = true;
         }
-      } catch (e) { job.ig = { ...job.ig, state: "failed", error: errText(e), at: now }; changed = true; }
+      } catch (e) { job[key] = { ...job[key], state: "failed", error: errText(e), at: now }; changed = true; }
     }
     if (linked && pl.includes("fb") && job.fb?.state === "scheduled") {
       let link = "";
@@ -539,11 +542,12 @@ async function postDue() {
     if (changed) await sb.from("docs").upsert({ collection: "postjobs", id: r.id, data: job });
     const tts = pl.filter((p) => TT_SLOTS[p]);
     if (tts.length && jr) await ttFollow(r.id, job, tts);
-    if (job.ig?.state === "uploaded") continue;                  // Instagram still processing: try again next minute
-    const done = (p: string) => (p === "reel" && job.ig?.state === "posted") || (p === "fb" && job.fb?.state === "posted") || (!!TT_SLOTS[p] && job[p]?.state === "posted");
+    if (job.ig?.state === "uploaded" || job.carousel?.state === "uploaded") continue;   // Instagram still processing: try again next minute
+    const done = (p: string) => (p === "reel" && job.ig?.state === "posted") || (p === "carousel" && job.carousel?.state === "posted") ||
+      (p === "fb" && job.fb?.state === "posted") || (!!TT_SLOTS[p] && job[p]?.state === "posted");
     const left = pl.filter((p) => !done(p));
     if (pl.length && !left.length) {
-      const link = job.ig?.permalink || job.fb?.permalink || "";
+      const link = job.ig?.permalink || job.carousel?.permalink || job.fb?.permalink || "";
       await sb.from("docs").update({ data: { ...d, status: "posted", postedAt: now, postedBy: "auto", postUrl: d.postUrl || link, remindedAt: now } }).eq("collection", "items").eq("id", r.id);
       out.push({ id: r.id, posted: true });
       continue;
@@ -553,8 +557,10 @@ async function postDue() {
     const fails: string[] = [];
     if (job.ig?.state === "failed") fails.push("Instagram: " + job.ig.error);
     if (job.fb?.state === "failed") fails.push("Facebook: " + job.fb.error);
+    if (job.carousel?.state === "failed") fails.push("Instagram carousel: " + job.carousel.error);
     for (const s of tts) if (job[s]?.state === "failed") fails.push(TT_SLOTS[s] + ": " + job[s].error);
     if (linked && !fails.length && left.some((p) => AUTO.includes(p))) fails.push("the video wasn't uploaded in time (is the Mac on and the NAS connected?)");
+    else if (linked && !fails.length && left.includes("carousel") && !job.carousel) fails.push("the pictures weren't sent to Instagram in time (is the Mac on?)");
     const auto = pl.filter(done).map((p) => PLAT[p] || p);
     const title = (d.code ? d.code + " " : "") + (d.title || "a video");
     const where = (p: string) => (PLAT[p] || p) + (TT_SLOTS[p] && ["sent", "inbox"].includes(job[p]?.state) ? " (it's in your TikTok drafts)" : "");

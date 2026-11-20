@@ -5,6 +5,8 @@ it re-encodes the final file from the NAS to what Meta accepts (see SPEC) and up
   - Instagram: a Reels container, fetched by Meta from a short-lived link (see ig_upload); Instagram only
     publishes on request, so the server publishes it at the time
   - Facebook: a Page Reel scheduled by Meta for the exact time
+  - Instagram Carousel (Post): when the version is pictures and "carousel" is ticked, the pictures go up as one
+    carousel (one picture: a single photo post), made into JPEGs Instagram takes; the server publishes it at the time
 If the item has a cover photo, Instagram gets it as the Reel cover (cover_url) and Facebook as the video's
 preferred thumbnail; a cover Meta refuses never stops the post itself.
 and records what happened in the "postjobs" collection so the app can show it.
@@ -132,7 +134,8 @@ def sig(it):
 
 def picture_post(item_id, it, versions):
     """The version to post is a set of pictures (a NAS picture folder or images added in the app), not a video:
-    Reels, Facebook video and TikTok drafts can't take it, so it is posted by hand."""
+    Reels, Facebook video and TikTok drafts can't take it. It goes to Instagram as a carousel when "carousel" is
+    ticked (run_carousel); anywhere else it is posted by hand."""
     mine = [v for v in versions.values() if v.get("item") == item_id]
     if not mine:
         return False
@@ -326,6 +329,149 @@ def fb_upload(m, path, caption, post_at):
     return vid
 
 
+# ---------- Instagram Carousel (Post): a picture version, posted as one carousel ----------
+# Instagram takes JPEG only, at most 8 MB and 1440 px wide, aspect between 4:5 (portrait) and 1.91:1
+# (landscape), up to 20 pictures; a carousel needs at least two, so one picture goes out as a photo post.
+# Pictures outside the aspect range are padded with white to fit rather than cropped, so nothing in the
+# design is cut off. The first picture sets the shape of the whole carousel in the feed.
+CAROUSEL_MAX = 20
+IMG_RE = re.compile(r"Video:.*?(\d{2,5})x(\d{2,5})")
+
+
+def picture_version(item_id, it, versions):
+    mine = [v for v in versions.values() if v.get("item") == item_id]
+    if not mine:
+        return None
+    want = it.get("submittedV")
+    return next((x for x in mine if want and x.get("n") == want), None) or max(mine, key=lambda x: x.get("n", 0))
+
+
+def _even(x):
+    return max(2, int(round(x / 2.0)) * 2)
+
+
+def to_jpeg(ff, src, out):
+    """src (JPEG, PNG or WebP, any size) -> out: a JPEG Instagram accepts. Returns a note if it had to pad."""
+    info = subprocess.run([ff, "-hide_banner", "-i", src], capture_output=True, text=True, timeout=120).stderr or ""
+    m = IMG_RE.search(info)
+    if not m:
+        raise GraphError("couldn't read the picture %s" % os.path.basename(src))
+    w, h = int(m.group(1)), int(m.group(2))
+    k = min(1.0, 1440.0 / w)
+    sw, sh = _even(w * k), _even(h * k)
+    cw, ch, note = sw, sh, ""
+    if sw / sh < 0.8:
+        cw, note = _even(sh * 0.8 + 1), "padded to 4:5"
+    elif sw / sh > 1.91:
+        ch, note = _even(sw / 1.91 + 1), "padded to 1.91:1"
+    graph = ("color=c=white:s=%dx%d[bg];[0:v]scale=%d:%d,format=rgba[fg];"
+             "[bg][fg]overlay=(W-w)/2:(H-h)/2,format=yuvj420p" % (cw, ch, sw, sh))
+    for q in (2, 4, 7, 10):
+        r = subprocess.run([ff, "-hide_banner", "-loglevel", "error", "-y", "-i", src, "-filter_complex", graph,
+                            "-frames:v", "1", "-q:v", str(q), out], capture_output=True, timeout=120)
+        if r.returncode or not os.path.isfile(out):
+            raise GraphError(("picture %s: " % os.path.basename(src) + (r.stderr or b"").decode("utf-8", "replace"))[:300])
+        if os.path.getsize(out) <= 7.5 * 1024 * 1024:
+            return note
+    raise GraphError("picture %s is still over 8 MB as a JPEG" % os.path.basename(src))
+
+
+def carousel_files(v):
+    """The pictures of a version in their order: the app's copies (full quality), else the NAS folder."""
+    files = [f for f in (v.get("files") or []) if str(f.get("type", "")).startswith("image/") and f.get("id")]
+    if files:
+        return [("storage", f["id"], f.get("name") or f["id"]) for f in files]
+    d = v.get("link") or ""
+    if d and os.path.isdir(d):
+        names = sorted((n for n in os.listdir(d) if not n.startswith(".") and
+                        n.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))),
+                       key=lambda n: [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", n)])
+        return [("nas", os.path.join(d, n), n) for n in names]
+    return []
+
+
+def carousel_sig(it, v, files):
+    raw = json.dumps([it.get("caption", ""), it.get("postAt", 0), v.get("n"), [f[1] for f in files]], ensure_ascii=False)
+    return hashlib.sha1(raw.encode()).hexdigest()[:16]
+
+
+def carousel_upload(m, it, files, log):
+    """Builds the carousel container (or a single photo container) on Instagram; returns its id."""
+    ff = S.FFMPEG if S.FFMPEG and os.path.exists(S.FFMPEG) else shutil.which("ffmpeg")
+    if not ff:
+        raise GraphError("no ffmpeg on this computer to make the pictures into JPEGs")
+    tag = hashlib.sha1(str(it.get("code") or it.get("title") or "").encode("utf-8")).hexdigest()[:8]
+    made, stashed, links = [], [], []
+    try:
+        for i, (where, ref, name) in enumerate(files[:CAROUSEL_MAX]):
+            src = ref
+            if where == "storage":
+                src = os.path.join(S.DATA, "car-src-%s-%d" % (tag, i))
+                with open(src, "wb") as f:
+                    f.write(_storage("GET", "object/%s/%s" % (BUCKET, ref), timeout=180))
+                made.append(src)
+            out = os.path.join(S.DATA, "car-%s-%d.jpg" % (tag, i))
+            note = to_jpeg(ff, src, out)
+            made.append(out)
+            if note:
+                log("autopost: %s picture %d (%s) %s for Instagram" % (it.get("title"), i + 1, name, note))
+            obj, link = stash(out, "image/jpeg", "jpg")
+            stashed.append(obj)
+            links.append(link)
+        cap = it.get("caption", "")
+        last = None
+        for tok in [t for t in (m.get("page_token"), m.get("user_token")) if t]:
+            try:
+                if len(links) == 1:
+                    cid = g("POST", "/%s/media" % m["ig_id"], {"image_url": links[0], "caption": cap}, tok)["id"]
+                else:
+                    kids = [g("POST", "/%s/media" % m["ig_id"], {"image_url": u, "is_carousel_item": "true"}, tok)["id"]
+                            for u in links]
+                    cid = g("POST", "/%s/media" % m["ig_id"],
+                            {"media_type": "CAROUSEL", "children": ",".join(kids), "caption": cap}, tok)["id"]
+                ready(cid, tok)
+                return cid
+            except GraphError as e:
+                last = e
+        raise last or GraphError("No Instagram token")
+    finally:
+        for obj in stashed:
+            unstash(obj)
+        for p in made:
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+
+def run_carousel(m, iid, it, versions, job, now, put, log):
+    if "carousel" not in it.get("platforms", []) or not m.get("ig_id"):
+        return
+    at = it.get("postAt") or 0
+    if it.get("status") != "scheduled" or not (now + 2 * 60 * 1000 < at < now + WINDOW_MS):
+        return
+    v = picture_version(iid, it, versions)
+    files = carousel_files(v or {})
+    if not files:
+        return
+    s = carousel_sig(it, v, files)
+    job = job or {"item": iid}
+    c = job.get("carousel") or {}
+    if c.get("sig") == s and (c.get("state") in ("uploaded", "posted") or
+                              (c.get("state") == "failed" and c.get("tries", 0) >= MAX_TRIES)):
+        return
+    tries = c.get("tries", 0) + 1 if c.get("sig") == s and c.get("state") == "failed" else 1
+    try:
+        cid = carousel_upload(m, it, files, log)
+        job["carousel"] = {"state": "uploaded", "container": cid, "sig": s, "count": min(len(files), CAROUSEL_MAX), "at": now}
+        log("autopost: Instagram carousel ready for %s (%d picture%s)" % (it.get("title"), min(len(files), CAROUSEL_MAX),
+                                                                        "" if len(files) == 1 else "s"))
+    except Exception as e:
+        job["carousel"] = {"state": "failed", "error": str(e)[:300], "sig": s, "tries": tries, "at": now}
+        log("autopost: Instagram carousel failed for %s: %s" % (it.get("title"), e))
+    put("postjobs", iid, job)
+
+
 def run(api, docs, put, log, items, versions):
     try:
         rows = api("GET", "/rest/v1/social_meta?id=eq.1&select=page_id,ig_id,page_token,user_token") or []
@@ -338,6 +484,10 @@ def run(api, docs, put, log, items, versions):
     now = int(time.time() * 1000)
     for iid, it in items.items():
         if picture_post(iid, it, versions):
+            try:
+                run_carousel(m, iid, it, versions, jobs.get(iid), now, put, log)   # pictures: IG carousel, if ticked
+            except Exception as e:
+                log("autopost: carousel of %s: %s" % (it.get("title"), e))
             continue
         job = jobs.get(iid)
         plats = [p for p in it.get("platforms", []) if p in AUTO]

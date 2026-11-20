@@ -1193,8 +1193,10 @@ function renderPublish(){
       const tip=s==="failed"||err?err:s==="inbox"?"In the account's TikTok drafts: open the TikTok notification, paste the caption and post":s==="sent"?"Sent, TikTok is processing it":"Goes to this account's TikTok drafts at the time; you add the caption and post it in TikTok";
       return '<span class="apl '+(s==="inbox"?"uploaded":s||"auto")+'" title="'+esc(tip)+'">'+esc(nm)+' · '+lab+'</span>';
     }
-    if(!autoOn||!AUTO_P.includes(p)||pics) return '<span class="apl man" title="'+(pics?"Pictures are posted by hand":"Post this one yourself")+'">'+esc(nm)+' · You</span>';
-    const j=(p==="reel"?job.ig:job.fb)||{}, st=j.state;
+    // Pictures ticked for IG Carousel go up by themselves; anywhere else pictures are posted by hand.
+    const car=p==="carousel"&&pics&&autoOn;
+    if(!car&&(!autoOn||!AUTO_P.includes(p)||pics)) return '<span class="apl man" title="'+(pics?"Pictures go up by themselves only as an IG Carousel; post this one yourself":p==="carousel"?"IG Carousel posts pictures; this one is a video":"Post this one yourself")+'">'+esc(nm)+' · You</span>';
+    const j=(p==="reel"?job.ig:p==="carousel"?job.carousel:job.fb)||{}, st=j.state;
     const lab=st==="posted"?"Posted ✓":st==="uploaded"||st==="scheduled"?"Ready ✓":st==="failed"?"Failed":"Auto";
     return '<span class="apl '+(st||"auto")+'" title="'+esc(st==="failed"?(j.error||""):st==="uploaded"||st==="scheduled"?"Uploaded, goes out at the time":"Uploads up to a day before")+'">'+esc(nm)+' · '+lab+'</span>';
   }).join("")+'</div>'+(autoOn&&job.error==="nofile"?'<p class="waitnote pubnote">Final video not found on the NAS.</p>':"");
