@@ -573,6 +573,45 @@ async function postDue() {
   return { due: due.length, sent, out };
 }
 
+/* gearizo.com products for the IG Story CTA. The store's public catalog is read here (the browser can't,
+   cross-site), and each product's Shopee link, pasted once in the app, is kept in docs settings/shopee_links. */
+const SHOP = "https://gearizo.com";
+let shopCache: { at: number; list: any[] } | null = null;
+async function shopCatalog() {
+  if (shopCache && Date.now() - shopCache.at < 15 * 60000) return shopCache.list;
+  const list: any[] = [];
+  for (let page = 1; page <= 8; page++) {
+    const r = await fetch(`${SHOP}/products.json?limit=250&page=${page}`, { headers: { accept: "application/json" } });
+    if (!r.ok) { if (list.length) break; throw new Error("gearizo.com answered " + r.status); }
+    const ps = (await r.json())?.products || [];
+    for (const p of ps) if (p?.handle) list.push({ handle: String(p.handle), title: String(p.title || p.handle) });
+    if (ps.length < 250) break;
+  }
+  list.sort((a, b) => a.title.localeCompare(b.title));
+  shopCache = { at: Date.now(), list };
+  return list;
+}
+async function shopLinks(): Promise<Record<string, string>> {
+  const { data } = await sb.from("docs").select("data").eq("collection", "settings").eq("id", "shopee_links").maybeSingle();
+  return (data?.data as Record<string, string>) || {};
+}
+async function shopProducts() {
+  const links = await shopLinks();
+  try {
+    const list = await shopCatalog();
+    return { products: list.map((p) => ({ ...p, url: SHOP + "/products/" + p.handle, shopee: links[p.handle] || "" })) };
+  } catch (e) { return { products: [], error: errText(e) }; }
+}
+async function shopLink(body: any) {
+  const h = String(body.handle || "").trim(), u = String(body.shopee || "").trim();
+  if (!/^[a-z0-9][a-z0-9-]{0,200}$/i.test(h)) return { error: "Unknown product." };
+  if (u && !/^https:\/\/(\S+\.)?(shopee\.com\.my|shopee\.sg|shp\.ee)\/\S*$/i.test(u)) return { error: "That isn't a Shopee link." };
+  const links = await shopLinks();
+  if (u) links[h] = u.slice(0, 500); else delete links[h];
+  const { error } = await sb.from("docs").upsert({ collection: "settings", id: "shopee_links", data: links });
+  return error ? { error: error.message } : { ok: true };
+}
+
 /* ---------- 2. Google Calendar → busy times (only start and end are kept) ---------- */
 function busyFromIcs(text: string, fromMs: number, toMs: number, tzOffsetMinutes = 480): number[][] {
   const comp = new ICAL.Component(ICAL.parse(text));
@@ -706,6 +745,14 @@ Deno.serve(async (req) => {
     if (!(me.owner || ["marketing", "ecomm"].includes(me.role))) return json({ error: "Only marketing or the studio owner can change this." }, 403);
     if (body.action === "tt_start") return json(await ttStart(body, me.id));
     if (body.action === "tt_disconnect") return json(await ttDisconnect(String(body.slot || "")));
+    return json({ error: "unknown action" }, 400);
+  }
+  if (String(body.action || "").startsWith("shop_")) {
+    const me = await caller(req);
+    if (!me) return json({ error: "sign in first" }, 401);
+    if (body.action === "shop_products") return json(await shopProducts());
+    if (!(me.owner || ["marketing", "ecomm", "content"].includes(me.role))) return json({ error: "Only the team can change this." }, 403);
+    if (body.action === "shop_link") return json(await shopLink(body));
     return json({ error: "unknown action" }, 400);
   }
   if (body.action === "caption") {

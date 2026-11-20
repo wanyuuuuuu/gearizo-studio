@@ -173,6 +173,11 @@
       location.href = r.url;
     },
   };
+  /* gearizo.com products (and each one's Shopee link) for the IG Story CTA */
+  window.gzShop = {
+    products() { return window.gzMeta.call("shop_products"); },
+    link(handle, shopee) { return window.gzMeta.call("shop_link", { handle, shopee }); },
+  };
   /* Caption writing. The Anthropic key lives on the server; this only asks. */
   window.gzAI = {
     async caption(input) {

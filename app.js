@@ -105,6 +105,7 @@ function normalize(id,d){
     postAt:Number(d.postAt)||0, scheduledBy:String(d.scheduledBy||""), scheduledAt:Number(d.scheduledAt)||0, remindedAt:Number(d.remindedAt)||0,
     postUrl:/^https?:\/\//i.test(String(d.postUrl||""))?String(d.postUrl).slice(0,500):"",
     storyLink:/^https?:\/\/\S+$/i.test(String(d.storyLink||""))?String(d.storyLink).slice(0,500):"", storyAt:Number(d.storyAt)||0, storyBy:String(d.storyBy||""),
+    storyProduct:/^[a-z0-9][a-z0-9-]{0,200}$/i.test(String(d.storyProduct||""))?String(d.storyProduct):"", storyFrom:["web","shopee","other"].includes(d.storyFrom)?d.storyFrom:"",
     createdBy:String(d.createdBy||""), created:Number(d.created)||0,
     code:/^GZ\d{3,5}$/.test(String(d.code||""))?String(d.code):""};
 }
@@ -112,7 +113,7 @@ function normalize(id,d){
 const codeNum=c=>{ const m=/^GZ(\d+)$/.exec(c||""); return m?Number(m[1]):0 };
 function nextCode(){ let max=0; items.forEach(i=>{ max=Math.max(max,codeNum(i.code)) }); return "GZ"+String(max+1).padStart(3,"0") }
 const fileSafe=t=>String(t||"").replace(/[\/\\:*?"<>|]+/g,"-").replace(/\s+/g," ").trim().slice(0,60);
-const STAMP_KEYS=["approvedBy","approvedAt","postedAt","postedBy","submittedBy","submittedAt","submittedV","changesBy","changesAt","postAt","scheduledBy","scheduledAt","remindedAt","postUrl","storyLink","storyAt","storyBy"];
+const STAMP_KEYS=["approvedBy","approvedAt","postedAt","postedBy","submittedBy","submittedAt","submittedV","changesBy","changesAt","postAt","scheduledBy","scheduledAt","remindedAt","postUrl","storyLink","storyAt","storyBy","storyProduct","storyFrom"];
 /* Who moved an item into a status, and when. Feeds the notifications. */
 function stamp(st,id){
   const t=Date.now(), me=myId||"";
@@ -1216,11 +1217,13 @@ function renderPublish(){
         ?"Reshared "+esc(fmtTime(it.storyAt))+"."
         :feed?"After the post goes out, open it on your phone: ✈︎ Share → Add to story → Sticker → Link → paste the link → Your story."
         :"Tick IG Reels or IG Carousel (Post) so there’s a post to reshare.")+'</span></div>'+
-      '<div class="pubdone sthelp-l"><input type="url" id="storyLink" value="'+esc(it.storyLink||"")+'" placeholder="CTA link, e.g. the Shopee product page" aria-label="Link for the Story’s link sticker"'+(can?"":" disabled")+'></div>'+
+      stProductHtml(it,can)+
+      '<div class="pubdone sthelp-l"><input type="url" id="storyLink" value="'+esc(it.storyLink||"")+'" placeholder="CTA link (or pick the product above)" aria-label="Link for the Story’s link sticker"'+(can?"":" disabled")+'></div>'+
       '<div class="tthelp-b"><button class="btn sm" type="button" data-stcopy>Copy link</button>'+
       (perm?'<a class="btn sm" href="'+esc(perm)+'" target="_blank" rel="noopener">Open post ↗</a>':'<span class="hint">The post’s link shows here once it’s out</span>')+
       (can&&feed?(it.storyAt?'<button class="btn ghost sm" type="button" data-stdone="0">Not shared yet</button>':'<button class="btn go sm" type="button" data-stdone="1">Story shared ✓</button>'):"")+'</div></div>';
   }
+  if(it.platforms.includes("story")&&can) stAutofill(it);
   html+='<div class="pubacts">'+(latest&&latest.link?'<button class="btn sm" type="button" data-copy="'+esc(latest.link)+'">Copy v'+latest.n+' path</button>':"")+
     (ig||!tt?'<a class="btn sm" href="https://business.facebook.com/" target="_blank" rel="noopener">Meta ↗</a>':"")+(tt?'<a class="btn sm" href="https://www.tiktok.com/tiktokstudio" target="_blank" rel="noopener">TikTok ↗</a>':"")+'</div>';
   setHTML(box,html);
@@ -1264,6 +1267,85 @@ $("pubInfo").addEventListener("click",async e=>{
   }
   dlFile("/_blob/"+cv.id,f?f.name:(cv.name||"cover"));
 });
+/* IG Story CTA from the related product: gearizo.com (Shopify catalog, read by the server) or its Shopee page.
+   Shopee has no public catalog, so each product's Shopee link is pasted once and kept for the whole team. */
+let shop={list:null,loading:false,error:""};
+const SHOP_FROM=[{id:"web",s:"gearizo.com"},{id:"shopee",s:"Shopee"}];
+async function loadShop(force){
+  if(!window.gzShop||mode!=="db"||shop.loading||(shop.list&&!force)) return;
+  shop.loading=true;
+  try{ const r=await window.gzShop.products(); shop.list=r.products||[]; shop.error=r.error||"" }catch(e){ shop.error=e.message; shop.list=shop.list||[] }
+  shop.loading=false; if($("dlg").open&&editingId) renderPublish();
+}
+const shopBy=h=>(shop.list||[]).find(p=>p.handle===h);
+const STOP=new Set(["michelin","gearizo","the","and","for","with","of","a","car","set","new","video","reel","post","ep","part"]);
+const toks=t=>String(t||"").toLowerCase().replace(/&/g," ").split(/[^a-z0-9]+/).filter(w=>w.length>1&&!STOP.has(w));
+// The catalog product that best matches the item's product or title; none if nothing clearly fits.
+function shopMatch(it){
+  const words=new Set([...toks(it.product),...toks(it.title)]); if(!words.size) return null;
+  let best=null, top=0, tie=false;
+  for(const p of shop.list||[]){
+    let sc=0; new Set(toks(p.title)).forEach(w=>{ if(words.has(w)) sc+=/\d/.test(w)?3:w.length>3?2:1 });
+    if(sc>top){ top=sc; best=p; tie=false } else if(sc===top&&sc>0) tie=true;
+  }
+  return top>=3&&!tie?best:null;
+}
+function shopUrl(p,from,it){
+  if(!p) return "";
+  if(from==="shopee") return p.shopee||"";
+  return p.url+"?utm_source=instagram&utm_medium=story&utm_campaign="+encodeURIComponent((it.code||"story").toLowerCase());
+}
+function lastFrom(){ try{ const v=localStorage.getItem("gz.storyFrom"); return v==="shopee"?"shopee":"web" }catch(e){ return "web" } }
+// A Story with no CTA yet gets the matched product's link once; after that only what someone picks changes it.
+const stTried=new Set();
+function stAutofill(it){
+  if(!shop.list){ loadShop(); return }
+  if(it.storyLink||it.storyProduct||it.storyFrom||stTried.has(it.id)) return;
+  stTried.add(it.id);
+  const p=shopMatch(it); if(!p) return;
+  const from=lastFrom();
+  setTimeout(()=>{ const cur=items.get(it.id); if(!cur||cur.storyLink||cur.storyProduct) return;
+    persist(it.id,{...cur,storyProduct:p.handle,storyFrom:from,storyLink:shopUrl(p,from,cur)}); renderPublish() },0);
+}
+function stProductHtml(it,can){
+  if(!window.gzShop||mode!=="db") return "";
+  if(!shop.list) return '<div class="sthelp-l stprod"><span class="hint">'+(shop.loading?"Loading gearizo.com products…":"")+'</span></div>';
+  const p=shopBy(it.storyProduct), from=it.storyFrom;
+  let h='<div class="sthelp-l stprod"><select id="storyProd" aria-label="Related product"'+(can?"":" disabled")+'><option value="">'+(shop.list.length?"Related product…":"No products found on gearizo.com")+'</option>'+
+    shop.list.map(x=>'<option value="'+esc(x.handle)+'"'+(x.handle===it.storyProduct?" selected":"")+'>'+esc(x.title)+'</option>').join("")+'</select>'+
+    '<div class="toggles stfrom" role="group" aria-label="Link to">'+SHOP_FROM.map(f=>'<button type="button" class="btn sm'+(from===f.id?" on":"")+'" data-stfrom="'+f.id+'" aria-pressed="'+(from===f.id)+'"'+(can&&p?"":" disabled")+'>'+f.s+'</button>').join("")+'</div></div>';
+  if(p&&from==="shopee"&&!p.shopee&&can)
+    h+='<div class="pubdone sthelp-l"><input type="url" id="shopeeLink" placeholder="Paste this product’s Shopee link once, it’s kept for next time" aria-label="Shopee link for '+esc(p.title)+'"><button class="btn sm" type="button" data-stshopee>Save</button></div>';
+  if(shop.error) h+='<p class="hint sthelp-l">gearizo.com: '+esc(shop.error)+'</p>';
+  return h;
+}
+function stSet(patch){
+  const prev=editingId&&items.get(editingId); if(!prev) return;
+  persist(editingId,{...prev,...patch}); renderPublish();
+}
+$("pubInfo").addEventListener("change",e=>{
+  const s=e.target.closest("#storyProd"); if(!s||!editingId) return;
+  if(readOnly||!isMk()) return;
+  const it=items.get(editingId); if(!it) return;
+  const p=shopBy(s.value), from=it.storyFrom==="shopee"||it.storyFrom==="web"?it.storyFrom:lastFrom();
+  stSet(p?{storyProduct:p.handle,storyFrom:from,storyLink:shopUrl(p,from,it)}:{storyProduct:"",storyFrom:"",storyLink:""});
+});
+$("pubInfo").addEventListener("click",async e=>{
+  const f=e.target.closest("[data-stfrom]");
+  if(f&&editingId){
+    if(readOnly||!isMk()) return;
+    const it=items.get(editingId), p=it&&shopBy(it.storyProduct); if(!p) return;
+    const from=f.dataset.stfrom; try{ localStorage.setItem("gz.storyFrom",from) }catch(err){}
+    stSet({storyFrom:from,storyLink:shopUrl(p,from,it)}); return;
+  }
+  const sv=e.target.closest("[data-stshopee]"); if(!sv||!editingId) return;
+  const it=items.get(editingId), p=it&&shopBy(it.storyProduct); if(!p) return;
+  const u=(($("shopeeLink")||{}).value||"").trim();
+  if(!/^https:\/\/(\S+\.)?(shopee\.com\.my|shopee\.sg|shp\.ee)\/\S*$/i.test(u)){ toast("Paste a Shopee link (https://shopee.com.my/…)."); return }
+  sv.disabled=true;
+  try{ await window.gzShop.link(p.handle,u); p.shopee=u; stSet({storyFrom:"shopee",storyLink:u}); toast("Shopee link saved for "+p.title+".") }
+  catch(err){ sv.disabled=false; toast(err.message||"Couldn’t save the Shopee link.") }
+});
 /* IG Story: the CTA link to paste into the link sticker, and "shared" once it's on the Story */
 $("pubInfo").addEventListener("click",e=>{
   if(e.target.closest("[data-stcopy]")){ const v=(($("storyLink")||{}).value||"").trim(); if(!v){ toast("Add the CTA link first."); return } copyText(v); return }
@@ -1278,7 +1360,7 @@ $("pubInfo").addEventListener("change",e=>{
   if(readOnly||!isMk()) return;
   const v=l.value.trim(); if(v&&!/^https?:\/\/\S+$/i.test(v)){ toast("The link should start with https://"); return }
   const prev=items.get(editingId); if(!prev||prev.storyLink===v) return;
-  persist(editingId,{...prev,storyLink:v}); toast(v?"CTA link saved.":"CTA link removed.");
+  persist(editingId,{...prev,storyLink:v,storyFrom:v?"other":""}); toast(v?"CTA link saved.":"CTA link removed."); renderPublish();
 });
 $("pubInfo").addEventListener("change",e=>{
   const c=e.target.closest("[data-plat]"); if(!c||!editingId) return;
