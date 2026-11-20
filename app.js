@@ -104,6 +104,7 @@ function normalize(id,d){
     changesBy:String(d.changesBy||""), changesAt:Number(d.changesAt)||0,
     postAt:Number(d.postAt)||0, scheduledBy:String(d.scheduledBy||""), scheduledAt:Number(d.scheduledAt)||0, remindedAt:Number(d.remindedAt)||0,
     postUrl:/^https?:\/\//i.test(String(d.postUrl||""))?String(d.postUrl).slice(0,500):"",
+    storyLink:/^https?:\/\/\S+$/i.test(String(d.storyLink||""))?String(d.storyLink).slice(0,500):"", storyAt:Number(d.storyAt)||0, storyBy:String(d.storyBy||""),
     createdBy:String(d.createdBy||""), created:Number(d.created)||0,
     code:/^GZ\d{3,5}$/.test(String(d.code||""))?String(d.code):""};
 }
@@ -111,7 +112,7 @@ function normalize(id,d){
 const codeNum=c=>{ const m=/^GZ(\d+)$/.exec(c||""); return m?Number(m[1]):0 };
 function nextCode(){ let max=0; items.forEach(i=>{ max=Math.max(max,codeNum(i.code)) }); return "GZ"+String(max+1).padStart(3,"0") }
 const fileSafe=t=>String(t||"").replace(/[\/\\:*?"<>|]+/g,"-").replace(/\s+/g," ").trim().slice(0,60);
-const STAMP_KEYS=["approvedBy","approvedAt","postedAt","postedBy","submittedBy","submittedAt","submittedV","changesBy","changesAt","postAt","scheduledBy","scheduledAt","remindedAt","postUrl"];
+const STAMP_KEYS=["approvedBy","approvedAt","postedAt","postedBy","submittedBy","submittedAt","submittedV","changesBy","changesAt","postAt","scheduledBy","scheduledAt","remindedAt","postUrl","storyLink","storyAt","storyBy"];
 /* Who moved an item into a status, and when. Feeds the notifications. */
 function stamp(st,id){
   const t=Date.now(), me=myId||"";
@@ -1193,6 +1194,8 @@ function renderPublish(){
       const tip=s==="failed"||err?err:s==="inbox"?"In the account's TikTok drafts: open the TikTok notification, paste the caption and post":s==="sent"?"Sent, TikTok is processing it":"Goes to this account's TikTok drafts at the time; you add the caption and post it in TikTok";
       return '<span class="apl '+(s==="inbox"?"uploaded":s||"auto")+'" title="'+esc(tip)+'">'+esc(nm)+' · '+lab+'</span>';
     }
+    // IG Story: Instagram's API can't add a link sticker, so the post is reshared to the Story by hand.
+    if(p==="story") return '<span class="apl '+(it.storyAt?"posted":"man")+'" title="'+(it.storyAt?"Reshared to the Story":"After the post goes out, reshare it to the Story and add the link sticker")+'">'+esc(nm)+' · '+(it.storyAt?"Shared ✓":"Reshare")+'</span>';
     // Pictures ticked for IG Carousel go up by themselves; anywhere else pictures are posted by hand.
     const car=p==="carousel"&&pics&&autoOn;
     if(!car&&(!autoOn||!AUTO_P.includes(p)||pics)) return '<span class="apl man" title="'+(pics?"Pictures go up by themselves only as an IG Carousel; post this one yourself":p==="carousel"?"IG Carousel posts pictures; this one is a video":"Post this one yourself")+'">'+esc(nm)+' · You</span>';
@@ -1205,6 +1208,18 @@ function renderPublish(){
     if(cv) ttCoverPrep(it);            // fetched ahead, so the phone's share sheet can open on the tap itself
     html+='<div class="tthelp"><div><b>For TikTok</b><span class="hint">The video lands in each account’s TikTok drafts at the time. Open it there, check the caption, set the cover and post.</span></div>'+
       '<div class="tthelp-b"><button class="btn sm" type="button" data-ttcap>Copy caption</button>'+(cv?'<button class="btn sm" type="button" data-ttcover>Save cover to phone</button>':'<span class="hint">No cover photo yet</span>')+'</div></div>';
+  }
+  if(it.platforms.includes("story")){
+    const perm=job.ig&&job.ig.permalink||job.carousel&&job.carousel.permalink||it.postUrl||"";
+    const feed=it.platforms.some(p=>p==="reel"||p==="carousel");
+    html+='<div class="tthelp sthelp"><div><b>For IG Story</b><span class="hint">'+(it.storyAt
+        ?"Reshared "+esc(fmtTime(it.storyAt))+"."
+        :feed?"After the post goes out, open it on your phone: ✈︎ Share → Add to story → Sticker → Link → paste the link → Your story."
+        :"Tick IG Reels or IG Carousel (Post) so there’s a post to reshare.")+'</span></div>'+
+      '<div class="pubdone sthelp-l"><input type="url" id="storyLink" value="'+esc(it.storyLink||"")+'" placeholder="CTA link, e.g. the Shopee product page" aria-label="Link for the Story’s link sticker"'+(can?"":" disabled")+'></div>'+
+      '<div class="tthelp-b"><button class="btn sm" type="button" data-stcopy>Copy link</button>'+
+      (perm?'<a class="btn sm" href="'+esc(perm)+'" target="_blank" rel="noopener">Open post ↗</a>':'<span class="hint">The post’s link shows here once it’s out</span>')+
+      (can&&feed?(it.storyAt?'<button class="btn ghost sm" type="button" data-stdone="0">Not shared yet</button>':'<button class="btn go sm" type="button" data-stdone="1">Story shared ✓</button>'):"")+'</div></div>';
   }
   html+='<div class="pubacts">'+(latest&&latest.link?'<button class="btn sm" type="button" data-copy="'+esc(latest.link)+'">Copy v'+latest.n+' path</button>':"")+
     (ig||!tt?'<a class="btn sm" href="https://business.facebook.com/" target="_blank" rel="noopener">Meta ↗</a>':"")+(tt?'<a class="btn sm" href="https://www.tiktok.com/tiktokstudio" target="_blank" rel="noopener">TikTok ↗</a>':"")+'</div>';
@@ -1248,6 +1263,22 @@ $("pubInfo").addEventListener("click",async e=>{
     try{ await navigator.share({files:[f]}); return }catch(err){ if(err&&err.name==="AbortError") return }
   }
   dlFile("/_blob/"+cv.id,f?f.name:(cv.name||"cover"));
+});
+/* IG Story: the CTA link to paste into the link sticker, and "shared" once it's on the Story */
+$("pubInfo").addEventListener("click",e=>{
+  if(e.target.closest("[data-stcopy]")){ const v=(($("storyLink")||{}).value||"").trim(); if(!v){ toast("Add the CTA link first."); return } copyText(v); return }
+  const b=e.target.closest("[data-stdone]"); if(!b||!editingId) return;
+  if(readOnly||!isMk()){ toast("Marketing posts the Story."); return }
+  const prev=items.get(editingId); if(!prev) return;
+  const on=b.dataset.stdone==="1";
+  persist(editingId,{...prev,storyAt:on?Date.now():0,storyBy:on?(myId||""):""}); toast(on?"Story marked as shared.":"Story marked as not shared."); renderPublish();
+});
+$("pubInfo").addEventListener("change",e=>{
+  const l=e.target.closest("#storyLink"); if(!l||!editingId) return;
+  if(readOnly||!isMk()) return;
+  const v=l.value.trim(); if(v&&!/^https?:\/\/\S+$/i.test(v)){ toast("The link should start with https://"); return }
+  const prev=items.get(editingId); if(!prev||prev.storyLink===v) return;
+  persist(editingId,{...prev,storyLink:v}); toast(v?"CTA link saved.":"CTA link removed.");
 });
 $("pubInfo").addEventListener("change",e=>{
   const c=e.target.closest("[data-plat]"); if(!c||!editingId) return;

@@ -544,7 +544,8 @@ async function postDue() {
     if (tts.length && jr) await ttFollow(r.id, job, tts);
     if (job.ig?.state === "uploaded" || job.carousel?.state === "uploaded") continue;   // Instagram still processing: try again next minute
     const done = (p: string) => (p === "reel" && job.ig?.state === "posted") || (p === "carousel" && job.carousel?.state === "posted") ||
-      (p === "fb" && job.fb?.state === "posted") || (!!TT_SLOTS[p] && job[p]?.state === "posted");
+      (p === "fb" && job.fb?.state === "posted") || (!!TT_SLOTS[p] && job[p]?.state === "posted") ||
+      (p === "story" && Number(d.storyAt) > 0);   // the Story is reshared by hand and marked in the app
     const left = pl.filter((p) => !done(p));
     if (pl.length && !left.length) {
       const link = job.ig?.permalink || job.carousel?.permalink || job.fb?.permalink || "";
@@ -563,7 +564,8 @@ async function postDue() {
     else if (linked && !fails.length && left.includes("carousel") && !job.carousel) fails.push("the pictures weren't sent to Instagram in time (is the Mac on?)");
     const auto = pl.filter(done).map((p) => PLAT[p] || p);
     const title = (d.code ? d.code + " " : "") + (d.title || "a video");
-    const where = (p: string) => (PLAT[p] || p) + (TT_SLOTS[p] && ["sent", "inbox"].includes(job[p]?.state) ? " (it's in your TikTok drafts)" : "");
+    const where = (p: string) => (PLAT[p] || p) + (TT_SLOTS[p] && ["sent", "inbox"].includes(job[p]?.state) ? " (it's in your TikTok drafts)" : "") +
+      (p === "story" && pl.some((x) => x === "reel" || x === "carousel") ? " (reshare the post and add the link sticker)" : "");
     const body = `Time to post ${title} on ${left.map(where).join(", ")}` + (auto.length ? ` (${auto.join(", ")} went out automatically)` : "") +
       (fails.length ? `. Auto-post didn't work: ${fails.join("; ")}` : ". The caption is ready in the app.");
     sent += (await send({ role: d.team === "ecomm" ? "ecomm" : "marketing", body, url: "./#review/" + r.id, tag: "post-" + r.id }, null, roleOf)).sent;
