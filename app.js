@@ -146,8 +146,9 @@ function chip(it,showDate,extra){
   if(showDate&&it.date) meta.push(shortDate(it.date));
   if(view!=="pipeline") meta.push(stLabel(it)); else if(it.status==="scheduled"&&it.postAt) meta.push(hm(it.postAt));
   if(!showDate&&view==="calendar"){ const vs0=vFor(it.id); const open0=fbFor(it.id).filter(f=>!f.done).length;
-    return '<button class="chip s-'+it.status+(it.status==="posted"?" posted":"")+(extra||"")+'" draggable="'+(!readOnly)+'" data-id="'+esc(it.id)+'" style="--c:'+s.c+'" title="'+esc(s.name+(it.code?" · "+it.code:""))+'">'+
-      '<span class="t">'+esc(it.title)+'</span><span class="m">'+esc((isCr()&&it.team==="ecomm"?"E-com · ":"")+(it.type==="design"?"Design · ":"")+stLabel(it))+'</span>'+(open0?'<span class="flag">'+open0+' to fix</span>':"")+'</button>'; }
+    const dueOnly=!it.date&&!!it.due;   // no post date yet: shown on its first-cut day
+    return '<button class="chip s-'+it.status+(it.status==="posted"?" posted":"")+(dueOnly?" dueonly":"")+(extra||"")+'" draggable="'+(!readOnly)+'" data-id="'+esc(it.id)+'" style="--c:'+s.c+'" title="'+esc(s.name+(it.code?" · "+it.code:"")+(dueOnly?" · first cut due, no post date yet":""))+'">'+
+      '<span class="t">'+esc(it.title)+'</span><span class="m">'+esc((dueOnly?"First cut due · ":"")+(isCr()&&it.team==="ecomm"?"E-com · ":"")+(it.type==="design"?"Design · ":"")+stLabel(it))+'</span>'+(open0?'<span class="flag">'+open0+' to fix</span>':"")+'</button>'; }
   const vs=vFor(it.id); if(vs.length) meta.push("v"+vs[0].n);
   if(it.due&&["idea","script","shoot","edit","changes"].includes(it.status)) meta.push("Due "+shortDate(it.due));
 
@@ -220,7 +221,7 @@ function renderCalendar(){
   const y=cursor.getFullYear(), m=cursor.getMonth();
   const offset=(new Date(y,m,1).getDay()+6)%7, dim=new Date(y,m+1,0).getDate(), weeks=Math.ceil((offset+dim)/7);
   const byDate={};
-  sorted([...items.values()].filter(visible)).forEach(it=>{ if(it.date){(byDate[it.date]=byDate[it.date]||[]).push(it)} });
+  sorted([...items.values()].filter(visible)).forEach(it=>{ const d=it.date||(it.status!=="posted"&&it.due)||""; if(d){(byDate[d]=byDate[d]||[]).push(it)} });
   let html;
   if(narrow.matches){
     html=LEGEND+'<div class="agenda">'; let any=false;
