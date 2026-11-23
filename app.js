@@ -789,14 +789,15 @@ const NAS_MAC="/Volumes/Marketing Content/", NAS_SMB="smb://TAYARLO-DXP2800.loca
 const NAS_CHECKING="Content Video/Checking", NAS_APPROVE="Content Video/approve";
 const smbUrl=rel=>NAS_SMB+rel.split("/").map(encodeURIComponent).join("/");
 function nasBoxHtml(it){
-  const mk=isMk(), rel=mk?NAS_APPROVE:NAS_CHECKING;
+  const mk=isMk(), rel=mk?NAS_APPROVE:NAS_CHECKING, isD=it.type==="design";
   const nextN=((vFor(it.id)[0]||{n:0}).n)+1, base=(it.code?it.code+" ":"")+fileSafe(it.title), vname=base+" v"+nextN, cname=base+" cover";
-  const hint=mk?"When you approve a video, its file moves from Checking to this folder within about 15 minutes."
-    :"Export the finished video and its cover picture here with these names. Within about 15 minutes the video is added here and sent for review, and the picture becomes its cover. Once approved, both move to approve.";
+  const hint=mk?"When you approve, the "+(isD?"picture folder":"file")+" moves from Checking to this folder within about 15 minutes."
+    :isD?"Make a folder with this name in Checking and put the pictures in it (no video). Within about 5 minutes they are added here as v"+nextN+" and sent for review. To send changes, rename the folder to the next version, or replace the pictures in it. Once approved, the folder moves to approve."
+    :"Export the finished video and its cover picture here with these names. Within about 15 minutes the video is added here and sent for review, and the picture becomes its cover. For a picture post, put the pictures in a folder with the Pictures name instead. Once approved, they move to approve.";
+  const row=(label,name,ext)=>'<div class="fnrow"><span>'+label+'</span><code>'+esc(name)+'<i>'+ext+'</i></code><button class="btn sm" type="button" data-copy="'+esc(name)+'">Copy</button></div>';
   return '<div class="nas"><div><b>NAS folder</b><code>Marketing Content / '+esc(rel.split("/").join(" / "))+'</code>'+
-    (mk?"":'<div class="fnames"><b>File names</b>'+
-      '<div class="fnrow"><span>Video</span><code>'+esc(vname)+'<i>.mp4</i></code><button class="btn sm" type="button" data-copy="'+esc(vname)+'">Copy</button></div>'+
-      '<div class="fnrow"><span>Cover</span><code>'+esc(cname)+'<i>.jpg</i></code><button class="btn sm" type="button" data-copy="'+esc(cname)+'">Copy</button></div></div>')+
+    (mk?"":'<div class="fnames"><b>'+(isD?"Folder name":"File names")+'</b>'+
+      (isD?row("Pictures",vname," / folder"):row("Video",vname,".mp4")+row("Cover",cname,".jpg")+row("Pictures",vname," / folder"))+'</div>')+
     '<span class="hint">'+esc(hint)+'</span></div><div class="acts"><a class="btn sm" href="'+esc(smbUrl(rel))+'" target="_blank" rel="noopener" title="Open in Finder">Finder ↗</a><button class="btn sm ghost" type="button" data-copy="'+esc(NAS_MAC+rel)+'">Copy path</button></div></div>';
 }
 function linkHtml(link){
@@ -1000,7 +1001,7 @@ function renderDesk(){
   setHTML($("vStatus"),'<div class="banner" style="--k:'+k+'"><div><b>'+esc(head)+'</b><span>'+esc(sub)+'</span></div>'+(acts?'<div class="acts">'+acts+'</div>':"")+'</div>');
 
   const isD=it.type==="design";
-  setHTML($("nasBox"),(isD?"":nasBoxHtml(it)+deskCoverHtml(it))+(it.refs.length?'<div class="refs"><b>References</b>'+attHtml(it.refs)+'</div>':""));
+  setHTML($("nasBox"),nasBoxHtml(it)+(isD?"":deskCoverHtml(it))+(it.refs.length?'<div class="refs"><b>References</b>'+attHtml(it.refs)+'</div>':""));
   setHTML($("vLatest"),latest?verCard(latest,true,it):'<p class="empty">'+(isD?"No design yet.":"No video yet.")+(can?" Add the first "+(isD?"version":"cut")+" below.":" The content team hasn’t added one.")+'</p>');
   setHTML($("vOlder"),vs.length>1?'<details class="older"><summary>Earlier versions ('+(vs.length-1)+')</summary>'+vs.slice(1).map(v=>verCard(v,false,it)).join("")+'</details>':"");
   $("vVideoRows").hidden=isD; $("vAttTxt").textContent=isD?"+ Images":"+ Files";
