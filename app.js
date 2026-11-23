@@ -1010,7 +1010,7 @@ function renderDesk(){
   const showV=can&&!mk, vOpen=vOpenFor===it.id||!latest;
   $("vOpen").hidden=!showV||vOpen; $("vForm").hidden=!showV||!vOpen;
   $("fbText").placeholder=cr?"Reply or note":"What should change?";
-  $("vAdd").textContent="Add v"+((latest?latest.n:0)+1);
+  $("vAdd").textContent=(cr&&["idea","script","shoot","edit","changes"].includes(it.status)?"Send v":"Add v")+((latest?latest.n:0)+1)+(cr&&["idea","script","shoot","edit","changes"].includes(it.status)?" for review":"");
   $("vAttach").hidden=$("fbAttach").hidden=!assets;
   $("fbHint").textContent=isD?"":"Empty time = whole video";
 
@@ -1064,8 +1064,14 @@ async function addVersion(){
   try{
     await db.collection("versions").add({item:id,n,link,asset,assetType,note,files,at:Date.now(),by:myId||""});
     $("vLink").value=""; $("vNote").value=""; $("vFile").value=""; pending.v=[]; renderPending("v");
-    vOpenFor=null; toast("v"+n+" added.");
-    const it=items.get(id); if(it&&["idea","script","shoot"].includes(it.status)) setStatusFor(id,"edit");
+    vOpenFor=null;
+    // A new version from the content team goes straight to review (like files dropped in NAS Checking),
+    // so Marketing or E-commerce can approve it without a second step.
+    const it=items.get(id);
+    if(it&&isCr()&&["idea","script","shoot","edit","changes"].includes(it.status)){
+      persist(id,{...it,status:"review",submittedBy:myId||"",submittedAt:Date.now(),submittedV:n});
+      toast("v"+n+" added and sent to "+(it.team==="ecomm"?"E-commerce":"Marketing")+" for review.");
+    }else{ toast("v"+n+" added."); if(it&&["idea","script","shoot"].includes(it.status)) setStatusFor(id,"edit") }
   }catch(e){ writeErr(e,"this version") }
   btn.disabled=false; renderDesk();
 }
@@ -2055,7 +2061,7 @@ $("desk").addEventListener("click",e=>{
     const act=a.dataset.act;
     if(["approve","changes","reopen","gopub"].includes(act)&&isCr()){ toast("Only the team that asked for it can do that."); return }
     if(act==="submit"&&isMk()){ toast("The content team sends videos for review."); return }
-    if(act==="submit"){ setStatusFor(id,"review"); toast("Sent for review. Marketing gets a notification."); }
+    if(act==="submit"){ setStatusFor(id,"review"); toast("Sent for review. "+((items.get(id)||{}).team==="ecomm"?"E-commerce":"Marketing")+" gets a notification."); }
     else if(act==="approve"){ setStatusFor(id,"approved"); toast("Approved. The file moves to the approve folder shortly."); }
     else if(act==="changes"){
       if(!fbFor(id).filter(f=>!f.done).length){ toast("Write what needs to change in Feedback first."); $("fbText").focus(); return }
