@@ -122,7 +122,7 @@
     build(d, th) {
       const c = column("gap:46px"), kick = tag(d.kicker ? pill(d.kicker, th) : null, "kicker");
       if (kick) c.appendChild(kick);
-      const b = tag(d.icon !== "none" ? badge(d.icon || "sparkle", th, 330) : null, "icon", null, "scale"); if (b) c.appendChild(b);
+      const b = tag(d.icon !== "none" ? badge(d.icon || "sparkle", th, 330, null, d.iconColor) : null, "icon", null, "scale"); if (b) c.appendChild(b);
       const t = tag(words(d.title || "Title", th, "font:800 " + titleSize(d.title) + "px/1.04 " + FONT + ";color:" + th.text + ";max-width:940px"), "title"); c.appendChild(t);
       const s = tag(d.sub ? el("div", "font:600 " + bodySize(d.sub) + "px/1.3 " + FONT + ";color:" + th.sub + ";max-width:860px", d.sub) : null, "sub"); if (s) c.appendChild(s);
       return { root: c, update(lt) {
@@ -142,7 +142,7 @@
       const card = el("div", "width:900px;box-sizing:border-box;background:" + th.card + ";border:5px solid " + th.ink + ";border-radius:48px;padding:70px 64px 76px;display:flex;flex-direction:column;align-items:center;gap:36px;box-shadow:0 30px 60px rgba(0,0,0,.08);position:relative");
       const lab = tag(d.tag ? pill(d.tag, th, th.accent, "#fff") : null, "tag");
       if (lab) { lab.style.position = "absolute"; lab.style.top = "-30px"; card.appendChild(lab); }
-      const b = tag(badge(d.icon || "sparkle", th, 260, th.soft), "icon", null, "scale"); card.appendChild(b);
+      const b = tag(badge(d.icon || "sparkle", th, 260, th.soft, d.iconColor), "icon", null, "scale"); card.appendChild(b);
       const t = tag(words(d.title || "", th, "font:800 " + titleSize(d.title, 0.72) + "px/1.08 " + FONT + ";color:" + th.text), "title"); card.appendChild(t);
       const x = tag(d.text ? el("div", "font:600 " + bodySize(d.text) + "px/1.35 " + FONT + ";color:" + th.sub, d.text) : null, "text"); if (x) card.appendChild(x);
       tag(card, "card", null, "move"); c.appendChild(card);
@@ -211,7 +211,7 @@
       const c = column("justify-content:flex-start;top:330px"); const h = head(d, th, c); r.appendChild(c);
       const sides = ["left", "right"].map((k, i) => {
         const s = d[k] || {}, card = el("div", "position:absolute;top:" + (d.heading ? 760 : 620) + "px;left:" + (i ? 560 : 60) + "px;width:460px;height:780px;box-sizing:border-box;background:" + th.card + ";border:5px solid " + th.ink + ";border-radius:44px;padding:64px 36px;display:flex;flex-direction:column;align-items:center;gap:30px;text-align:center;box-shadow:0 26px 50px rgba(0,0,0,.08)");
-        const b = badge(s.icon || "sparkle", th, 230, th.soft); card.appendChild(b);
+        const b = badge(s.icon || "sparkle", th, 230, th.soft, s.iconColor); card.appendChild(b);
         const longest = Math.max(...String(s.title || "").replace(/\*/g, "").split(/\s+/).map(weight), 1);
         const t = tag(words(s.title || "", th, "font:800 " + Math.round(Math.min(74, titleSize(s.title, 0.6), 370 / (longest * 1.05))) + "px/1.08 " + FONT + ";color:" + th.text), k + ".title"); card.appendChild(t);
         const x = tag(s.text ? el("div", "font:600 " + Math.min(40, bodySize(s.text)) + "px/1.32 " + FONT + ";color:" + th.sub, s.text) : null, k + ".text"); if (x) card.appendChild(x);
@@ -248,7 +248,7 @@
         const row = el("div", "position:absolute;left:120px;right:70px;top:" + (top0 + i * gap) + "px;display:flex;align-items:center;gap:40px");
         const n = el("div", "flex:none;width:132px;height:132px;border-radius:50%;background:" + th.ink + ";color:" + th.card + ";font:800 64px/132px " + FONT + ";text-align:center;box-shadow:0 12px 26px rgba(0,0,0,.12)", String(i + 1));
         const box = el("div", "flex:1;display:flex;align-items:center;gap:26px;background:" + th.card + ";border-radius:30px;padding:26px 30px;border:4px solid transparent;min-height:120px;box-sizing:border-box");
-        const ic = s.icon ? icon(s.icon, 92, th.ink, 6) : null; if (ic) box.appendChild(ic);
+        const ic = s.icon ? icon(s.icon, 92, s.iconColor || th.ink, 6) : null; if (ic) box.appendChild(ic);
         const tx = el("div", "font:700 " + Math.min(50, bodySize(s.text) + 4) + "px/1.25 " + FONT + ";color:" + th.text + ";text-align:left", s.text || ""); box.appendChild(tx);
         row.appendChild(n); row.appendChild(box); r.appendChild(tag(row, "steps", tx));
         return { row, n, box, ic };
@@ -309,7 +309,7 @@
       const shadow = el("div", "position:absolute;left:290px;top:1090px;width:500px;height:70px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.28),rgba(0,0,0,0))"); r.appendChild(shadow);
       let prod;
       if (d.image) { prod = el("img", "position:absolute;left:190px;top:330px;width:700px;height:760px;object-fit:contain"); prod.alt = ""; prod.setAttribute("src", ctx.url(d.image)); }
-      else { prod = el("div", "position:absolute;left:290px;top:430px;width:500px;height:560px;display:flex;align-items:center;justify-content:center"); const ic = icon("inflator", 460, th.ink, 4); prod.appendChild(ic); prod._ic = ic; }
+      else { prod = el("div", "position:absolute;left:290px;top:430px;width:500px;height:560px;display:flex;align-items:center;justify-content:center"); const ic = icon(d.icon && d.icon !== "none" ? d.icon : "inflator", 460, d.iconColor || th.ink, 4); prod.appendChild(ic); prod._ic = ic; }
       r.appendChild(tag(prod, "product", null, "scale"));
       const low = el("div", "position:absolute;left:80px;right:80px;top:1210px;display:flex;flex-direction:column;align-items:center;gap:26px;text-align:center");
       const logo = d.logo === "none" ? null : el("img", "width:380px;height:auto;display:block;margin-bottom:6px"); if (logo) { logo.alt = ""; logo.setAttribute("src", ctx.url(d.logo || "brand/gearizo-logo.png")); low.appendChild(tag(logo, "logo", null, "scale")); }

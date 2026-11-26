@@ -103,6 +103,13 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
 .adj-two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
 .adj-two>*{min-width:0}
 .adj-chips{display:flex;flex-wrap:wrap;gap:6px}
+.adj-icrow{display:flex;align-items:center;gap:6px}
+.adj-icrow select{flex:1;min-width:0}
+.adj-icol{position:relative;flex:none;width:32px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--surface);display:grid;place-items:center;cursor:pointer}
+.adj-icol input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0}
+.adj-icol b{pointer-events:none;width:16px;height:16px;border-radius:50%;background:var(--c);box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+.adj-step .adj-icol{margin:0 -2px}
+.adj-icrst{flex:none;padding:0 8px}
 .adj-tsty{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:-4px 0 4px}
 .adj-tsty button,.adj-tsty .sw{position:relative;width:32px;height:30px;border:1px solid var(--line);background:var(--surface);border-radius:8px;display:grid;place-items:center;padding:0;font:inherit;font-size:14px;font-weight:700;color:var(--ink);cursor:pointer}
 .adj-tsty button[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
@@ -427,7 +434,11 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
   function scenePanel(i) {
     const n = doc.film.scenes.length, S = doc.film.scenes[i]; if (!S) return '<p class="hint">No scenes.</p>';
     const g = S.data || {}, T = GZS.TPL[S.tpl] || {}, st0 = starts()[i] || 0;
-    const icons = (k, v) => '<select data-sk="' + k + '">' + GZS.ICONS.map((x) => opt(x, v || "sparkle", x)).join("") + "</select>";
+    // icon picker + its colour (data "<key>Color", e.g. iconColor, left.iconColor, steps.0.iconColor); empty = the look's colour
+    const ink = ((GZS.THEMES || {})[doc.film.theme || "paper"] || {}).ink || "#262A28";
+    const icol = (kc) => { const cv = getPath(g, kc) || ""; return '<label class="adj-icol" title="Icon colour"><input type="color" data-sk="' + kc + '" value="' + esc(cv || ink) + '" aria-label="Icon colour"><b style="--c:' + esc(cv || ink) + '"></b></label>' +
+      (cv && !readOnly ? '<button class="btn sm ghost adj-icrst" type="button" data-a="icreset" data-k="' + esc(kc) + '" title="Back to the look\'s colour" aria-label="Back to the look\'s colour">↺</button>' : ""); };
+    const icons = (k, v) => '<span class="adj-icrow"><select data-sk="' + k + '">' + GZS.ICONS.map((x) => opt(x, v || "sparkle", x)).join("") + "</select>" + icol(k + "Color") + "</span>";
     const txt = (k, v) => '<input type="text" data-sk="' + k + '" value="' + esc(v || "") + '">';
     // which script lines this scene speaks
     const sl = ((actx && actx.getScript && actx.getScript(itemId)) || {}).lines || [];
@@ -454,7 +465,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
       else if (kind === "mark") w += fs(label, '<select data-sk="' + k + '">' + opt("", v || "", "None") + opt("yes", v, "✓ Right") + opt("no", v, "✗ Wrong") + "</select>");
       else if (kind === "area") w += fs(label, '<textarea data-sk="' + k + '" rows="2">' + esc(v || "") + "</textarea>") + tsty(k);
       else if (kind === "lines") w += fs(label, '<textarea data-sk="' + k + '" data-lines="1" rows="4">' + esc((v || []).join("\n")) + "</textarea>") + tsty(k);
-      else if (kind === "steps") w += '<div class="adj-fs"><span>' + label + "</span>" + (v || []).map((x, j) => '<div class="adj-step"><select data-sk="steps.' + j + '.icon" aria-label="Icon"><option value="">No icon</option>' + GZS.ICONS.map((y) => opt(y, x.icon || "", y)).join("") + '</select><input type="text" data-sk="steps.' + j + '.text" value="' + esc(x.text || "") + '"><button class="btn sm ghost" type="button" data-a="stepdel" data-i="' + j + '" aria-label="Remove step">×</button></div>').join("") + (readOnly ? "" : '<div><button class="btn sm ghost" type="button" data-a="stepadd">+ Step</button></div>') + "</div>" + tsty(k);
+      else if (kind === "steps") w += '<div class="adj-fs"><span>' + label + "</span>" + (v || []).map((x, j) => '<div class="adj-step"><select data-sk="steps.' + j + '.icon" aria-label="Icon"><option value="">No icon</option>' + GZS.ICONS.map((y) => opt(y, x.icon || "", y)).join("") + '</select>' + (x.icon ? icol("steps." + j + ".iconColor") : "") + '<input type="text" data-sk="steps.' + j + '.text" value="' + esc(x.text || "") + '"><button class="btn sm ghost" type="button" data-a="stepdel" data-i="' + j + '" aria-label="Remove step">×</button></div>').join("") + (readOnly ? "" : '<div><button class="btn sm ghost" type="button" data-a="stepadd">+ Step</button></div>') + "</div>" + tsty(k);
       else if (kind === "image") {
         const stt = g.imageCut === "pending" ? "The studio Mac is removing the background (within 3 minutes)…" : g.imageCut === "failed" ? "Couldn’t remove the background: " + (g.imageCutError || "") : "";
         w += '<div class="adj-fs"><span>' + label + '</span><div class="row" style="align-items:center">' + (g.image ? '<img src="' + esc(g.image.startsWith("/_blob/") || /^https?:/.test(g.image) || g.image.startsWith("brand/") ? g.image : "") + '" alt="" style="width:72px;height:72px;object-fit:contain;background:var(--sunk);border-radius:10px">' : '<span class="hint">No photo: a drawing is used.</span>') +
@@ -690,6 +701,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
         if (part && S.style && S.style[part]) { mark(); if (a === "preset") delete S.style[part]; else delete S.style[part].color; sc = idx; panel(); draw(); changed(); }
         return;
       }
+      if (FM && a === "icreset" && !readOnly) { const idx = sc == null ? sceneAt(now()) : sc, S = doc.film.scenes[idx]; mark(); setPath(S.data = S.data || {}, b.dataset.k, ""); sc = idx; panel(); draw(); changed(); return; }
       if (FM && /^(sadd|sdup|sdel|sup|sdown|stepadd|stepdel|nophoto)$/.test(a)) { sceneAction(a === "stepdel" ? "stepdel:" + b.dataset.i : a); return; }
       if (a === "close") close();
       else if (a === "play") play();
@@ -891,6 +903,7 @@ dialog.adj::backdrop{background:rgba(0,0,0,.4)}
     if (i.dataset.sk != null) {
       if (i.dataset.lines) v = v.split("\n").map((x) => x.trim()).filter(Boolean);
       S.data = S.data || {}; setPath(S.data, i.dataset.sk, v);
+      if (i.type === "color") { const sw = i.parentNode.querySelector("b"); if (sw) sw.style.setProperty("--c", v); }
     } else if (i.dataset.sa === "dur") {
       v = Number(v); if (!(v > 0)) return;
       S.dur = Math.max(0.6, Math.min(30, v)); doc.dur = GZS.filmDur(doc.film); $a("adjScrub").max = String(doc.dur); timeline();
