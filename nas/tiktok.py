@@ -145,7 +145,7 @@ def run(api, docs, put, merge, log, items, versions):
                 job[s] = rec
                 merge("postjobs", iid, {s: rec})
 
-        path = A.final_file(iid, it, versions)
+        path = A.final_file(iid, it, versions, tiktok=True)
         if not path:
             new = [s for s in todo if ((job or {}).get(s) or {}).get("error") != "nofile"]
             for s in new:

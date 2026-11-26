@@ -148,12 +148,17 @@ def picture_post(item_id, it, versions):
         or (bool(v.get("link")) and os.path.isdir(v["link"]))
 
 
-def final_file(item_id, it, versions):
+def final_file(item_id, it, versions, tiktok=False):
+    """The approved version's video on the NAS. For TikTok, its TikTok copy (own end card) when it has one."""
     mine = [v for v in versions.values() if v.get("item") == item_id]
     if not mine:
         return None
     want = it.get("submittedV")
     v = next((x for x in mine if want and x.get("n") == want), None) or max(mine, key=lambda x: x.get("n", 0))
+    if tiktok:
+        tl = (v.get("tt") or {}).get("link") or ""
+        if tl.startswith("/Volumes/") and os.path.isfile(tl):
+            return tl
     link = v.get("link") or ""
     return link if link.startswith("/Volumes/") and os.path.isfile(link) else None
 

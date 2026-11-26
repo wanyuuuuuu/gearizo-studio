@@ -417,7 +417,8 @@ async function connect(){
       if(before) catWatch(before,m);
     },()=>{clearTimeout(timer);mode="local";setNote();toast("Couldn’t load the online plan. Showing the copy on this device.")});
     db.collection("versions").onSnapshot(snap=>{
-      raw.versions=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,item:String(v.item||""),n:Number(v.n)||1,link:String(v.link||""),asset:String(v.asset||""),assetType:String(v.assetType||""),note:String(v.note||""),files:normFiles(v.files),at:Number(v.at)||0,by:String(v.by||""),gone:Number(v.previewGone)||0}}); applyPreview();
+      raw.versions=snap.docs.filter(x=>x.exists).map(x=>{const v=x.data()||{};return {id:x.id,item:String(v.item||""),n:Number(v.n)||1,link:String(v.link||""),asset:String(v.asset||""),assetType:String(v.assetType||""),note:String(v.note||""),files:normFiles(v.files),at:Number(v.at)||0,by:String(v.by||""),gone:Number(v.previewGone)||0,
+        tt:v.tt&&typeof v.tt==="object"&&v.tt.link?{link:String(v.tt.link),name:String(v.tt.name||""),asset:/^\/_blob\/[A-Za-z0-9_-]+$/.test(String(v.tt.asset||""))?String(v.tt.asset):"",late:!!v.tt.late,at:Number(v.tt.at)||0}:null}}); applyPreview();
       render(); resolveNames();
     },()=>{});
     db.collection("feedback").onSnapshot(snap=>{
@@ -794,11 +795,11 @@ function nasBoxHtml(it){
   const nextN=((vFor(it.id)[0]||{n:0}).n)+1, base=(it.code?it.code+" ":"")+fileSafe(it.title), vname=base+" v"+nextN, cname=base+" cover";
   const hint=mk?"When you approve, the "+(isD?"picture folder":"file")+" moves from Checking to this folder within about 15 minutes."
     :isD?"Make a folder with this name in Checking and put the pictures in it (no video). Within about 5 minutes they are added here as v"+nextN+" and sent for review. To send changes, rename the folder to the next version, or replace the pictures in it. Once approved, the folder moves to approve."
-    :"Export the finished video and its cover picture here with these names. Within about 15 minutes the video is added here and sent for review, and the picture becomes its cover. For a picture post, put the pictures in a folder with the Pictures name instead. Once approved, they move to approve.";
+    :"Export the finished video and its cover picture here with these names. Within about 15 minutes the video is added here and sent for review, and the picture becomes its cover. If TikTok needs its own end card, export that copy with the TikTok name, at the same time or later: it joins the same version and is what goes to TikTok. For a picture post, put the pictures in a folder with the Pictures name instead. Once approved, they move to approve.";
   const row=(label,name,ext)=>'<div class="fnrow"><span>'+label+'</span><code>'+esc(name)+'<i>'+ext+'</i></code><button class="btn sm" type="button" data-copy="'+esc(name)+'">Copy</button></div>';
   return '<div class="nas"><div><b>NAS folder</b><code>Marketing Content / '+esc(rel.split("/").join(" / "))+'</code>'+
     (mk?"":'<div class="fnames"><b>'+(isD?"Folder name":"File names")+'</b>'+
-      (isD?row("Pictures",vname," / folder"):row("Video",vname,".mp4")+row("Cover",cname,".jpg")+row("Pictures",vname," / folder"))+'</div>')+
+      (isD?row("Pictures",vname," / folder"):row("Video",vname,".mp4")+row("TikTok",vname+" TikTok",".mp4")+row("Cover",cname,".jpg")+row("Pictures",vname," / folder"))+'</div>')+
     '<span class="hint">'+esc(hint)+'</span></div><div class="acts"><a class="btn sm" href="'+esc(smbUrl(rel))+'" target="_blank" rel="noopener" title="Open in Finder">Finder ↗</a><button class="btn sm ghost" type="button" data-copy="'+esc(NAS_MAC+rel)+'">Copy path</button></div></div>';
 }
 function linkHtml(link){
@@ -934,7 +935,10 @@ function verCard(v,latest,it){
   const media=v.asset?(v.assetType.startsWith("image/")?'<button type="button" class="img vimg" data-lb="'+esc(v.asset)+'" data-name="v'+v.n+' preview" title="View full size"><img src="'+esc(v.asset)+'" alt="Preview for v'+v.n+'"></button>':'<video src="'+esc(v.asset)+'" controls preload="metadata" playsinline></video>'):v.gone?'<div class="vgone">Preview cleared after posting · full video on the NAS</div>':"";
   const cap=latest&&v.asset&&!v.assetType.startsWith("image/")&&assets&&!readOnly&&mode==="db"
     ?'<button type="button" class="camcap" data-cap aria-label="Capture this frame into your feedback" title="Capture this frame into your feedback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>':"";
-  return '<div class="ver'+(latest?" latest":"")+'"><div class="ver-h"><b>v'+v.n+(latest?" (latest)":"")+'</b><span>'+esc(who(v.by))+', '+esc(fmtTime(v.at))+'</span></div>'+(cap?'<div class="vwrap">'+media+cap+'</div>':media)+linkHtml(v.link)+(v.note?'<p>'+fbHtml(v.note)+'</p>':"")+attHtml(v.files)+'</div>';
+  // TikTok copy: the same video with TikTok's own end card (NAS file named "… vN TikTok.mp4"); TikTok posts this one
+  const tt=v.tt?'<div class="vtt"><div class="vtt-h"><b>TikTok version</b><span>'+(v.tt.late?"Added after approval · ":"")+"Posted to TikTok instead of the video above"+'</span></div>'+
+    (v.tt.asset?'<video src="'+esc(v.tt.asset)+'" controls preload="metadata" playsinline></video>':"")+linkHtml(v.tt.link)+'</div>':"";
+  return '<div class="ver'+(latest?" latest":"")+'"><div class="ver-h"><b>v'+v.n+(latest?" (latest)":"")+'</b><span>'+esc(who(v.by))+', '+esc(fmtTime(v.at))+'</span></div>'+(cap?'<div class="vwrap">'+media+cap+'</div>':media)+linkHtml(v.link)+tt+(v.note?'<p>'+fbHtml(v.note)+'</p>':"")+attHtml(v.files)+'</div>';
 }
 const fbHtml=t=>esc(t).replace(/\b(\d{1,2}):([0-5]\d)\b/g,(m,a,b)=>'<button type="button" class="ts" data-t="'+(Number(a)*60+Number(b))+'" title="Jump to '+m+' in the video">'+m+'</button>');
 let deskFor;

@@ -10,7 +10,7 @@
 
 It only ever moves files from Checking to approve; it never deletes or renames anything on the NAS.
 """
-import fcntl, json, os, shutil, subprocess, sys, tempfile, time, traceback, urllib.error, urllib.parse, urllib.request, uuid
+import fcntl, json, os, re, shutil, subprocess, sys, tempfile, time, traceback, urllib.error, urllib.parse, urllib.request, uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -110,6 +110,7 @@ def move_approved(items, versions):
         want = it.get("submittedV")
         pick = next(((vid, v) for vid, v in mine if want and v.get("n") == want), None) or max(mine, key=lambda x: x[1].get("n", 0))
         vid, v = pick
+        move_tiktok(it, vid, v)
         link = v.get("link") or ""
         if not link.startswith(CHECKING_PREFIX):
             continue
@@ -123,6 +124,24 @@ def move_approved(items, versions):
             continue
         merge("versions", vid, {"link": r["to"]})
         log(f"moved approved file of {it.get('title')} -> {r['to']}" + (" (copied; the original could not be removed from Checking)" if r.get("original_left") else ""))
+
+
+def move_tiktok(it, vid, v):
+    """The TikTok copy of the approved version follows it into approve (also when it arrives after approval)."""
+    tt = v.get("tt") or {}
+    link = tt.get("link") or ""
+    if not link.startswith(CHECKING_PREFIX):
+        return
+    try:
+        r = NP.do_move(link, tt.get("size"), tt.get("mtime"))
+    except OSError as e:
+        log(f"TikTok copy move failed for {it.get('title')}, will retry: {e}")
+        return
+    if "error" in r:
+        return
+    merge("versions", vid, {"tt": dict(tt, link=r["to"])})
+    v["tt"] = dict(tt, link=r["to"])
+    log(f"moved the TikTok copy of {it.get('title')} -> {r['to']}")
 
 
 def nas_file(link):
@@ -149,6 +168,14 @@ def clean_previews(items, versions):
         want = it.get("submittedV")
         final = next((vid for vid, v in mine if want and v.get("n") == want), None) or max(mine, key=lambda x: x[1].get("n", 0))[0]
         for vid, v in mine:
+            tta = (v.get("tt") or {}).get("asset") or ""
+            if tta.startswith("/_blob/") and nas_file((v.get("tt") or {}).get("link") or ""):
+                try:
+                    api("DELETE", "/storage/v1/object/media/" + tta[len("/_blob/"):])
+                except urllib.error.HTTPError:
+                    pass
+                merge("versions", vid, {"tt": dict(v["tt"], asset="")})
+                v["tt"]["asset"] = ""
             asset = v.get("asset") or ""
             if not asset.startswith("/_blob/") or (v.get("assetType") or "").startswith("image/"):
                 continue
@@ -170,9 +197,76 @@ def clean_previews(items, versions):
                 return
 
 
+TT_NAME = re.compile(r"[\s_-]*tik\s*tok\s*$", re.I)
+TT_VNUM = re.compile(r"(?<![a-z0-9])v(\d{1,3})(?![0-9])", re.I)
+TT_WAIT_LOGGED = set()
+
+
+def tiktok_file(name):
+    """'GZ013 Title v2 TikTok.mp4' -> the TikTok copy of v2 (same video, TikTok's own end card)."""
+    return bool(TT_NAME.search(os.path.splitext(name)[0]))
+
+
+def handle_tiktok_file(f, items, versions):
+    """Hang a TikTok copy on its version (the vN in its name, else the latest). It can arrive before, with or long
+    after the main file; until that version exists it waits in Checking. Returns True when done with the file."""
+    if not f["item"]:
+        if f["path"] not in TT_WAIT_LOGGED:
+            TT_WAIT_LOGGED.add(f["path"])
+            log(f"TikTok file {f['name']} in Checking did not match any item: check the GZ code in its name")
+        return False
+    stem = TT_NAME.sub("", os.path.splitext(f["name"])[0])
+    m = TT_VNUM.findall(stem)
+    mine = [(vid, v) for vid, v in versions.items() if v.get("item") == f["item"]]
+    pick = None
+    if m:
+        pick = next(((vid, v) for vid, v in mine if v.get("n") == int(m[-1])), None)
+    elif mine:
+        pick = max(mine, key=lambda x: x[1].get("n", 0))
+    it = items[f["item"]]
+    if not pick:
+        if f["path"] not in TT_WAIT_LOGGED:
+            TT_WAIT_LOGGED.add(f["path"])
+            log(f"TikTok file {f['name']} is waiting for v{m[-1] if m else '?'} of {it.get('title')} (the main file) to arrive")
+        return False
+    vid, v = pick
+    pv = NP.make_preview(f["path"])
+    asset = ""
+    if "error" not in pv:
+        try:
+            asset = "/_blob/" + upload(pv["out"], "video/mp4")
+        finally:
+            try:
+                os.remove(pv["out"])
+            except OSError:
+                pass
+    old = (v.get("tt") or {}).get("asset") or ""
+    tt = {"link": f["path"], "name": f["name"], "asset": asset, "size": f["size"], "mtime": f["mtime"],
+          "at": int(time.time() * 1000), "late": it.get("status") in ("approved", "scheduled", "posted")}
+    merge("versions", vid, {"tt": tt})
+    v["tt"] = tt
+    if old.startswith("/_blob/") and old != asset:
+        try:
+            api("DELETE", "/storage/v1/object/media/" + old[len("/_blob/"):])
+        except urllib.error.HTTPError:
+            pass
+    NP.do_mark(f["path"])
+    log(f"added the TikTok copy {f['name']} to v{v.get('n')} of {it.get('title')}" + (" (after approval)" if tt["late"] else ""))
+    return True
+
+
 def handle_new(items, versions):
     listing = [{"id": k, "title": v.get("title", ""), "status": v.get("status", ""), "code": v.get("code", "")} for k, v in items.items()]
-    new = NP.find_new(listing)[:MAX_NEW_PER_RUN]
+    found = NP.find_new(listing)
+    # TikTok copies don't take a turn from new videos: they may wait a long time for their main file
+    done = 0
+    for f in [x for x in found if tiktok_file(x["name"])]:
+        if any((x.get("tt") or {}).get("size") == f["size"] and (x.get("tt") or {}).get("mtime") == f["mtime"] for x in versions.values()):
+            NP.do_mark(f["path"])
+            continue
+        if done < 2 and handle_tiktok_file(f, items, versions):
+            done += 1
+    new = [x for x in found if not tiktok_file(x["name"])][:MAX_NEW_PER_RUN]
     if not new:
         return
     inbox = docs("inbox")
