@@ -182,6 +182,32 @@ def find_new_sets(items):
     return new
 
 
+def find_new_pdfs(items):
+    """PDFs in Checking whose name has a GZ code, not taken yet (name, size and time identify one, so a changed
+    or renamed PDF counts as new), once untouched for SET_SETTLE_SECONDS."""
+    state, now, new = load_state(), time.time(), []
+    if not os.path.isdir(CHECKING):
+        return new
+    for dirpath, dirnames, files in os.walk(CHECKING):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        for fn in files:
+            if fn.startswith(".") or not fn.lower().endswith(".pdf") or not CODE_IN_NAME.search(fn):
+                continue
+            p = os.path.join(dirpath, fn)
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            if st.st_size == 0 or now - st.st_mtime < SET_SETTLE_SECONDS:
+                continue
+            k = "pdf|%s|%d|%d" % (fn, st.st_size, int(st.st_mtime))
+            if k in state:
+                continue
+            new.append({"path": p, "name": fn, "key": k, "size": st.st_size, "mtime": int(st.st_mtime), "item": match_item(fn, items)})
+    new.sort(key=lambda x: x["mtime"])
+    return new
+
+
 def mark_key(k):
     state = load_state()
     state[k] = int(time.time())

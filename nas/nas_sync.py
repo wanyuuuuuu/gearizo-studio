@@ -10,7 +10,7 @@
 
 It only ever moves files from Checking to approve; it never deletes or renames anything on the NAS.
 """
-import fcntl, json, os, sys, time, traceback, urllib.error, urllib.parse, urllib.request, uuid
+import fcntl, json, os, shutil, subprocess, sys, tempfile, time, traceback, urllib.error, urllib.parse, urllib.request, uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -260,6 +260,66 @@ def handle_sets(items, versions):
         log(f"added v{n} of {it.get('title')} from picture folder {s['name']} ({len(files)} pictures) and sent it for review")
 
 
+PDFPAGES_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pdfpages.swift")
+PDFPAGES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pdfpages")
+MAX_PDF_PAGES = 29          # + the PDF itself = 30 files, what the app shows per version
+
+
+def pdf_tool():
+    """The page renderer, built from pdfpages.swift with the Mac's own Swift compiler when missing or older."""
+    if not os.path.isfile(PDFPAGES) or (os.path.isfile(PDFPAGES_SRC) and os.path.getmtime(PDFPAGES_SRC) > os.path.getmtime(PDFPAGES)):
+        r = subprocess.run(["swiftc", "-O", PDFPAGES_SRC, "-o", PDFPAGES], capture_output=True, text=True, timeout=600)
+        if r.returncode:
+            raise RuntimeError("couldn't build pdfpages: " + (r.stderr or "")[-300:])
+    return PDFPAGES
+
+
+def handle_pdfs(items, versions):
+    """A PDF in Checking named with a GZ code -> one version: every page as a picture (to review, zoom and comment on
+    page by page) plus the PDF itself to download, sent for review. A changed or renamed PDF makes the next version."""
+    listing = [{"id": k, "title": v.get("title", ""), "status": v.get("status", ""), "code": v.get("code", "")} for k, v in items.items()]
+    for f in NP.find_new_pdfs(listing)[:2]:
+        if not f["item"]:
+            log(f"PDF {f['name']} in Checking did not match any item: check the GZ code in its name")
+            NP.mark_key(f["key"])
+            continue
+        tmp = tempfile.mkdtemp(prefix="gzpdf-")
+        try:
+            r = subprocess.run([pdf_tool(), f["path"], tmp, str(MAX_PDF_PAGES), "2000"], capture_output=True, text=True, timeout=900)
+            try:
+                out = json.loads((r.stdout or "").strip().splitlines()[-1])
+            except (ValueError, IndexError):
+                out = {"error": (r.stderr or r.stdout or "no output")[-200:]}
+            if out.get("error") or not out.get("files"):
+                log(f"PDF {f['name']}: couldn't read its pages ({out.get('error') or 'no pages'}), nothing added")
+                NP.mark_key(f["key"])
+                continue
+            stem = os.path.splitext(f["name"])[0]
+            files = []
+            for i, pth in enumerate(out["files"], 1):
+                files.append({"id": upload(pth, "image/jpeg"), "name": f"{stem} p{i}.jpg", "type": "image/jpeg"})
+            if f["size"] <= PIC_LIMIT:
+                files.append({"id": upload(f["path"], "application/pdf"), "name": f["name"], "type": "application/pdf"})
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        it = items[f["item"]]
+        now = int(time.time() * 1000)
+        n = max([v.get("n", 0) for v in versions.values() if v.get("item") == f["item"]] or [0]) + 1
+        total, shown = out.get("total") or len(out["files"]), len(out["files"])
+        note = f"From Checking: {f['name']} ({total} page{'s' if total != 1 else ''})" + \
+            (f"; only the first {shown} pages are shown, the PDF has them all" if total > shown else "") + \
+            ("" if f["size"] <= PIC_LIMIT else "; the PDF itself is over 50 MB, so it stays on the NAS only")
+        vid = f"chk-pdf-{f['mtime']}-v{n}"
+        vdoc = {"item": f["item"], "n": n, "link": f["path"], "asset": "", "assetType": "", "note": note, "files": files,
+                "size": f["size"], "mtime": f["mtime"], "at": now, "by": OWNER_ID}
+        put("versions", vid, vdoc)
+        versions[vid] = vdoc
+        if it.get("status") != "posted":
+            merge("items", f["item"], {"status": "review", "submittedBy": OWNER_ID, "submittedAt": now, "submittedV": n})
+        NP.mark_key(f["key"])
+        log(f"added v{n} of {it.get('title')} from {f['name']} ({shown} page{'s' if shown != 1 else ''}) and sent it for review")
+
+
 def handle_covers(items):
     listing = [{"id": k, "title": v.get("title", ""), "status": v.get("status", ""), "code": v.get("code", "")} for k, v in items.items()]
     try:
@@ -349,6 +409,10 @@ def run():
             handle_sets(items, versions)
         except Exception:
             log("picture folder ERROR " + traceback.format_exc().strip().replace("\n", " | "))
+        try:
+            handle_pdfs(items, versions)
+        except Exception:
+            log("PDF ERROR " + traceback.format_exc().strip().replace("\n", " | "))
         try:
             handle_covers(items)
         except Exception:

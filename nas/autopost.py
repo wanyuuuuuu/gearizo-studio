@@ -142,7 +142,9 @@ def picture_post(item_id, it, versions):
     want = it.get("submittedV")
     v = next((x for x in mine if want and x.get("n") == want), None) or max(mine, key=lambda x: x.get("n", 0))
     files = v.get("files") or []
-    return (not v.get("asset") and bool(files) and all(str(f.get("type", "")).startswith("image/") for f in files)) \
+    pics = [f for f in files if str(f.get("type", "")).startswith("image/")]
+    # pictures, plus at most the PDF they came from
+    return (not v.get("asset") and bool(pics) and all(f in pics or f.get("type") == "application/pdf" for f in files)) \
         or (bool(v.get("link")) and os.path.isdir(v["link"]))
 
 

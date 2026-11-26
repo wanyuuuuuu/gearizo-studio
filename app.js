@@ -1162,7 +1162,7 @@ const deskCoverHtml=it=>{
 /* Publish tab */
 // The version to post is pictures (a NAS picture folder or images added here), not a video: posted by hand.
 function picPost(it){ const vs=vFor(it.id), v=vs.find(x=>it.submittedV&&x.n===it.submittedV)||vs[0];
-  return !!v&&!v.asset&&(v.files||[]).length>0&&v.files.every(f=>f.type.startsWith("image/")) }
+  return !!v&&!v.asset&&v.files.some(f=>f.type.startsWith("image/"))&&v.files.every(f=>f.type.startsWith("image/")||f.type==="application/pdf") }
 function renderPublish(){
   const box=$("pubInfo");
   if(!editingId){ setHTML(box,'<p class="hint" style="margin-top:12px">Save the item first.</p>'); return }
