@@ -49,7 +49,7 @@ const AUTO_P=["reel","fb"];
 const PLAT_G=[{id:"ig",name:"Instagram"},{id:"tt",name:"TikTok"},{id:"fb",name:"Facebook Page"}];
 const TT_P=["tiktok","tt_gz","tt_my","tt_sg"];                // the old single "tiktok" plus one per account
 const ROLES={content:{name:"Content & video",k:"var(--blue)"},marketing:{name:"Marketing",k:"var(--mk)"},ecomm:{name:"E-commerce",k:"#E8772E"},hr:{name:"HR",k:"#8C6BD1"}};
-const TEAMS={marketing:"Marketing",ecomm:"E-commerce"};
+const TEAMS={marketing:"Marketing",ecomm:"E-commerce",both:"E-com & Marketing"};   // both: either team can review and approve
 const SIZES=[{id:"sq",name:"Square 1:1 (product)",s:"1:1"},{id:"post",name:"Post 4:5",s:"4:5"},{id:"story",name:"Story 9:16",s:"9:16"},{id:"banner",name:"Banner 16:9",s:"16:9"},{id:"wide",name:"Wide banner 3:1",s:"3:1"},{id:"thumb",name:"Thumbnail 1280×720",s:"Thumbnail"}];
 const sizeName=id=>(SIZES.find(x=>x.id===id)||{}).name||id;
 /* Owner preview: see the app as another role (read only); raw holds the real data */
@@ -91,7 +91,7 @@ function normalize(id,d){
     due:typeof d.due==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(d.due)?d.due:"",
     product:String(d.product||""),
     kind:d.kind==="ai"||d.kind==="real"?d.kind:"",
-    team:d.team==="ecomm"?"ecomm":"marketing",
+    team:["ecomm","both"].includes(d.team)?d.team:"marketing",
     type:d.type==="design"?"design":"video",
     sizes:Array.isArray(d.sizes)?d.sizes.filter(x=>typeof x==="string").slice(0,12):[],
     sizeNote:String(d.sizeNote||"").slice(0,300),
@@ -134,7 +134,7 @@ function who(id){ if(!id) return "Someone"; if(id==="auto") return "Auto-post"; 
 
 const vFor=id=>versions.filter(v=>v.item===id).sort((a,b)=>b.n-a.n);
 const fbFor=id=>feedback.filter(f=>f.item===id).sort((a,b)=>a.at-b.at);
-function visible(it){ return (filters.size===0||filters.has(it.series))&&(!teamF||it.team===teamF) }
+function visible(it){ return (filters.size===0||filters.has(it.series))&&(!teamF||it.team===teamF||it.team==="both") }
 function sorted(list){ return list.sort((a,b)=>(a.date||"9999").localeCompare(b.date||"9999")||a.created-b.created) }
 
 const stLabel=it=>it.status==="scheduled"&&it.postAt?"Scheduled "+hm(it.postAt):it.status==="posted"&&it.team==="ecomm"?"Live":stMap[it.status].name;
@@ -148,7 +148,7 @@ function chip(it,showDate,extra){
   if(!showDate&&view==="calendar"){ const vs0=vFor(it.id); const open0=fbFor(it.id).filter(f=>!f.done).length;
     const dueOnly=!it.date&&!!it.due;   // no post date yet: shown on its first-cut day
     return '<button class="chip s-'+it.status+(it.status==="posted"?" posted":"")+(dueOnly?" dueonly":"")+(extra||"")+'" draggable="'+(!readOnly)+'" data-id="'+esc(it.id)+'" style="--c:'+s.c+'" title="'+esc(s.name+(it.code?" · "+it.code:"")+(dueOnly?" · first cut due, no post date yet":""))+'">'+
-      '<span class="t">'+esc(it.title)+'</span><span class="m">'+esc((dueOnly?"First cut due · ":"")+(isCr()&&it.team==="ecomm"?"E-com · ":"")+(it.type==="design"?"Design · ":"")+stLabel(it))+'</span>'+(open0?'<span class="flag">'+open0+' to fix</span>':"")+'</button>'; }
+      '<span class="t">'+esc(it.title)+'</span><span class="m">'+esc((dueOnly?"First cut due · ":"")+(isCr()&&it.team==="ecomm"?"E-com · ":isCr()&&it.team==="both"?"E-com & Mk · ":"")+(it.type==="design"?"Design · ":"")+stLabel(it))+'</span>'+(open0?'<span class="flag">'+open0+' to fix</span>':"")+'</button>'; }
   const vs=vFor(it.id); if(vs.length) meta.push("v"+vs[0].n);
   if(it.due&&["idea","script","shoot","edit","changes"].includes(it.status)) meta.push("Due "+shortDate(it.due));
 
@@ -537,8 +537,8 @@ function openItem(id,presetDate,presetProduct){
 }
 /* Platforms follow the team: E-commerce → Shopee, Lazada, Website; marketing → social */
 function platVis(){
-  const team=isCr()?$("fTeam").value:(isMk()?myRole():"marketing"), shop=team==="ecomm";
-  $("fPlatforms").querySelectorAll("label").forEach(l=>{ const v=l.querySelector("input").value; l.hidden=(shop?!SHOP_P.includes(v):SHOP_P.includes(v))||(pMap[v].legacy&&!l.querySelector("input").checked) });
+  const team=isCr()?$("fTeam").value:(isMk()?myRole():"marketing"), shop=team==="ecomm", both=team==="both"||(isMk()&&editingId&&(items.get(editingId)||{}).team==="both");
+  $("fPlatforms").querySelectorAll("label").forEach(l=>{ const v=l.querySelector("input").value; l.hidden=(!both&&(shop?!SHOP_P.includes(v):SHOP_P.includes(v)))||(pMap[v].legacy&&!l.querySelector("input").checked) });
   const lab=$("fDate").closest(".f").querySelector(".lab"); if(lab) lab.textContent=shop?"Needed by":"Post";
   $("fSeries").closest(".f").hidden=isEc();
 }
@@ -558,7 +558,7 @@ function formData(prev,id){
   STAMP_KEYS.forEach(k=>{ d[k]=prev?prev[k]:(k.endsWith("By")?"":0) });
   d.createdBy=prev?prev.createdBy:(myId||"");
   d.code=prev&&prev.code?prev.code:nextCode();
-  d.team=isMk()?myRole():(isCr()?$("fTeam").value:(prev?prev.team:"marketing"));
+  d.team=isMk()?(prev&&prev.team==="both"?"both":myRole()):(isCr()?$("fTeam").value:(prev?prev.team:"marketing"));
   return d;
 }
 async function saveItem(close){
@@ -1075,7 +1075,7 @@ async function addVersion(){
     const it=items.get(id);
     if(it&&isCr()&&["idea","script","shoot","edit","changes"].includes(it.status)){
       persist(id,{...it,status:"review",submittedBy:myId||"",submittedAt:Date.now(),submittedV:n});
-      toast("v"+n+" added and sent to "+(it.team==="ecomm"?"E-commerce":"Marketing")+" for review.");
+      toast("v"+n+" added and sent to "+TEAMS[it.team]+" for review.");
     }else{ toast("v"+n+" added."); if(it&&["idea","script","shoot"].includes(it.status)) setStatusFor(id,"edit") }
   }catch(e){ writeErr(e,"this version") }
   btn.disabled=false; renderDesk();
@@ -2066,7 +2066,7 @@ $("desk").addEventListener("click",e=>{
     const act=a.dataset.act;
     if(["approve","changes","reopen","gopub"].includes(act)&&isCr()){ toast("Only the team that asked for it can do that."); return }
     if(act==="submit"&&isMk()){ toast("The content team sends videos for review."); return }
-    if(act==="submit"){ setStatusFor(id,"review"); toast("Sent for review. "+((items.get(id)||{}).team==="ecomm"?"E-commerce":"Marketing")+" gets a notification."); }
+    if(act==="submit"){ setStatusFor(id,"review"); toast("Sent for review. "+(TEAMS[(items.get(id)||{}).team]||"Marketing")+(((items.get(id)||{}).team==="both")?" get":" gets")+" a notification."); }
     else if(act==="approve"){ setStatusFor(id,"approved"); toast("Approved. The file moves to the approve folder shortly."); }
     else if(act==="changes"){
       if(!fbFor(id).filter(f=>!f.done).length){ toast("Write what needs to change in Feedback first."); $("fbText").focus(); return }
@@ -2550,6 +2550,7 @@ $("fType").addEventListener("change",typeFields);
 /* Content switching a request's team: swap social platforms for Shopee/Lazada/Website and back */
 $("fTeam").addEventListener("change",()=>{
   const shop=$("fTeam").value==="ecomm", boxes=[...$("fPlatforms").querySelectorAll("input")];
+  if($("fTeam").value==="both"){ platVis(); return }
   if(!boxes.some(b=>b.checked&&(shop?SHOP_P.includes(b.value):!SHOP_P.includes(b.value)))) boxes.forEach(b=>{ b.checked=shop?["shopee","lazada"].includes(b.value):b.value==="reel" });
   else boxes.forEach(b=>{ if(shop?!SHOP_P.includes(b.value):SHOP_P.includes(b.value)) b.checked=false });
   platVis();
@@ -2559,7 +2560,7 @@ $("dlg").addEventListener("click",e=>{ const rm=e.target.closest("#refsFiles [da
 $("teamFilter").addEventListener("click",e=>{ const b=e.target.closest("button[data-t]"); if(!b) return; teamF=b.dataset.t; selId=null; render() });
 function applyPreview(){
   const r=previewRole;
-  if(raw.items) items=r?new Map([...raw.items].filter(([,it])=>["marketing","ecomm"].includes(r)&&it.team===r)):raw.items;
+  if(raw.items) items=r?new Map([...raw.items].filter(([,it])=>["marketing","ecomm"].includes(r)&&(it.team===r||it.team==="both"))):raw.items;
   const ok=id=>items.has(id);
   if(raw.versions) versions=r?raw.versions.filter(v=>ok(v.item)):raw.versions;
   if(raw.feedback) feedback=r?raw.feedback.filter(f=>ok(f.item)):raw.feedback;

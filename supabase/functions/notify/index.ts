@@ -29,7 +29,7 @@ webpush.setVapidDetails(
 );
 
 type Doc = { collection: string; id: string; data: Record<string, any>; updated_by: string | null };
-type Role = "content" | "marketing" | "ecomm" | "hr";
+type Role = "content" | "marketing" | "ecomm" | "hr" | "both";   // both = an item E-commerce and Marketing share
 type Msg = { body: string; url: string; tag: string; role?: Role; user?: string; users?: string[] };
 
 const mmss = (s: number) => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
@@ -50,7 +50,7 @@ async function itemInfo(id?: string): Promise<{ title: string; team: Role }> {
   if (!id) return { title: "a video", team: "marketing" };
   const { data } = await sb.from("docs").select("data").eq("collection", "items").eq("id", id).maybeSingle();
   const d = data?.data || {};
-  return { title: (d.code ? d.code + " " : "") + (d.title || "a video"), team: d.team === "ecomm" ? "ecomm" : "marketing" };
+  return { title: (d.code ? d.code + " " : "") + (d.title || "a video"), team: (d.team === "ecomm" || d.team === "both" ? d.team : "marketing") as Role };
 }
 
 /* ---------- 1. what to tell whom ---------- */
@@ -91,7 +91,7 @@ async function describe(type: string, rec: Doc, old: Doc | null, roleOf: Record<
     }
     case "items": {
       const title = (d.code ? d.code + " " : "") + (d.title || "a video");
-      const itemTeam: Role = d.team === "ecomm" ? "ecomm" : "marketing";
+      const itemTeam = (d.team === "ecomm" || d.team === "both" ? d.team : "marketing") as Role;   // both: E-commerce and Marketing
       if (type === "INSERT" && d.createdBy) {
         const mk = ["marketing", "ecomm"].includes(roleOf[d.createdBy]);
         return { role: mk ? "content" : itemTeam, body: `${await nameOf(d.createdBy)} ${mk ? "assigned" : "planned"} ${title}` + (d.date ? ` for ${shortDate(d.date)}` : ""), url: "./#calendar", tag: "item-" + rec.id };
@@ -127,7 +127,8 @@ async function send(msg: Msg, actor: string | null, roleOf: Record<string, strin
   const { data: subs } = await sb.from("push_subs").select("endpoint,user_id,sub");
   const targets = (subs || []).filter((s: any) =>
     s.user_id !== actor &&
-    (msg.users ? msg.users.includes(s.user_id) : msg.user ? s.user_id === msg.user : !msg.role || roleOf[s.user_id] === msg.role));
+    (msg.users ? msg.users.includes(s.user_id) : msg.user ? s.user_id === msg.user : !msg.role || roleOf[s.user_id] === msg.role ||
+      (msg.role === "both" && ["marketing", "ecomm"].includes(roleOf[s.user_id]))));
   const payload = JSON.stringify({ title: "Gearizo", body: msg.body.slice(0, 240), url: msg.url, tag: msg.tag });
   let sent = 0;
   await Promise.all(targets.map(async (s: any) => {
@@ -568,7 +569,7 @@ async function postDue() {
       (p === "story" && pl.some((x) => x === "reel" || x === "carousel") ? " (reshare the post and add the link sticker)" : "");
     const body = `Time to post ${title} on ${left.map(where).join(", ")}` + (auto.length ? ` (${auto.join(", ")} went out automatically)` : "") +
       (fails.length ? `. Auto-post didn't work: ${fails.join("; ")}` : ". The caption is ready in the app.");
-    sent += (await send({ role: d.team === "ecomm" ? "ecomm" : "marketing", body, url: "./#review/" + r.id, tag: "post-" + r.id }, null, roleOf)).sent;
+    sent += (await send({ role: (d.team === "ecomm" || d.team === "both" ? d.team : "marketing") as Role, body, url: "./#review/" + r.id, tag: "post-" + r.id }, null, roleOf)).sent;
   }
   return { due: due.length, sent, out };
 }
