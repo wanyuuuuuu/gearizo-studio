@@ -111,6 +111,19 @@ def move_approved(items, versions):
         pick = next(((vid, v) for vid, v in mine if want and v.get("n") == want), None) or max(mine, key=lambda x: x[1].get("n", 0))
         vid, v = pick
         move_tiktok(it, vid, v)
+        more = v.get("more") or []
+        if any(m.startswith(CHECKING_PREFIX) for m in more):
+            moved = []
+            for m in more:
+                if m.startswith(CHECKING_PREFIX):
+                    try:
+                        r = NP.do_move(m)
+                        m = r.get("to") or m
+                    except OSError as e:
+                        log(f"move failed for a picture of {it.get('title')}, will retry: {e}")
+                moved.append(m)
+            merge("versions", vid, {"more": moved})
+            v["more"] = moved
         link = v.get("link") or ""
         if not link.startswith(CHECKING_PREFIX):
             continue
@@ -414,8 +427,40 @@ def handle_pdfs(items, versions):
         log(f"added v{n} of {it.get('title')} from {f['name']} ({shown} page{'s' if shown != 1 else ''}) and sent it for review")
 
 
+def handle_design_pics(items, versions):
+    """Loose pictures for a design item -> one new version per vN group, full quality, sent for review."""
+    listing = [{"id": k, "title": v.get("title", ""), "status": v.get("status", ""), "code": v.get("code", ""), "type": v.get("type", "")} for k, v in items.items()]
+    for g in NP.find_new_design_pics(listing)[:2]:
+        files, big = [], []
+        for p in g["pics"][:MAX_SET_PICTURES]:
+            if p["size"] > PIC_LIMIT:
+                big.append(p["name"])
+                continue
+            ctype = PIC_TYPES.get(os.path.splitext(p["name"])[1].lower(), "image/jpeg")
+            files.append({"id": upload(p["path"], ctype), "name": p["name"], "type": ctype})
+        it = items[g["item"]]
+        if not files:
+            log(f"pictures for {it.get('title')}: none under 50 MB, nothing added")
+            NP.mark_key(g["key"])
+            continue
+        now = int(time.time() * 1000)
+        n = max([v.get("n", 0) for v in versions.values() if v.get("item") == g["item"]] or [0]) + 1
+        names = ", ".join(p["name"] for p in g["pics"][:3]) + (" …" if len(g["pics"]) > 3 else "")
+        note = f"From Checking: {names}" + (f"; left out, over 50 MB: {', '.join(big)}" if big else "")
+        paths = [p["path"] for p in g["pics"]]
+        vid = f"chk-dpic-{g['mtime']}-v{n}"
+        vdoc = {"item": g["item"], "n": n, "link": paths[0], "more": paths[1:], "asset": "", "assetType": "", "note": note,
+                "files": files, "size": g["size"], "mtime": g["mtime"], "at": now, "by": OWNER_ID}
+        put("versions", vid, vdoc)
+        versions[vid] = vdoc
+        if it.get("status") != "posted":
+            merge("items", g["item"], {"status": "review", "submittedBy": OWNER_ID, "submittedAt": now, "submittedV": n})
+        NP.mark_key(g["key"])
+        log(f"added v{n} of {it.get('title')} from {len(files)} picture{'s' if len(files) != 1 else ''} in Checking and sent it for review")
+
+
 def handle_covers(items):
-    listing = [{"id": k, "title": v.get("title", ""), "status": v.get("status", ""), "code": v.get("code", "")} for k, v in items.items()]
+    listing = [{"id": k, "title": v.get("title", ""), "status": v.get("status", ""), "code": v.get("code", ""), "type": v.get("type", "")} for k, v in items.items()]
     try:
         skipped = json.load(open(COVER_SKIPPED))
     except Exception:
@@ -503,6 +548,10 @@ def run():
             handle_sets(items, versions)
         except Exception:
             log("picture folder ERROR " + traceback.format_exc().strip().replace("\n", " | "))
+        try:
+            handle_design_pics(items, versions)
+        except Exception:
+            log("design pictures ERROR " + traceback.format_exc().strip().replace("\n", " | "))
         try:
             handle_pdfs(items, versions)
         except Exception:

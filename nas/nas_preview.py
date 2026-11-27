@@ -153,7 +153,7 @@ def set_dirs():
         if dirpath == CHECKING or not CODE_IN_NAME.search(os.path.basename(dirpath)):
             continue
         files = [f for f in files if not f.startswith(".")]
-        pics = sorted((f for f in files if f.lower().endswith(IMAGE_EXT)), key=_natural)
+        pics = sorted((f for f in files if f.lower().endswith(IMAGE_EXT)), key=lambda f: _natural(os.path.splitext(f)[0]))
         if pics and not any(f.lower().endswith(VIDEO_EXT) for f in files):
             found[dirpath] = pics
     return found
@@ -217,6 +217,54 @@ def mark_key(k):
     os.replace(tmp, STATE)
 
 
+VNUM = re.compile(r"(?<![a-z0-9])v(\d{1,3})(?![0-9])", re.I)
+
+
+def find_new_design_pics(items):
+    """Loose pictures in Checking for a design item (not in a picture folder): they are the design itself, not a
+    cover. Pictures of one item with the same vN in their names ('GZ016 ME6701 v3.png', 'GZ016 ME6701 v3 2.png')
+    make one group = one version. A group is taken once nothing in it changed for SET_SETTLE_SECONDS; its key
+    covers names, sizes and times, so changing it later makes the next version."""
+    state, now = load_state(), time.time()
+    design = {it["id"] for it in items if it.get("type") == "design"}
+    sets, groups = set_dirs(), {}
+    if not os.path.isdir(CHECKING) or not design:
+        return []
+    for dirpath, dirnames, files in os.walk(CHECKING):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        if dirpath in sets:
+            continue
+        for fn in files:
+            if fn.startswith(".") or not fn.lower().endswith(IMAGE_EXT):
+                continue
+            iid = match_item(fn, items)
+            if iid not in design:
+                continue
+            p = os.path.join(dirpath, fn)
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            if st.st_size == 0:
+                continue
+            v = VNUM.findall(os.path.splitext(fn)[0])
+            groups.setdefault((iid, v[-1] if v else ""), []).append((fn, p, st))
+    new = []
+    for (iid, vn), fs in groups.items():
+        fs.sort(key=lambda x: _natural(os.path.splitext(x[0])[0]))   # 'v3' before 'v3 2'
+        last = max(st.st_mtime for _, _, st in fs)
+        if now - last < SET_SETTLE_SECONDS:
+            continue
+        sig = iid + "|" + vn + "\n" + "\n".join("%s:%d:%d" % (fn, st.st_size, int(st.st_mtime)) for fn, _, st in fs)
+        k = "dpic|" + hashlib.sha1(sig.encode()).hexdigest()[:20]
+        if k in state:
+            continue
+        new.append({"item": iid, "vn": vn, "key": k, "mtime": int(last), "size": sum(st.st_size for _, _, st in fs),
+                    "pics": [{"path": p, "name": fn, "size": st.st_size, "mtime": int(st.st_mtime)} for fn, p, st in fs]})
+    new.sort(key=lambda x: x["mtime"])
+    return new
+
+
 def find_new_covers(items):
     """Cover photos dropped in Checking: pictures not seen before, matched to an item like videos are.
     Pictures inside a picture-set folder are not covers."""
@@ -238,7 +286,10 @@ def find_new_covers(items):
                     continue
                 if st.st_size == 0 or now - st.st_mtime < COVER_SETTLE_SECONDS or key(p, st) in seen:
                     continue
-                new.append({"path": p, "name": fn, "size": st.st_size, "mtime": int(st.st_mtime), "item": match_item(fn, items)})
+                iid = match_item(fn, items)
+                if iid and any(it["id"] == iid and it.get("type") == "design" for it in items):
+                    continue   # a design's own pictures (find_new_design_pics), not a cover
+                new.append({"path": p, "name": fn, "size": st.st_size, "mtime": int(st.st_mtime), "item": iid})
     new.sort(key=lambda x: x["mtime"])
     return new
 
